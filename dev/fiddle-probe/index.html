@@ -165,6 +165,9 @@ const onCanvas = (x, y) => {
   return x >= r.left && x < r.right && y >= r.top && y < r.bottom ? { x: ((x - r.left) / r.width) * 400, y: ((y - r.top) / r.height) * 300, r } : null;
 };
 const dragOut = (m) => {
+  // The iframe's own point plus where the iframe is now: right even when frame.offset is stale.
+  const f = frame.getBoundingClientRect();
+  m = { ...m, x: f.left + m.localX, y: f.top + m.localY };
   const at = onCanvas(m.x, m.y);
   marker.style.display = m.phase === "move" && at ? "block" : "none";
   if (at) { marker.style.left = `${m.x - at.r.left}px`; marker.style.top = `${m.y - at.r.top}px`; }

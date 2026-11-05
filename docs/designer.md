@@ -616,9 +616,11 @@ The iframe sends:
 - `{ channel, type: "code.flushed", request, written, left }`: the answer to `code.flush`, once its writes are done
   (their `code.edit` messages sent first): how many changes were written and how many are still not in code (they
   cannot be written, or the mode is Manual).
-- `{ channel, type: "drag.out", typeName, x, y, phase }`: a control dragged from Controls is outside the iframe,
-  the button still held (the iframe keeps the pointer). `x`, `y` are in the page's client coordinates
-  (`frame.offset` added). `phase` is `"move"` while it is carried, `"drop"` when it is let go outside the iframe,
+- `{ channel, type: "drag.out", typeName, x, y, localX, localY, phase }`: a control dragged from Controls is outside
+  the iframe, the button still held (the iframe keeps the pointer). `x`, `y` are in the page's client coordinates
+  (`frame.offset` added); `localX`, `localY` are the same point in the iframe's own CSS pixels, so the page can add
+  where the iframe is at that moment (`iframe.getBoundingClientRect()`) and need not keep `frame.offset` current.
+  `phase` is `"move"` while it is carried, `"drop"` when it is let go outside the iframe,
   `"cancel"` on Esc or when it comes back into the iframe (then it is a drag onto Layers again). A drop outside the
   app's canvas places nothing: the page treats it as a cancel.
 
@@ -635,7 +637,8 @@ The page sends:
   Auto or Always the editor writes every change not in code yet, as one step of its history, then answers
   `code.flushed` with the same `request`; with Manual it answers at once and writes nothing.
 - `{ channel, type: "frame.offset", x, y }`: where the iframe sits in the page (CSS pixels, the left and top of its
-  client box). Send it once at start and again on every resize or scroll that moves it.
+  client box). Send it once at start and again whenever the iframe moves: on every resize or scroll, and when the
+  page's layout first gives the iframe its place (it may still be 0 by 0 at the iframe's first message).
 - `{ channel, type: "place", typeName, x, y }`: a `drag.out` dropped on the app's canvas, at that canvas point in
   the app's pixels. The editor sends the app `placeAt`: the control goes where a place-mode click at that point puts
   it, and it is recorded, undone and written as a placed control.

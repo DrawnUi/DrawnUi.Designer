@@ -2043,11 +2043,12 @@ impl App {
     }
 
     /// Page mode: a Controls drag outside the editor's frame, told to the page in its own CSS pixels
-    /// (`phase`: "move", "drop" or "cancel").
+    /// (`frame.offset` added) and in the frame's (`localX`, `localY`: the page adds where the frame is
+    /// now). `phase`: "move", "drop" or "cancel".
     fn post_drag_out(&self, phase: &str, at: drawnui::skia::Point) {
         let Some(DragWhat::Control(k)) = self.drag.map(|d| d.what) else { return };
         let (Some(post), Some(kind)) = (&self.to_page, self.kinds().get(k)) else { return };
-        post(serde_json::json!({ "type": "drag.out", "typeName": kind.type_name, "x": self.frame_offset.0 + at.x, "y": self.frame_offset.1 + at.y, "phase": phase }));
+        post(serde_json::json!({ "type": "drag.out", "typeName": kind.type_name, "x": self.frame_offset.0 + at.x, "y": self.frame_offset.1 + at.y, "localX": at.x, "localY": at.y, "phase": phase }));
     }
 
     /// Place mode ends without placing anything.
@@ -5318,6 +5319,8 @@ mod shots {
         let last = posted.lock().unwrap().last().cloned().unwrap();
         assert_eq!((last["type"].as_str(), last["typeName"].as_str()), (Some("drag.out"), Some("DrawnUi.Draw.SkiaLabel")));
         assert!((last["x"].as_f64().unwrap() - 60.0).abs() < 0.5 && (last["y"].as_f64().unwrap() - (50.0 + from.1 as f64)).abs() < 0.5, "{last}");
+        // And the frame's own point, for a page that adds where the frame is now.
+        assert!((last["localX"].as_f64().unwrap_or(f64::NAN) + 40.0).abs() < 0.5 && (last["localY"].as_f64().unwrap_or(f64::NAN) - from.1 as f64).abs() < 0.5, "{last}");
         assert!(host.ui.state.drag.is_none() && inserts(&sent) == 0, "the editor inserts nothing itself");
 
         // Out, then back in over Layers: the page hears "cancel", the drop goes into Layers as before.
