@@ -3170,6 +3170,10 @@ mod shots {
             host
         };
         let mut host = page((0.0, 0.0), 0.0);
+        // A long status line in the narrow Properties: cut short, never past the panel's edge.
+        host.ui.state.status = "HeightRequest = 120 in the app, not in code yet".into();
+        host.ui.waker().invalidate(host.ui.state.inbox, Dirty::APPLY);
+        host.settle();
         let (controls, tree, props) = (host.rect(host.ui.state.controls_list), host.rect(host.ui.state.tree_list), host.rect(host.ui.state.props_list));
         assert!((controls.width() - 150.0).abs() < 2.0 && (props.width() - 270.0).abs() < 2.0, "{controls:?} {props:?}");
         assert!(tree.width() >= 300.0, "Layers has the rest: {tree:?}");

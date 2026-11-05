@@ -1894,13 +1894,14 @@ fn selection_header() -> Build<SkiaLayout> {
     SkiaLayout::new().fill_x().padding((12, 10, 12, 8)).children(SkiaStack::new().spacing(2).children((
         bold(15.0, TEXT).observe(|me, app: &App| me.set_text(selection_names(app).0)),
         text(12.0, FIELD).height_request(17).observe(|me, app: &App| me.set_text(selection_names(app).1)),
-        SkiaRow::new().spacing(6).height_request(17).children((
+        // A narrow panel cuts the line short with an ellipsis: the row fills, the text takes what the icon leaves.
+        SkiaRow::new().spacing(6).height_request(17).fill_x().children((
             SkiaSvg::from_string(icons::CIRCLE_CHECK).width_request(13).height_request(13).vertical_options(LayoutOptions::Center).observe(|me, app: &App| {
                 me.set_svg_string(if app.status_error { icons::CIRCLE_ALERT } else { icons::CIRCLE_CHECK });
                 me.set_tint_color(c(if app.status_error { WARN } else { OK }));
                 me.set_opacity(if app.status.is_empty() { 0.0 } else { 1.0 });
             }),
-            text(12.0, MUTED).vertical_options(LayoutOptions::Center).observe(|me, app: &App| me.set_text(app.status.as_str())),
+            text(12.0, MUTED).max_lines(1).fill_x().vertical_options(LayoutOptions::Center).observe(|me, app: &App| me.set_text(app.status.as_str())),
         )),
     )))
 }
