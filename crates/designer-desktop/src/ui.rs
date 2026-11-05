@@ -933,13 +933,14 @@ impl App {
         self.outline.clear();
         // Parts the library made for itself (a button's label, shell chrome) are left out: no code
         // of the app declares them. Their app-made children hang under the nearest shown ancestor.
+        // So is a page's own wrapper (DrawFiddle's C# snippet): the snippet's root is the top row.
         let mut depth: std::collections::HashMap<u64, Option<usize>> = std::collections::HashMap::new();
         // Only a root (an empty DrawFiddle snippet: the page's own layout) is no control to list:
         // Layers shows its empty state instead.
         let lone_root = self.tree.nodes.len() <= 1;
         for (index, node) in self.tree.nodes.iter().enumerate().filter(|_| !lone_root) {
             let parent_depth = node.parent.and_then(|p| depth.get(&p).copied().flatten());
-            if node.internal && !self.settings.show_internal {
+            if (node.internal && !self.settings.show_internal) || node.page_root {
                 depth.insert(node.id, parent_depth);
                 continue;
             }
@@ -4818,6 +4819,33 @@ mod shots {
         host.frame_after(drawnui::ACCESSIBILITY_INTERVAL_MS);
         host.settle();
         assert!(host.ui.accessibility_nodes().iter().any(|n| n.label.contains("item 12")), "the row reads its item");
+    }
+
+    /// Inside a page (DrawFiddle's C# snippet) the page's own wrapper has no row: the snippet's root is
+    /// the top row, as for a React or Rust snippet. Drops and pastes count in the controls under it.
+    #[test]
+    fn a_page_wrapper_has_no_row() {
+        let mut state = with_controls(connected());
+        let n = |id: u64, parent: Option<u64>, t: &str| Node { id, parent, type_name: format!("DrawnUi.Draw.{t}"), visible: true, rect: [0.0, 0.0, 100.0, 20.0], ..Default::default() };
+        // The wrapper 1, the snippet's layer 2 with a label 3 and a stack 4 holding a label 5.
+        let mut nodes = vec![n(1, None, "SkiaLayout"), n(2, Some(1), "SkiaLayer"), n(3, Some(2), "SkiaLabel"), n(4, Some(2), "SkiaStack"), n(5, Some(4), "SkiaLabel")];
+        nodes[0].page_root = true;
+        state.set_tree(Tree { revision: 7, width: 400.0, height: 300.0, nodes });
+        state.collapsed.clear();
+        state.rebuild_rows();
+        let rows: Vec<(u64, usize)> = state.rows.iter().map(|r| (state.tree.nodes[r.node].id, r.depth)).collect();
+        assert_eq!(rows, [(2, 0), (3, 1), (4, 1), (5, 2)], "the snippet's root first, no row for the wrapper");
+        // Into the layer (middle of its row): last, after its two controls; into the stack: after its label.
+        assert_eq!(state.drop_at(0.5 * view::ROW).map(|d| (d.parent, d.index, d.into)), Some((2, 2, true)));
+        assert_eq!(state.drop_at(2.5 * view::ROW).map(|d| (d.parent, d.index, d.into)), Some((4, 1, true)));
+        // Between the label and the stack: in the layer at 1. Above the layer: nothing (that is the wrapper).
+        assert_eq!(state.drop_at(1.9 * view::ROW).map(|d| (d.parent, d.index, d.into)), Some((2, 1, false)));
+        assert_eq!(state.drop_at(0.1 * view::ROW), None);
+        // The layer selected: a paste goes into it, last.
+        state.clip = Some(Copied { type_name: "DrawnUi.Draw.SkiaLabel".into(), props: vec![], children: vec![] });
+        state.selected = Some(0);
+        assert_eq!(state.selected_node().map(|n| n.id), Some(2));
+        assert_eq!(state.paste_target(false), Some((2, 2)));
     }
 
     /// Inside a page the root is the page's wrapper: no drop or paste goes into it.
