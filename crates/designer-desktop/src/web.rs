@@ -223,11 +223,12 @@ pub extern "C" fn designer_page(text: *const u8, len: usize) {
                 None => vec![],
             },
             // The snippet in the page's language: fiddle:///snippet.cs (C#) or .tsx (React).
+            // A write the page took (or its own text): the writes held for it go now.
             Some("code") if m["uri"].as_str().is_none_or(page::is_snippet) => {
                 if let (Some(text), Some(version)) = (m["text"].as_str(), m["version"].as_u64()) {
                     p.code.set_text_for(m["uri"].as_str().unwrap_or(page::SNIPPET), text.to_owned(), version);
                 }
-                vec![]
+                p.core.code_arrived()
             }
             _ => vec![],
         }

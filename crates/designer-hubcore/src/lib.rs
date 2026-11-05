@@ -30,8 +30,8 @@ pub type Stamp = (u64, u64);
 
 /// Where the hub reads and writes an app's C# sources.
 pub trait CodeStore: Send + Sync {
-    /// Every `*.cs`, `*.tsx` and `*.jsx` file under `dir` (without `bin`, `obj` and hidden folders)
-    /// with its stamp.
+    /// Every `*.cs`, `*.tsx`, `*.jsx` and `*.rs` file under `dir` (without build output and hidden
+    /// folders) with its stamp.
     fn list(&self, dir: &Path) -> Vec<(String, Stamp)>;
     /// A file's bytes, or why it could not be read.
     fn read(&self, uri: &str) -> Result<Vec<u8>, String>;
@@ -39,6 +39,11 @@ pub trait CodeStore: Send + Sync {
     fn write(&self, uri: &str, bytes: &[u8]) -> Result<(), String>;
     /// Whether a project folder is there (a recent app whose copy was deleted is not offered).
     fn dir_exists(&self, dir: &Path) -> bool;
+    /// A write is on its way and the next one must wait for it (a page that has not taken the
+    /// last edit yet): the hub holds the editors' writes until [`HubCore::code_arrived`].
+    fn busy(&self) -> bool {
+        false
+    }
 }
 
 /// One connected app: who it is and what it last reported.
@@ -118,11 +123,13 @@ pub struct HubCore {
     /// Request ids of the hub's own messages to apps (live changes put back): from 2^31 up, apart
     /// from the editors' and the shell's.
     next_request: u32,
+    /// Code writes and undos held while the store is busy, in the order the editors sent them.
+    held: std::collections::VecDeque<(u32, EditorMsg)>,
 }
 
 impl HubCore {
     pub fn new(store: Arc<dyn CodeStore>) -> Self {
-        Self { apps: HashMap::new(), recent: vec![], devices: None, cables: (0, 0), next_id: 0, known: HashMap::new(), editors: HashSet::new(), written: HashMap::new(), code: Arc::default(), store, page_project: None, next_request: 1 << 31 }
+        Self { apps: HashMap::new(), recent: vec![], devices: None, cables: (0, 0), next_id: 0, known: HashMap::new(), editors: HashSet::new(), written: HashMap::new(), code: Arc::default(), store, page_project: None, next_request: 1 << 31, held: Default::default() }
     }
 
     pub fn store(&self) -> Arc<dyn CodeStore> {
@@ -275,6 +282,17 @@ impl HubCore {
 
     /// A message of an editor. Running apps and letting devices in are the shell's (nothing here).
     pub fn editor_msg(&mut self, editor: u32, msg: EditorMsg) -> Vec<Out> {
+        // A page has not taken the last edit: this write waits its turn, made against the text the
+        // page sends next (never against offsets that are stale by then).
+        let write = matches!(msg, EditorMsg::SetCode { .. } | EditorMsg::InsertCode { .. } | EditorMsg::RemoveCode { .. } | EditorMsg::MoveCode { .. } | EditorMsg::UndoCode { .. });
+        if write && (self.store.busy() || !self.held.is_empty()) {
+            self.held.push_back((editor, msg));
+            return vec![];
+        }
+        self.editor_msg_now(editor, msg)
+    }
+
+    fn editor_msg_now(&mut self, editor: u32, msg: EditorMsg) -> Vec<Out> {
         match msg {
             EditorMsg::ToApp { app, msg } if self.apps.contains_key(&app) => {
                 self.to_app(app, &msg);
@@ -431,6 +449,7 @@ impl HubCore {
     /// An editor's connection closed: its code edits can no longer be taken back.
     pub fn editor_closed(&mut self, editor: u32) {
         self.editors.remove(&editor);
+        self.held.retain(|(e, _)| *e != editor);
         self.written.retain(|&(e, _), _| e != editor);
     }
 
@@ -488,6 +507,19 @@ impl HubCore {
 
     /// Runs every [`Out::Work`] here and now and returns the messages only: for a shell where
     /// blocking is fine (a browser page; tests).
+    /// The store took its last write (a page sent its code): the held writes go, one by one while
+    /// the store is free, each against the code as it is now. Their work runs inline (a page hub).
+    pub fn code_arrived(&mut self) -> Vec<Out> {
+        let mut sent = vec![];
+        while !self.store.busy()
+            && let Some((editor, msg)) = self.held.pop_front()
+        {
+            let outs = self.editor_msg_now(editor, msg);
+            sent.extend(self.run_inline(outs));
+        }
+        sent
+    }
+
     pub fn run_inline(&mut self, outs: Vec<Out>) -> Vec<Out> {
         let mut sent = vec![];
         for out in outs {
@@ -579,14 +611,14 @@ fn runs_here(r: &RecentApp) -> bool {
     }
 }
 
-/// The folder of an app's project: the .csproj's folder, or the path itself.
+/// The folder of an app's project: the folder of its .csproj or Cargo.toml, or the path itself.
 pub fn project_dir(project: &str) -> &Path {
     let p = Path::new(project);
-    if p.extension().is_some_and(|e| e == "csproj") { p.parent().unwrap_or(p) } else { p }
+    if p.extension().is_some_and(|e| e == "csproj") || p.file_name().is_some_and(|n| n.eq_ignore_ascii_case("Cargo.toml")) { p.parent().unwrap_or(p) } else { p }
 }
 
 /// A project path compared as written by any agent: separators, `.` and `..` segments, case
-/// (Windows), a trailing separator and a `.csproj` file name do not matter.
+/// (Windows), a trailing separator and a `.csproj` or `Cargo.toml` file name do not matter.
 pub fn project_key(project: &str) -> String {
     let mut parts: Vec<&str> = vec![];
     for part in project.split(['/', '\\']) {
@@ -598,7 +630,7 @@ pub fn project_key(project: &str) -> String {
             _ => parts.push(part),
         }
     }
-    if parts.last().is_some_and(|l| l.to_ascii_lowercase().ends_with(".csproj")) {
+    if parts.last().is_some_and(|l| l.to_ascii_lowercase().ends_with(".csproj") || l.eq_ignore_ascii_case("Cargo.toml")) {
         parts.pop();
     }
     let p = parts.join("\\");

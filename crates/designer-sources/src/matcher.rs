@@ -29,12 +29,20 @@ pub struct RuntimeMatch {
 /// Types compare by short name. Runtime nodes the code does not create are skipped; a source value
 /// that cannot be followed (a loop, other LINQ, a field) ends matching for the rest of that list.
 pub fn match_runtime(files: &[(String, String)], tree: &RuntimeTree) -> Vec<RuntimeMatch> {
-    // C# files by the C# reader, TSX (React) files by the TSX one; a control either can place.
-    let (tsx, cs): (Vec<_>, Vec<_>) = files.iter().cloned().partition(|(u, _)| crate::tsx::is_tsx(u));
+    // C# files by the C# reader, TSX (React) files by the TSX one, Rust by the Rust one; a control
+    // any of them can place.
+    let (rs, files): (Vec<_>, Vec<_>) = files.iter().cloned().partition(|(u, _)| crate::rs::is_rust(u));
+    let (tsx, cs): (Vec<_>, Vec<_>) = files.into_iter().partition(|(u, _)| crate::tsx::is_tsx(u));
     let mut out = if cs.is_empty() { vec![] } else { run(&cs, tree).0 };
-    if !tsx.is_empty() {
-        let done: std::collections::HashSet<NodeId> = out.iter().map(|m| m.node).collect();
-        out.extend(crate::tsx::match_tsx(&tsx, tree, &done));
+    if !tsx.is_empty() || !rs.is_empty() {
+        let mut done: std::collections::HashSet<NodeId> = out.iter().map(|m| m.node).collect();
+        if !tsx.is_empty() {
+            out.extend(crate::tsx::match_tsx(&tsx, tree, &done));
+            done = out.iter().map(|m| m.node).collect();
+        }
+        if !rs.is_empty() {
+            out.extend(crate::rs::match_rust(&rs, tree, &done));
+        }
         let order: HashMap<NodeId, usize> = tree.nodes.iter().enumerate().map(|(i, n)| (n.id, i)).collect();
         out.sort_by_key(|r| order.get(&r.node).copied().unwrap_or(usize::MAX));
     }

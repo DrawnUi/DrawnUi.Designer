@@ -97,8 +97,8 @@ the browser, hot reload, which code the designer can write to, and every MCP too
 | DrawnUi MAUI on Android | Over the USB cable (the designer sets up adb by itself) |
 | DrawnUi MAUI on iPhone and iPad | Over the USB cable, the way the debugger does |
 | DrawnUi MAUI on Mac (Mac Catalyst) | On the same Mac; from another computer's designer over Wi-Fi |
-| DrawnUI for Rust on Windows | On the same computer: live editing, Pick, snapshots and Bring to front, also while minimized; Write to code not yet |
-| DrawnUI for Rust in the browser | From the page, with the agent built in (`agents/rust`): live editing, Pick, adding, copying, moving (also into another control) and deleting controls, snapshots; inside DrawFiddle through the page; Write to code not yet |
+| DrawnUI for Rust on Windows | On the same computer: live editing, Pick, snapshots and Bring to front, also while minimized; Write to code into the crate's `.rs` files |
+| DrawnUI for Rust in the browser | From the page, with the agent built in (`agents/rust`): live editing, Pick, adding, copying, moving (also into another control) and deleting controls, snapshots; inside DrawFiddle through the page, with Write to code into the snippet |
 | DrawnUI for React (DrawnUi.React) in the browser | From the page, in development builds: live editing, Pick, adding, copying and deleting controls, snapshots, Write to code into `.tsx`; inside DrawFiddle through the page |
 | Any of them on another device | Over Wi-Fi: Settings, Connection, Apps on other devices |
 

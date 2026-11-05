@@ -137,6 +137,9 @@ pub fn set_property(files: &[(String, String)], tree: &RuntimeTree, node: NodeId
     if crate::tsx::is_tsx(&m.uri) {
         return crate::tsx::set_property(files, &m, prop, value);
     }
+    if crate::rs::is_rust(&m.uri) {
+        return crate::rs::set_property(files, &m, prop, value);
+    }
     let text = files.iter().find(|(u, _)| *u == m.uri).expect("matched file").1.as_str();
     let ts = parse(text);
     let (src, handles) = walk(&ts, text, &m.uri);

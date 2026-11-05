@@ -5552,7 +5552,8 @@ mod shots {
             let (mut host, sent, to_ui) = wired(state);
             to_ui.send(Incoming::Flush(serde_json::json!(7))).unwrap();
             host.ui.waker().invalidate(host.ui.state.inbox, Dirty::APPLY);
-            host.settle();
+            // Frames, not settle: settle would run on to the answer's deadline.
+            frames(&mut host, 3);
             (host, sent, to_ui, posted)
         };
         let (mut host, sent, to_ui, posted) = run(WriteMode::Auto);
@@ -5565,6 +5566,47 @@ mod shots {
         let (_host, sent, _to_ui, posted) = run(WriteMode::Manual);
         assert!(set_codes(&sent).is_empty());
         assert_eq!(posted.lock().unwrap().as_slice(), [serde_json::json!({ "type": "code.flushed", "request": 7, "written": 0, "left": 2 })]);
+    }
+
+    /// A page's flush of three changes: one answer, after the last write; and when a write is not
+    /// answered in time, the answer still comes before the page gives up, the rest in `left`.
+    #[test]
+    fn a_page_flush_answers_once_and_in_time() {
+        let run = || {
+            let posted = std::sync::Arc::new(std::sync::Mutex::new(Vec::<serde_json::Value>::new()));
+            let mut state = with_changes(WriteMode::Auto);
+            state.live_original.insert((118, "FontSize".into()), "x".into());
+            state.pending.insert((118, "FontSize".into()), "22".into());
+            state.embedded = true;
+            let log = posted.clone();
+            state.to_page = Some(Box::new(move |m| log.lock().unwrap().push(m)));
+            let (mut host, sent, to_ui) = wired(state);
+            to_ui.send(Incoming::Flush(serde_json::json!(8))).unwrap();
+            host.ui.waker().invalidate(host.ui.state.inbox, Dirty::APPLY);
+            frames(&mut host, 3);
+            (host, sent, to_ui, posted)
+        };
+        let flushed = |posted: &std::sync::Mutex<Vec<serde_json::Value>>| posted.lock().unwrap().iter().filter(|m| m["type"] == "code.flushed").cloned().collect::<Vec<_>>();
+        let (mut host, sent, to_ui, posted) = run();
+        let writes = set_codes(&sent);
+        assert_eq!(writes.len(), 3);
+        for (k, (request, node, _)) in writes.iter().enumerate() {
+            assert!(flushed(&posted).is_empty(), "not before write {k} is answered");
+            edited(&mut host, &to_ui, *request, *node);
+        }
+        assert_eq!(flushed(&posted), [serde_json::json!({ "type": "code.flushed", "request": 8, "written": 3, "left": 0 })]);
+        frames(&mut host, 200);
+        assert_eq!(flushed(&posted).len(), 1, "answered once");
+        // The third write never answered: the answer comes at 2.5 s.
+        let (mut host, sent, to_ui, posted) = run();
+        let writes = set_codes(&sent);
+        for (request, node, _) in &writes[..2] {
+            edited(&mut host, &to_ui, *request, *node);
+        }
+        frames(&mut host, 100);
+        assert!(flushed(&posted).is_empty(), "still waiting at 1.6 s");
+        frames(&mut host, 80);
+        assert_eq!(flushed(&posted), [serde_json::json!({ "type": "code.flushed", "request": 8, "written": 2, "left": 1 })]);
     }
 
     /// Always: a finished edit is written at once (Enter), never while it is typed.

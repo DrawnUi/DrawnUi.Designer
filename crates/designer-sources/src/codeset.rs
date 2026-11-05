@@ -20,6 +20,9 @@ pub fn element_code(uri: &str, text: &str) -> HashMap<String, ElementCode> {
     if crate::tsx::is_tsx(uri) {
         return crate::tsx::element_code(uri, text);
     }
+    if crate::rs::is_rust(uri) {
+        return crate::rs::element_code(uri, text);
+    }
     let ts = parse(text);
     let (src, handles) = walk(&ts, text, uri);
     let mut out = HashMap::new();

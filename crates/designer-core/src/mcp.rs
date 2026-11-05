@@ -450,7 +450,7 @@ impl Designer {
         }
     }
 
-    #[tool(description = "Change a property on the live control AND write it into the C# code that creates the control (the literal it is set to, the helper call argument that feeds it, or a new assignment), preserving the file's formatting. The code is matched with what it makes, whatever else is changed live and not written yet (controls inserted or removed live). Returns code.edited with the file, range and an undo id (for undo_write), or code.refused with the reason and its key (an expression the designer will not rewrite, an unsupported type, no matching code, a control not in the code yet). Nothing is written when the target is ambiguous.")]
+    #[tool(description = "Change a property on the live control AND write it into the code (C#, TSX or Rust) that creates the control (the literal it is set to, the helper call argument that feeds it, or a new assignment), preserving the file's formatting. The code is matched with what it makes, whatever else is changed live and not written yet (controls inserted or removed live). Returns code.edited with the file, range and an undo id (for undo_write), or code.refused with the reason and its key (an expression the designer will not rewrite, an unsupported type, no matching code, a control not in the code yet). Nothing is written when the target is ambiguous.")]
     async fn write_property(&self, Parameters(PropertyArg { app, node, name, value }): Parameters<PropertyArg>) -> Result<CallToolResult, ErrorData> {
         if let Err(e) = self.set_live(app, node, &name, &value).await {
             return failed(format!("the app refused {name} = {value}: {e}"));
@@ -536,7 +536,7 @@ impl Designer {
         if self.tree_with(app, node, false).await { json_result(json!({"removed": node})) } else { failed(format!("the app still shows control {node}")) }
     }
 
-    #[tool(description = "Write a control inserted live (insert, or placed in the designer) into the C# code that makes its parent's children, as new T { its starting values and props } at its place among the children the code makes (other live changes not written are taken into account). Returns code.edited with an undo id, or code.refused with the reason and its key: a parent whose children come from a loop or a template, a parent not in the code yet, a control already in the code.")]
+    #[tool(description = "Write a control inserted live (insert, or placed in the designer) into the code (C#, TSX or Rust) that makes its parent's children, as a new control with its starting values and props at its place among the children the code makes (other live changes not written are taken into account). Returns code.edited with an undo id, or code.refused with the reason and its key: a parent whose children come from a loop or a template, a parent not in the code yet, a control already in the code.")]
     async fn write_insert(&self, Parameters(NodeArg { app, node }): Parameters<NodeArg>) -> Result<CallToolResult, ErrorData> {
         let Some((type_name, Some(parent))) = self.node_info(app, node) else { return failed(format!("no control {node} with a parent in app {app}'s tree (see get_tree)")) };
         // Its property types spell the values.
@@ -547,7 +547,7 @@ impl Designer {
         json_result(json!({"code": Self::code_json(request, answer)}))
     }
 
-    #[tool(description = "Take a control out of the C# code that makes it: one removed live with remove (its place in the code is remembered), or one still shown. Returns code.edited with an undo id, or code.refused with the reason and its key.")]
+    #[tool(description = "Take a control out of the code that makes it: one removed live with remove (its place in the code is remembered), or one still shown. Returns code.edited with an undo id, or code.refused with the reason and its key.")]
     async fn write_remove(&self, Parameters(NodeArg { app, node }): Parameters<NodeArg>) -> Result<CallToolResult, ErrorData> {
         let (request, answer) = self.code(|request| EditorMsg::RemoveCode { request, app, node }).await;
         json_result(json!({"code": Self::code_json(request, answer)}))
@@ -573,7 +573,7 @@ impl Designer {
         }
     }
 
-    #[tool(description = "Move a control in the C# code that makes it to where move put it live (its place in the code is remembered). Returns code.edited with an undo id, or code.refused with the reason and its key: a parent whose children come from a loop or a template, a control in another file, a parent not in the code yet.")]
+    #[tool(description = "Move a control in the code that makes it to where move put it live (its place in the code is remembered). Returns code.edited with an undo id, or code.refused with the reason and its key: a parent whose children come from a loop or a template, a control in another file, a parent not in the code yet.")]
     async fn write_move(&self, Parameters(NodeArg { app, node }): Parameters<NodeArg>) -> Result<CallToolResult, ErrorData> {
         let Some((_, Some(parent))) = self.node_info(app, node) else { return failed(format!("no control {node} with a parent in app {app}'s tree (see get_tree)")) };
         let (request, answer) = self.code(|request| EditorMsg::MoveCode { request, app, node, parent, index: 0 }).await;
@@ -610,7 +610,7 @@ impl ServerHandler for Designer {
     fn get_info(&self) -> ServerConfig {
         ServerConfig::new(ServerCapabilities::builder().enable_tools().build()).with_instructions(
             "DrawnUI Designer: inspect and change running DrawnUI apps. Start with list_apps, then get_tree for an app. \
-             Use set_property to try a value live and write_property to change the app's C# code as well. \
+             Use set_property to try a value live and write_property to change the app's code as well (C#, TSX or Rust). \
              insert, remove and move change the controls live; write_insert, write_remove and write_move put those changes into the code; \
              undo_write takes any write back.",
         )
@@ -627,7 +627,8 @@ fn locate(project: &str, tree: &Tree) -> HashMap<NodeId, String> {
     for m in &matches {
         let keys = lines.entry(m.uri.as_str()).or_insert_with(|| {
             let text = &texts.iter().find(|(u, _)| *u == m.uri).expect("matched file").1;
-            designer_sources::read_csharp(&m.uri, text).nodes.into_iter().map(|n| (n.key, n.range.start.line + 1)).collect()
+            let src = if designer_sources::is_rust(&m.uri) { designer_sources::read_rust(&m.uri, text) } else { designer_sources::read_csharp(&m.uri, text) };
+            src.nodes.into_iter().map(|n| (n.key, n.range.start.line + 1)).collect()
         });
         if let Some(line) = keys.get(&m.key) {
             out.insert(m.node, format!("{}:{line}", m.uri));

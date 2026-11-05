@@ -48,6 +48,9 @@ pub(crate) enum Unwritten {
     Remove(u64),
 }
 
+/// How long a page's `code.flush` waits for its writes before it is answered anyway (the page gives up at 3 s).
+const PAGE_FLUSH_WAIT_MS: f32 = 2500.0;
+
 /// What waits for a flush to be answered.
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum AfterFlush {
@@ -214,7 +217,21 @@ impl App {
             return self.go_on(AfterFlush::Page(request), cx);
         }
         let changes = self.unwritten();
-        self.flush(changes, vec![AfterFlush::Page(request)], cx);
+        self.flush(changes, vec![AfterFlush::Page(request.clone())], cx);
+        // The page waits 3 s for its answer: by then it comes, what is not written yet in `left`.
+        if self.flushing.as_ref().is_some_and(|f| f.then.contains(&AfterFlush::Page(request.clone()))) {
+            cx.after::<App>(self.inbox, PAGE_FLUSH_WAIT_MS, move |app, _cx| app.page_flush_late(request));
+        }
+    }
+
+    /// A page's flush not done in time: answered now; its writes still go on.
+    fn page_flush_late(&mut self, request: serde_json::Value) {
+        let Some(f) = &mut self.flushing else { return };
+        let Some(i) = f.then.iter().position(|t| *t == AfterFlush::Page(request.clone())) else { return };
+        f.then.remove(i);
+        let written = f.written;
+        let left = self.unwritten_count();
+        self.post_page(serde_json::json!({ "type": "code.flushed", "request": request, "written": written, "left": left }));
     }
 
     pub(crate) fn post_page(&self, msg: serde_json::Value) {

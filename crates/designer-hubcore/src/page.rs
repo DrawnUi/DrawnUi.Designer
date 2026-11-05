@@ -147,4 +147,8 @@ impl CodeStore for PageCode {
     fn dir_exists(&self, dir: &Path) -> bool {
         dir == Path::new(PROJECT)
     }
+
+    fn busy(&self) -> bool {
+        self.state.lock().unwrap().waiting
+    }
 }

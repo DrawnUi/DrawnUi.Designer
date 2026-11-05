@@ -24,8 +24,10 @@ use tree_sitter::{Node, Parser, Tree};
 mod codeset;
 mod insert;
 mod matcher;
+mod rs;
 mod setcode;
 mod tsx;
+pub use rs::{is_rust, read_rust};
 pub use tsx::{edit_tsx, is_tsx, read_tsx};
 pub use insert::{children_forms, insert_element, insert_spec, move_element, remove_element};
 pub use codeset::{ElementCode, code_set_names, element_code};
@@ -676,6 +678,9 @@ impl<'t> Walker<'t> {
 /// an element it creates itself (`SkiaControl Circle(..) => new SkiaShape { .. }`), the element's key
 /// and the helper's name. Through casts, parentheses and fluent calls on the element.
 pub fn helper_names(uri: &str, text: &str) -> HashMap<String, String> {
+    if crate::rs::is_rust(uri) {
+        return crate::rs::helper_names(uri, text);
+    }
     let ts = parse(text);
     let (fresh, handles) = walk(&ts, text, uri);
     let elements: HashMap<usize, usize> = (0..fresh.nodes.len()).filter(|&i| fresh.nodes[i].role == SourceRole::Element).map(|i| (handles[i].id(), i)).collect();

@@ -127,7 +127,8 @@ draws the frame that answers off screen. The Controls panel lists the engine's c
 editor, button, checkbox, radio button, switch, slider, progress, image, SVG, shape); they are placed, pasted with
 their properties and children (or dropped by a click in the app: Place puts it into the container under the pointer, after the child there; Esc cancels), copied, taken out and moved among their siblings live (into another control not
 yet). A tree waits for the app's controls to be built and laid out (fonts still loading), up to about a second.
-Write to code is not there yet (the code reader knows C# only), nor screens; a snapshot shows the app's window, not its popup windows. `DRAWNUI_DESIGNER=0` turns the agent off, `DRAWNUI_DESIGNER_URL` points it
+Write to code changes the crate's `.rs` files (see What Write to code changes, Rust). Screens are not there yet, and a
+snapshot shows the app's window, not its popup windows. `DRAWNUI_DESIGNER=0` turns the agent off, `DRAWNUI_DESIGNER_URL` points it
 at another hub. While no designer runs it tries the one address every 2 s on its own thread and adds no work to the
 UI thread; connected, each request costs one frame. The sample is `agents/rust/sample` (`cargo run -p
 designer-agent-sample` in `agents/rust`); its Quick actions switch opens a popup menu.
@@ -423,7 +424,8 @@ Settings, Code, **Write changes to code**:
 
 In every mode the title bar shows how many changes are not in code yet, with **Write all**, which writes them all as
 one step of the history (in a page this is a strip under the Layers header). What cannot be written stays live with its dot:
-an app with no code the designer writes into (DrawnUI for Rust), a value the code computes, a write the code refuses.
+an app with no code the designer can reach (a browser page that sends none), a value the code computes, a write the
+code refuses.
 With Manual, Restart app and Run app ask first: write the changes, go on without them, or cancel. Closing the
 designer (its close button, Alt+F4, Cmd+Q, File, Exit) with changes not in code goes the same way: Auto and Always
 write them first, then the window closes; Manual asks. An app that closes by itself takes its live changes with it.
@@ -483,6 +485,30 @@ The designer refuses instead of guessing, and says why, when:
 Some code is shared by several controls: a helper method's body, or a template used for every cell of a list.
 A value written there changes every control made from it. A value passed as an argument to the helper changes
 only that one call.
+
+### Rust (DrawnUI for Rust)
+
+The designer follows the function the app builds its window with (`Ui::new(state, build)`, or a DrawFiddle
+snippet's `fn build`) through `.children(..)` and `.content(..)`, tuples, `vec![..]` and calls into your own
+functions, to the constructor that makes the control. It changes one span of text:
+
+| Your code | After writing `font_size = 20`, `text_color = #FF0000`, `padding = 8,4` |
+|---|---|
+| `.font_size(18)` | `.font_size(20)`; a decimal (`18.0`) stays a decimal |
+| `SkiaLabel::new("Hi")` | the text in the constructor, escaped as Rust needs |
+| `.horizontal_options(LayoutOptions::Center)` | `LayoutOptions::Start`, its path kept |
+| `.text_color(Color::from_rgb(0xDC, 0x14, 0x3C))` | `Color::from_rgb(0xFF, 0x00, 0x00)`: hex or decimal kept, `from_argb` when not opaque |
+| `.text_color(Color::WHITE)` | `Color::RED` when the color has a name, else `Color::from_rgb(..)` |
+| `.padding(24)` | `.padding((8, 4))`: the shortest form |
+| `circle(Color::BLUE, 40.0)` where `circle` calls `.background_color(colour)` | the argument at that call, not the helper |
+| nothing set yet | `.text_color(..)` at the end of the chain, on its own line when the chain's calls are; for a control a helper returns, on that call (`swatch(..).margin(8)`) |
+
+Added, pasted and duplicated controls are written with the engine's own constructors (`SkiaLabel::new("Label")`)
+and their values as builder calls; a control without children gets `.children(..)`. Moves and deletes edit the
+children tuple or `vec![..]`, commas and lines kept; taking out the last child takes out its `.children(..)`. The
+designer refuses, and says why, when the children come from a loop, an iterator or a condition, a value is a
+constant or an expression, a `vec![..]` would get a control of another type, or a tuple already holds 12 controls
+(the most DrawnUI for Rust takes). Controls of your own types are followed when they are made with `Build::new(..)`.
 
 ## For AI agents (MCP)
 
@@ -562,8 +588,9 @@ your app + agent  --WebSocket-->  hub (127.0.0.1:54270)  <--WebSocket--  designe
 - An editor sends requests for one app (`toApp`), `setCode` to write a property to code, `insertCode` to write
   a control added live, `removeCode` to take one out of the code, or `undoCode` to take such a write back. The hub answers them itself: `codeEdited`, `codeUndone` or `codeRefused`.
 - The hub keeps each app's last tree, screens and properties, and gives them to every editor that connects.
-- Writing to code happens in the hub. It reads the app's project files fresh each time (all `.cs` files under
-  the project folder, without `bin` and `obj`) and changes only the one file and span.
+- Writing to code happens in the hub. It reads the app's project files fresh each time (all `.cs`, `.tsx`,
+  `.jsx` and `.rs` files under the folder of its `.csproj` or `Cargo.toml`, without `bin`, `obj`, `node_modules`,
+  `dist` and `target`) and changes only the one file and span.
 
 Messages are JSON text frames. Their definitions are in `crates/designer-protocol`.
 
@@ -615,7 +642,8 @@ The iframe sends:
   step. Write to code and its Undo both send it.
 - `{ channel, type: "code.flushed", request, written, left }`: the answer to `code.flush`, once its writes are done
   (their `code.edit` messages sent first): how many changes were written and how many are still not in code (they
-  cannot be written, or the mode is Manual).
+  cannot be written, or the mode is Manual). It comes within 2.5 s: a write the page has not taken by then counts in
+  `left`, and still lands when the page takes it.
 - `{ channel, type: "drag.out", typeName, x, y, localX, localY, phase }`: a control dragged from Controls is outside
   the iframe, the button still held (the iframe keeps the pointer). `x`, `y` are in the page's client coordinates
   (`frame.offset` added); `localX`, `localY` are the same point in the iframe's own CSS pixels, so the page can add
@@ -631,8 +659,9 @@ The page sends:
 - `{ channel, type: "app.closed" }`: the agent was detached.
 - `{ channel, type: "theme", theme }`: the page's look. `"dark"`, `"light"` or a designer theme id (`midnight`,
   `graphite`, `paper`, `high-contrast`). Send it once at start and again whenever the page's theme changes.
-- `{ channel, type: "code", uri: "fiddle:///snippet.cs", text, version }`: the code. The answer to `code.get`,
-  and sent again on every change in the page's editor, with a new version.
+- `{ channel, type: "code", uri: "fiddle:///snippet.cs", text, version }`: the code (`snippet.tsx` for React,
+  `snippet.rs` for Rust). The answer to `code.get`, and sent again on every change in the page's editor, with a new
+  version.
 - `{ channel, type: "code.flush", request }`: the page needs the code (before Source, Run, Share or Export). With
   Auto or Always the editor writes every change not in code yet, as one step of its history, then answers
   `code.flushed` with the same `request`; with Manual it answers at once and writes nothing.
@@ -644,10 +673,11 @@ The page sends:
   it, and it is recorded, undone and written as a placed control.
 
 The hub treats the app's code as one file, `fiddle:///snippet.cs` (the app's hello has no project): the
-snippet's last top-level `return` is what the Fiddle's own layout holds. After a `code.edit` the iframe uses
+snippet's last top-level `return` is what the Fiddle's own layout holds (for Rust, `fn build`). After a `code.edit` the iframe uses
 the new text at once; the next `code` message with a newer version is the truth either way (one at the
-version the edit was made against, or older, is the text from before the edit and waits for the edit). A second write before that message
-is refused ("the editor has not taken the last edit yet") and the iframe asks for the code again.
+version the edit was made against, or older, is the text from before the edit and waits for the edit). A write that
+comes before that message (Write all, `code.flush`) waits for it, then is made against that text: the writes land one
+by one, in order, each on the text the page sent after the one before, also when the person typed in between.
 
 `dev/fiddle-probe/index.html` is a stand-in for such a page (a fake agent, its preview as the app's canvas, and a
 textarea): serve the repo root, then open `/dev/fiddle-probe/`. Drag a control from Controls onto the preview to
@@ -656,8 +686,8 @@ see `drag.out`, `frame.offset` and `place` at work.
 ## Limits
 
 - Apps: DrawnUi.Net WPF and DrawnUi.Maui (Windows, Android, iPhone, iPad, Mac), DrawnUI for Rust on Windows (live
-  edits, Pick, snapshots, Bring to front; no Write to code yet), DrawnUI for React in the browser (live edits, Pick,
-  add / copy / delete, snapshots, Write to code into `.tsx`).
+  edits, Pick, snapshots, Bring to front, Write to code into `.rs`) and in DrawFiddle (Write to code into the snippet),
+  DrawnUI for React in the browser (live edits, Pick, add / copy / delete, snapshots, Write to code into `.tsx`).
 - Controls can be added, pasted, duplicated, moved and deleted (Placing controls; Move controls; Copy, paste and
   styles).
 - Gradients and shadows are edited as text.

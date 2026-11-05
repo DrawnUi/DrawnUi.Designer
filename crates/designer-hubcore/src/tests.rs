@@ -23,7 +23,7 @@ impl MemStore {
 impl CodeStore for MemStore {
     fn list(&self, dir: &Path) -> Vec<(String, Stamp)> {
         let files = self.0.lock().unwrap();
-        files.iter().filter(|(u, _)| Path::new(u).starts_with(dir) && u.ends_with(".cs")).map(|(u, (b, v))| (u.clone(), (b.len() as u64, *v))).collect()
+        files.iter().filter(|(u, _)| Path::new(u).starts_with(dir) && (u.ends_with(".cs") || u.ends_with(".rs"))).map(|(u, (b, v))| (u.clone(), (b.len() as u64, *v))).collect()
     }
 
     fn read(&self, uri: &str) -> Result<Vec<u8>, String> {
@@ -257,17 +257,68 @@ fn a_page_hub_writes_the_snippet_through_the_page() {
     assert_eq!(edits, [page::Utf16Edit { start: at + 1, end: at + 2, text: "ello".into() }]);
     assert_eq!(apply_utf16(SNIPPET, &edits[0]), edited);
 
-    // A second write before the page took the first: refused, and the page is asked for its text.
-    let refused = ed(&mut core, editor, set(2, "Bye"));
-    assert!(matches!(refused.as_slice(), [Out::ToEditor(_, HubToEditor::CodeRefused { request: 2, .. })]), "{refused:?}");
-    assert_eq!(posted.lock().unwrap().pop(), Some(page::ToPage::Get));
+    // A second write before the page took the first: it waits, unanswered, and nothing is posted.
+    assert!(ed(&mut core, editor, set(2, "Bye")).is_empty());
+    assert!(posted.lock().unwrap().is_empty());
 
-    // The page took it (its next version); Undo goes back through the page the same way.
+    // The page took the first (its next version): the second goes, made against that text.
     code.set_text(edited.clone(), 8);
-    let undo = ed(&mut core, editor, EditorMsg::UndoCode { request: 1 });
-    assert!(matches!(undo.as_slice(), [Out::ToEditor(_, HubToEditor::CodeUndone { request: 1, .. })]), "{undo:?}");
+    let outs = core.code_arrived();
+    assert!(matches!(outs.as_slice(), [Out::ToEditor(_, HubToEditor::CodeEdited { request: 2, .. })]), "{outs:?}");
     let Some(page::ToPage::Edit { version: 8, edits }) = posted.lock().unwrap().pop() else { panic!() };
+    let bye = apply_utf16(&edited, &edits[0]);
+    assert_eq!(bye, SNIPPET.replace("\"Hi\"", "\"Bye\""));
+
+    // Undo goes back through the page the same way, one edit at a time.
+    code.set_text(bye.clone(), 9);
+    assert!(core.code_arrived().is_empty());
+    let undo = ed(&mut core, editor, EditorMsg::UndoCode { request: 2 });
+    assert!(matches!(undo.as_slice(), [Out::ToEditor(_, HubToEditor::CodeUndone { request: 2, .. })]), "{undo:?}");
+    assert!(ed(&mut core, editor, EditorMsg::UndoCode { request: 1 }).is_empty(), "waits for the page");
+    let Some(page::ToPage::Edit { version: 9, edits }) = posted.lock().unwrap().pop() else { panic!() };
+    code.set_text(apply_utf16(&bye, &edits[0]), 10);
+    let undo = core.code_arrived();
+    assert!(matches!(undo.as_slice(), [Out::ToEditor(_, HubToEditor::CodeUndone { request: 1, .. })]), "{undo:?}");
+    let Some(page::ToPage::Edit { version: 10, edits }) = posted.lock().unwrap().pop() else { panic!() };
     assert_eq!(apply_utf16(&edited, &edits[0]), SNIPPET);
+}
+
+/// Write all in a page: three values sent at once land one after the other, in order, each made
+/// against the text the page sent after the one before; text the user typed meanwhile is the base
+/// of the next.
+#[test]
+fn a_page_flush_writes_every_change_in_order() {
+    let posted: Arc<Mutex<Vec<page::ToPage>>> = Arc::default();
+    let sink = posted.clone();
+    let code = Arc::new(page::PageCode::new(move |m| sink.lock().unwrap().push(m)));
+    let mut core = HubCore::new(code.clone());
+    core.page_project = Some(page::PROJECT.into());
+    let (editor, _) = core.editor_hello(PROTOCOL_VERSION).unwrap();
+    let (app, _) = core.app_hello(AppInfo { engine: "rust".into(), platform: Some("browser".into()), ..info("FiddleApp", 0, None) }).unwrap();
+    code.set_text_for("fiddle:///snippet.rs", RUST_APP.into(), 1);
+    ap(&mut core, app, AppMsg::Tree(rust_tree(1, 1)));
+    ap(&mut core, app, AppMsg::Props { node: 3, props: rust_props("B", "14") });
+    let mut answers = vec![];
+    for (request, prop, value) in [(1, "font_size", "20"), (2, "text_color", "#FFFF0000"), (3, "text", "C")] {
+        answers.extend(ed(&mut core, editor, EditorMsg::SetCode { request, app, node: 3, prop: prop.into(), value: value.into() }));
+    }
+    let mut text = RUST_APP.to_string();
+    let mut version = 1;
+    // The page takes each edit and sends its code back; the user types a comment before the third.
+    for k in 0..3 {
+        let Some(page::ToPage::Edit { version: v, edits }) = posted.lock().unwrap().pop() else { panic!("edit {k}") };
+        assert_eq!(v, version);
+        text = apply_utf16(&text, &edits[0]);
+        if k == 1 {
+            text = format!("// mine\n{text}");
+        }
+        version += 1;
+        code.set_text_for("fiddle:///snippet.rs", text.clone(), version);
+        answers.extend(core.code_arrived());
+    }
+    let order: Vec<u32> = answers.iter().filter_map(|o| if let Out::ToEditor(_, HubToEditor::CodeEdited { request, .. }) = o { Some(*request) } else { None }).collect();
+    assert_eq!(order, [1, 2, 3]);
+    assert!(text.starts_with("// mine\n") && text.contains("SkiaLabel::new(\"C\").font_size(20).text_color(Color::from_rgb(255, 0, 0)),"), "{text}");
 }
 
 /// DrawFiddle's Kids preset builds its shapes with helpers: after a tree, the hub reads the names the
@@ -905,4 +956,90 @@ fn one_write_is_one_page_edit() {
         assert_eq!(edits(&posted), 1, "{uri}: Write again changes nothing");
         assert_eq!(code.read(uri).map(|b| String::from_utf8(b).unwrap()), Ok(edited), "{uri}");
     }
+}
+
+// ---- DrawnUI for Rust ----
+
+const RUST_APP: &str = "use drawnui::prelude::*;
+
+fn build(_app: &mut App) -> Build<SkiaLayout> {
+    SkiaStack::new().children((
+        SkiaLabel::new(\"A\").font_size(14),
+        SkiaLabel::new(\"B\"),
+    ))
+}
+";
+
+/// The Rust app's tree as its agent reports it (type names without a path), ids from `first`.
+fn rust_tree(revision: u64, first: u64) -> Tree {
+    let n = |id, parent, t: &str| Node { id, parent, type_name: t.into(), ..Default::default() };
+    Tree { revision, width: 100.0, height: 50.0, nodes: vec![n(first, None, "SkiaLayout"), n(first + 1, Some(first), "SkiaLabel"), n(first + 2, Some(first), "SkiaLabel")] }
+}
+
+fn rust_props(text: &str, size: &str) -> Vec<Prop> {
+    vec![prop("text", "System.String", text), prop("font_size", "System.Single", size), prop("text_color", "drawnui.skia.Color", "#FF000000")]
+}
+
+/// A desktop Rust app (its project is its Cargo.toml): matched from its `Ui::new(.., build)` (another
+/// file's `fn build` is not it), values written into its src, each write answered, and Undo puts the
+/// file back.
+#[test]
+fn a_rust_app_writes_its_values_into_its_crate() {
+    let main = format!("{RUST_APP}
+fn main() {{
+    drawnui::run(\"app\", || Ui::new(App::default(), build));
+}}
+");
+    let store = MemStore::with(&[("/app/src/main.rs", main.as_str()), ("/app/src/other.rs", "fn build() -> Build<SkiaLabel> { SkiaLabel::new(\"not this one\") }
+")]);
+    let mut core = HubCore::new(store.clone());
+    let (editor, _) = core.editor_hello(PROTOCOL_VERSION).unwrap();
+    let (app, _) = core.app_hello(AppInfo { engine: "rust".into(), ..info("app", 1, Some("/app/Cargo.toml")) }).unwrap();
+    ap(&mut core, app, AppMsg::Tree(rust_tree(1, 1)));
+    let outs = ap(&mut core, app, AppMsg::Props { node: 2, props: rust_props("A", "14") });
+    assert!(to_editor(&outs, editor).contains(&&HubToEditor::CodeSet { app, node: 2, names: Some(vec!["text".into(), "font_size".into()]) }), "{outs:?}");
+    ap(&mut core, app, AppMsg::Props { node: 3, props: rust_props("B", "14") });
+    // Two values of B, as Write all sends them: both written.
+    for (request, prop, value) in [(1, "font_size", "20"), (2, "text_color", "#FFFF0000")] {
+        let outs = ed(&mut core, editor, EditorMsg::SetCode { request, app, node: 3, prop: prop.into(), value: value.into() });
+        assert!(matches!(to_editor(&outs, editor).as_slice(), [HubToEditor::CodeEdited { .. }]), "{outs:?}");
+    }
+    let code = store.text("/app/src/main.rs");
+    assert_eq!(code, main.replace("SkiaLabel::new(\"B\"),", "SkiaLabel::new(\"B\").font_size(20).text_color(Color::from_rgb(255, 0, 0)),"));
+    ed(&mut core, editor, EditorMsg::UndoCode { request: 2 });
+    ed(&mut core, editor, EditorMsg::UndoCode { request: 1 });
+    assert_eq!(store.text("/app/src/main.rs"), main);
+}
+
+/// DrawFiddle's Rust snippet: a write goes through the page, the page rebuilds the app from the new
+/// code (new ids), and only the values still not in code are put back; the written one is not
+/// set again, and the control is the same one for the editors (its selection stays).
+#[test]
+fn a_rust_snippet_write_survives_the_hot_rebuild() {
+    let posted: Arc<Mutex<Vec<page::ToPage>>> = Arc::default();
+    let sink = posted.clone();
+    let code = Arc::new(page::PageCode::new(move |m| sink.lock().unwrap().push(m)));
+    let mut core = HubCore::new(code.clone());
+    core.page_project = Some(page::PROJECT.into());
+    let (editor, _) = core.editor_hello(PROTOCOL_VERSION).unwrap();
+    let (app, _) = core.app_hello(AppInfo { engine: "rust".into(), platform: Some("browser".into()), ..info("FiddleApp", 0, None) }).unwrap();
+    code.set_text_for("fiddle:///snippet.rs", RUST_APP.into(), 1);
+    ap(&mut core, app, AppMsg::Tree(rust_tree(1, 1)));
+    ap(&mut core, app, AppMsg::Props { node: 3, props: rust_props("B", "14") });
+    for (request, name, value) in [(10, "font_size", "20"), (11, "text_color", "#FFFF0000")] {
+        ed(&mut core, editor, EditorMsg::ToApp { app, msg: HubToApp::SetProperty { request, node: 3, name: name.into(), value: value.into() } });
+    }
+    let outs = ed(&mut core, editor, EditorMsg::SetCode { request: 1, app, node: 3, prop: "font_size".into(), value: "20".into() });
+    assert!(matches!(to_editor(&outs, editor).as_slice(), [HubToEditor::CodeEdited { request: 1, .. }]), "{outs:?}");
+    let Some(page::ToPage::Edit { version: 1, edits }) = posted.lock().unwrap().pop() else { panic!() };
+    let written = apply_utf16(RUST_APP, &edits[0]);
+    assert!(written.contains("SkiaLabel::new(\"B\").font_size(20),"), "{written}");
+    // The page takes it (version 2) and hot-swaps the app built from it: new ids.
+    code.set_text_for("fiddle:///snippet.rs", written, 2);
+    let outs = core.app_msg(app, AppMsg::Tree(rust_tree(2, 11)));
+    let outs = core.run_inline(outs);
+    let (moved, replaying, lost) = replayed(&outs).expect("Replayed");
+    assert_eq!((moved, replaying, lost), (vec![(3, 13)], vec![], vec![]));
+    let set: Vec<(u64, String)> = to_app(&outs).into_iter().filter_map(|m| if let HubToApp::SetProperty { node, name, .. } = m { Some((node, name)) } else { None }).collect();
+    assert_eq!(set, [(13, "text_color".to_owned())], "font_size is in the code now");
 }

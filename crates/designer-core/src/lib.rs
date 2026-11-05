@@ -108,8 +108,8 @@ impl CodeStore for FsStore {
     }
 }
 
-/// Every `*.cs`, `*.tsx` and `*.jsx` under `dir` with its size and modified time, without build
-/// output and packages (`bin`, `obj`, `node_modules`, `dist`) and hidden folders. Linked folders
+/// Every `*.cs`, `*.tsx`, `*.jsx` and `*.rs` under `dir` with its size and modified time, without
+/// build output and packages (`bin`, `obj`, `node_modules`, `dist`, `target`) and hidden folders. Linked folders
 /// are followed (shared C# code), each folder once (a link back up never loops).
 fn list_sources(dir: &Path, out: &mut Vec<(String, Stamp)>) {
     list_sources_in(dir, out, &mut std::collections::HashSet::new());
@@ -126,10 +126,10 @@ fn list_sources_in(dir: &Path, out: &mut Vec<(String, Stamp)>, seen: &mut std::c
         // The entry's own metadata costs no extra call; a link is followed to what it points at.
         let Some(meta) = e.metadata().ok().and_then(|m| if m.file_type().is_symlink() { std::fs::metadata(&path).ok() } else { Some(m) }) else { continue };
         if meta.is_dir() {
-            if !matches!(name.as_str(), "bin" | "obj" | "node_modules" | "dist") && !name.starts_with('.') {
+            if !matches!(name.as_str(), "bin" | "obj" | "node_modules" | "dist" | "target") && !name.starts_with('.') {
                 list_sources_in(&path, out, seen);
             }
-        } else if name.ends_with(".cs") || designer_sources::is_tsx(&name) {
+        } else if name.ends_with(".cs") || designer_sources::is_tsx(&name) || designer_sources::is_rust(&name) {
             let modified = meta.modified().ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map_or(0, |d| d.as_nanos() as u64);
             out.push((path.to_string_lossy().to_string(), (meta.len(), modified)));
         }

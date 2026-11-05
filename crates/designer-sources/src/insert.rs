@@ -25,6 +25,10 @@ pub fn insert_element(
     if let Some(r) = tsx_insert(files, tree, parent, index, crate::tsx::NewControl::Defaults { type_name, defaults, types }) {
         return r.map(|s| s.finish(files));
     }
+    let spec = ControlSpec { type_name: type_name.into(), props: defaults.iter().map(|(n, v)| designer_protocol::SpecProp { name: n.clone(), value: v.clone(), type_name: String::new() }).collect(), children: vec![] };
+    if let Some(r) = rs_insert(files, tree, parent, index, crate::rs::NewControl::Spec { spec: &spec, root_types: types }) {
+        return r.map(|s| s.finish(files));
+    }
     insert_with(files, tree, parent, index, |_| new_element(type_name, defaults, types)).map(|s| s.finish(files))
 }
 
@@ -38,6 +42,9 @@ pub fn insert_spec(files: &[(String, String)], tree: &RuntimeTree, parent: NodeI
     if let Some(r) = tsx_insert(files, tree, parent, index, crate::tsx::NewControl::Spec { spec, root_types }) {
         return r.map(|s| s.finish(files));
     }
+    if let Some(r) = rs_insert(files, tree, parent, index, crate::rs::NewControl::Spec { spec, root_types }) {
+        return r.map(|s| s.finish(files));
+    }
     insert_with(files, tree, parent, index, |style| spec_element(spec, root_types, style, &mut vec![], forms)).map(|s| s.finish(files))
 }
 
@@ -46,7 +53,7 @@ pub fn insert_spec(files: &[(String, String)], tree: &RuntimeTree, parent: NodeI
 /// such list in code are left out.
 pub fn children_forms(files: &[(String, String)], tree: &RuntimeTree, nodes: &[NodeId]) -> HashMap<NodeId, String> {
     let mut out = HashMap::new();
-    for m in match_runtime(files, tree).into_iter().filter(|m| nodes.contains(&m.node) && !crate::tsx::is_tsx(&m.uri)) {
+    for m in match_runtime(files, tree).into_iter().filter(|m| nodes.contains(&m.node) && !crate::tsx::is_tsx(&m.uri) && !crate::rs::is_rust(&m.uri)) {
         let Some((_, text)) = files.iter().find(|(u, _)| *u == m.uri) else { continue };
         let ts = parse(text);
         let (src, handles) = walk(&ts, text, &m.uri);
@@ -90,6 +97,22 @@ fn tsx_insert(files: &[(String, String)], tree: &RuntimeTree, parent: NodeId, in
         return Some(Err(Refusal::new("src-insert-templated", &[])));
     }
     Some(crate::tsx::insert(files, tree, &matches, parent, index, new))
+}
+
+/// The insert for a parent made by Rust (`None`: no Rust file, or the parent is not made by one).
+fn rs_insert(files: &[(String, String)], tree: &RuntimeTree, parent: NodeId, index: usize, new: crate::rs::NewControl) -> Option<Result<Splice, Refusal>> {
+    if !files.iter().any(|(u, _)| crate::rs::is_rust(u)) {
+        return None;
+    }
+    let matches: HashMap<NodeId, RuntimeMatch> = match_runtime(files, tree).into_iter().map(|m| (m.node, m)).collect();
+    let m = matches.get(&parent)?;
+    if !crate::rs::is_rust(&m.uri) {
+        return None;
+    }
+    if tree.nodes.iter().any(|n| n.parent == Some(parent) && n.template_index.is_some()) {
+        return Some(Err(Refusal::new("src-insert-templated", &[])));
+    }
+    Some(crate::rs::insert(files, tree, &matches, parent, index, new))
 }
 
 /// Places the element `element` makes as child `index` of `parent`'s code (see [`insert_element`]).
@@ -221,6 +244,9 @@ pub fn remove_element(files: &[(String, String)], tree: &RuntimeTree, node: Node
     let m = match_runtime(files, tree).into_iter().find(|m| m.node == node).ok_or_else(|| Refusal::new("src-no-code", &[]))?;
     if crate::tsx::is_tsx(&m.uri) {
         return crate::tsx::remove(files, &m);
+    }
+    if crate::rs::is_rust(&m.uri) {
+        return crate::rs::remove(files, &m);
     }
     let text = files.iter().find(|(u, _)| *u == m.uri).expect("matched file").1.as_str();
     let src = read_csharp(&m.uri, text);
@@ -404,6 +430,8 @@ pub fn move_element(files: &[(String, String)], tree: &RuntimeTree, node: NodeId
     const MARK: &str = "\u{1}moved\u{1}";
     let ins = if crate::tsx::is_tsx(&m.uri) {
         tsx_insert(files, tree, parent, at, crate::tsx::NewControl::Text(MARK)).unwrap_or_else(|| Err(Refusal::new("src-no-code", &[])))?
+    } else if crate::rs::is_rust(&m.uri) {
+        rs_insert(files, tree, parent, at, crate::rs::NewControl::Text(MARK)).unwrap_or_else(|| Err(Refusal::new("src-no-code", &[])))?
     } else {
         insert_with(files, tree, parent, at, |_| Ok(MARK.to_owned()))?
     };
@@ -450,6 +478,9 @@ pub fn move_element(files: &[(String, String)], tree: &RuntimeTree, node: NodeId
 fn cut(uri: &str, text: &str, key: &str) -> Option<(usize, usize, String, std::ops::Range<usize>)> {
     if crate::tsx::is_tsx(uri) {
         return crate::tsx::cut(uri, text, key);
+    }
+    if crate::rs::is_rust(uri) {
+        return crate::rs::cut(text, key);
     }
     let ts = parse(text);
     let (src, handles) = walk(&ts, text, uri);
