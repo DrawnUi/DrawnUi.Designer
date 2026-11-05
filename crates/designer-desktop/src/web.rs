@@ -191,15 +191,13 @@ pub extern "C" fn designer_page(text: *const u8, len: usize) {
         match m["type"].as_str() {
             Some("fromApp") if m["msg"].get("role").is_some() => match serde_json::from_value::<Hello>(m["msg"].clone()) {
                 Ok(Hello::App(info)) => {
-                    // A new hello replaces the app (the page attached its agent again).
-                    let mut outs = p.app.take().map(|old| p.core.app_closed(old)).unwrap_or_default();
-                    match p.core.app_hello(info) {
-                        Some((id, more)) => {
-                            p.app = Some(id);
-                            outs.extend(more);
-                        }
-                        None => log("the app speaks another protocol version"),
+                    // The same app attaching its agent again (after a rebuild) stays, with what was
+                    // changed live and not written; another app replaces it.
+                    let (app, outs) = p.core.page_hello(p.app.take(), info);
+                    if app.is_none() {
+                        log("the app speaks another protocol version");
                     }
+                    p.app = app;
                     p.core.run_inline(outs)
                 }
                 _ => vec![],

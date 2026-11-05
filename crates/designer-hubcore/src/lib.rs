@@ -168,6 +168,42 @@ impl HubCore {
         Some((id, vec![Out::ToEditor(None, self.apps_msg())]))
     }
 
+    /// App `id` says hello again as the same app (its agent attached again after a rebuild: same
+    /// name, engine, pid and platform): it stays, its tree and the changes made live and not written
+    /// kept, so its next tree is a rebuild like a hot reload's. Its info is updated (editors hear it
+    /// when it changed). `None` when it is another app.
+    pub fn app_hello_again(&mut self, id: AppId, info: &AppInfo) -> Option<Vec<Out>> {
+        let app = self.apps.get_mut(&id)?;
+        let a = &app.info;
+        if (&a.name, &a.engine, a.pid, &a.platform) != (&info.name, &info.engine, info.pid, &info.platform) || !same_major(&info.protocol) {
+            return None;
+        }
+        if app.info == *info {
+            return Some(vec![]);
+        }
+        app.info = info.clone();
+        Some(vec![Out::ToEditor(None, self.apps_msg())])
+    }
+
+    /// A page's app says hello (a page hub has one app at a time): the same app again keeps its id,
+    /// tree and live changes ([`Self::app_hello_again`]); another replaces `current`. The app now, or
+    /// `None` when it speaks another protocol version.
+    pub fn page_hello(&mut self, current: Option<AppId>, info: AppInfo) -> (Option<AppId>, Vec<Out>) {
+        if let Some(old) = current
+            && let Some(outs) = self.app_hello_again(old, &info)
+        {
+            return (Some(old), outs);
+        }
+        let mut outs = current.map(|old| self.app_closed(old)).unwrap_or_default();
+        match self.app_hello(info) {
+            Some((id, more)) => {
+                outs.extend(more);
+                (Some(id), outs)
+            }
+            None => (None, outs),
+        }
+    }
+
     /// A message of a connected app: kept, passed to every editor, and after a control's
     /// properties, which of them its code sets.
     pub fn app_msg(&mut self, id: AppId, msg: AppMsg) -> Vec<Out> {

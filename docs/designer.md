@@ -657,7 +657,8 @@ The iframe sends:
 The page sends:
 
 - `{ channel, type: "fromApp", msg }`: the agent's messages; the first is its hello (`{ role: "app", ... }`).
-  Another hello later replaces the app.
+  A hello from the same app again (same name, engine, pid and platform: its agent attached again after a
+  rebuild) keeps it, with the changes not in code yet, as a hot reload does; another app's hello replaces it.
 - `{ channel, type: "app.closed" }`: the agent was detached.
 - `{ channel, type: "theme", theme }`: the page's look. `"dark"`, `"light"` or a designer theme id (`midnight`,
   `graphite`, `paper`, `high-contrast`). Send it once at start and again whenever the page's theme changes.

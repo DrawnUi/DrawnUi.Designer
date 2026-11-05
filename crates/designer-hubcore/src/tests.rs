@@ -1043,3 +1043,36 @@ fn a_rust_snippet_write_survives_the_hot_rebuild() {
     let set: Vec<(u64, String)> = to_app(&outs).into_iter().filter_map(|m| if let HubToApp::SetProperty { node, name, .. } = m { Some((node, name)) } else { None }).collect();
     assert_eq!(set, [(13, "text_color".to_owned())], "font_size is in the code now");
 }
+
+/// A page's agent attaches again after a rebuild (a new hello from the same app): the app stays, and
+/// what was changed live and not written goes back onto the rebuilt controls. Another app replaces it.
+#[test]
+fn a_page_app_attaching_again_keeps_its_live_changes() {
+    let code = Arc::new(page::PageCode::new(|_| {}));
+    let mut core = HubCore::new(code.clone());
+    core.page_project = Some(page::PROJECT.into());
+    let (editor, _) = core.editor_hello(PROTOCOL_VERSION).unwrap();
+    let hello = AppInfo { engine: "rust".into(), platform: Some("browser".into()), ..info("FiddleApp", 0, None) };
+    let (app, outs) = core.page_hello(None, hello.clone());
+    core.run_inline(outs);
+    let app = app.unwrap();
+    code.set_text_for("fiddle:///snippet.rs", RUST_APP.into(), 1);
+    ap(&mut core, app, AppMsg::Tree(rust_tree(1, 1)));
+    ap(&mut core, app, AppMsg::Props { node: 3, props: rust_props("B", "14") });
+    for (request, name, value) in [(10, "font_size", "20"), (11, "text_color", "#FFFF0000")] {
+        ed(&mut core, editor, EditorMsg::ToApp { app, msg: HubToApp::SetProperty { request, node: 3, name: name.into(), value: value.into() } });
+    }
+    // Attached again: same id, the editors hear nothing (the app never went).
+    let (again, outs) = core.page_hello(Some(app), hello.clone());
+    assert_eq!(again, Some(app));
+    assert!(core.run_inline(outs).is_empty());
+    // Its rebuilt tree: both values go back onto the new control.
+    let outs = ap(&mut core, app, AppMsg::Tree(rust_tree(2, 11)));
+    let (moved, replaying, lost) = replayed(&outs).expect("Replayed");
+    assert_eq!((moved, replaying, lost), (vec![(3, 13)], vec![], vec![]));
+    let set: Vec<(u64, String)> = to_app(&outs).into_iter().filter_map(|m| if let HubToApp::SetProperty { node, name, .. } = m { Some((node, name)) } else { None }).collect();
+    assert_eq!(set, [(13, "font_size".to_owned()), (13, "text_color".to_owned())]);
+    // Another app replaces it.
+    let (other, _) = core.page_hello(Some(app), AppInfo { name: "Other".into(), ..hello });
+    assert!(other.is_some_and(|o| o != app) && !core.apps.contains_key(&app));
+}

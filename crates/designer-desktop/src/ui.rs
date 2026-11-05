@@ -4637,10 +4637,12 @@ mod shots {
             n.id += 50_000;
             n.parent = n.parent.map(|p| if kept.contains(&p) { p } else { p + 50_000 });
         }
+        let count = host.ui.state.unwritten_count();
         feed(&mut host, &to_ui, HubToEditor::Replayed { app: 1, moved: vec![(118, 50_118)], replaying: vec![9001], lost: vec![] });
         feed(&mut host, &to_ui, HubToEditor::FromApp { app: 1, msg: AppMsg::Tree(tree.clone()) });
         let state = &host.ui.state;
         assert_eq!(state.pending.get(&(50_118, "TextColor".into())).map(String::as_str), Some("#FFFF0000"), "the dot moved");
+        assert_eq!(state.unwritten_count(), count, "the count of changes not in code stays");
         assert!(state.live_original.contains_key(&(50_118, "TextColor".into())), "Undo moved");
         assert!(state.inserted.contains_key("#9001"), "the add on its way back keeps its mark");
         // It arrives.
