@@ -836,7 +836,7 @@ checksum = "4583a4551df46e2792f82ceeac45e850d2e2d5debba0b91f102385cda5b11f06"
 
 [[package]]
 name = "designer-core"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "axum",
  "designer-hubcore",
@@ -855,7 +855,7 @@ dependencies = [
 
 [[package]]
 name = "designer-desktop"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "designer-core",
  "designer-hubcore",
@@ -875,7 +875,7 @@ dependencies = [
 
 [[package]]
 name = "designer-hubcore"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "designer-protocol",
  "designer-sources",
@@ -883,7 +883,7 @@ dependencies = [
 
 [[package]]
 name = "designer-i18n"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "fluent-bundle",
  "fluent-syntax",
@@ -892,7 +892,7 @@ dependencies = [
 
 [[package]]
 name = "designer-protocol"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "designer-i18n",
  "serde",
@@ -901,7 +901,7 @@ dependencies = [
 
 [[package]]
 name = "designer-sources"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "designer-i18n",
  "designer-protocol",

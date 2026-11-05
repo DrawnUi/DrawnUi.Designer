@@ -127,7 +127,7 @@ screens, controls and screenshots when the designer asks. One console line at st
 [Build from source](#build-from-source)), then install it:
 
 ```powershell
-code --install-extension vscode\drawnui-designer-0.2.0.vsix
+code --install-extension vscode\drawnui-designer-0.3.0.vsix
 ```
 
 Settings: `drawnuiDesigner.port` (default 54270) and `drawnuiDesigner.sidecarPath`.
