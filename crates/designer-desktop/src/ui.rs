@@ -311,6 +311,10 @@ pub struct App {
     runs: std::collections::HashMap<String, (designer_protocol::RunState, String)>,
     /// The app whose tree shows.
     app: Option<AppId>,
+    /// The selection whose control is not in the app's tree right now (its path and type): the app
+    /// went and attached again with the same id (a page after a rebuild), or a tree came from the
+    /// middle of a rebuild. The next tree that has it selects it again; another selection drops it.
+    reselect: Option<(AppId, String, String)>,
     screens: Vec<Screen>,
     tree: Tree,
     /// Every shown control in tree order; `rows` is this minus what folded nodes hide.
@@ -674,6 +678,9 @@ impl App {
                 self.forget_gone_apps();
                 let keep = self.app.is_some_and(|id| self.apps.iter().any(|a| a.id == id));
                 if fresh.is_some() || !keep {
+                    if let (Some(id), Some(n)) = (self.app, self.selected_node()) {
+                        self.reselect = Some((id, self.node_path(n.id), n.type_name.clone()));
+                    }
                     self.app = fresh.or_else(|| self.apps.iter().map(|a| a.id).max());
                     self.screens.clear();
                     self.set_tree(Tree::default());
@@ -689,16 +696,24 @@ impl App {
                 AppMsg::Tree(tree) => {
                     log(&format!("tree: {} nodes, revision {}", tree.nodes.len(), tree.revision));
                     self.tree_stale = false;
-                    let before = self.selected_node().map(|n| (self.node_path(n.id), n.type_name.clone()));
+                    // The selection, or the one still waiting for its control (see `reselect`).
+                    let pending = self.reselect.take().filter(|r| Some(r.0) == self.app).map(|(_, path, type_name)| (path, type_name));
+                    let before = self.selected_node().map(|n| (self.node_path(n.id), n.type_name.clone())).or(pending);
                     self.set_tree(tree);
                     // The app built its controls again (a hot reload, a DrawFiddle run after a write):
                     // the selection moves to the control at the same place, when it has the same type.
                     if self.selected.is_none()
-                        && let Some((path, type_name)) = before
-                        && let Some(id) = self.node_at_path(&path).filter(|&id| self.tree.nodes.iter().any(|n| n.id == id && n.type_name == type_name))
+                        && let Some((path, type_name)) = &before
+                        && let Some(id) = self.node_at_path(path).filter(|&id| self.tree.nodes.iter().any(|n| n.id == id && n.type_name == *type_name))
                         && let Some(row) = self.rows.iter().position(|r| self.tree.nodes[r.node].id == id)
                     {
                         self.select_row(row, cx);
+                    }
+                    // Not there yet (a tree from the middle of a rebuild): it waits for the next tree.
+                    if self.selected.is_none()
+                        && let (Some(app), Some((path, type_name))) = (self.app, before)
+                    {
+                        self.reselect = Some((app, path, type_name));
                     }
                     // A control just inserted: selected, revealed, and marked as added here.
                     if let Some(arriving) = self.select_inserted.take_if(|a| self.tree.nodes.iter().any(|n| n.id == a.id)) {
@@ -1637,6 +1652,7 @@ impl App {
 
     /// Selects a row of the tree: highlights the control in the app and asks for its properties.
     fn select_row(&mut self, index: usize, cx: &mut Cx) {
+        self.reselect = None;
         // The control already shown: its properties stay as they are (no reload, no flicker).
         if self.selected == Some(index) && !self.props.is_empty() {
             return;
@@ -5537,6 +5553,39 @@ mod shots {
             edited(&mut host, &to_ui, *request, *node);
         }
         assert!(host.take_close_app());
+    }
+
+    /// A page's app attaches again after a rebuild: it goes, comes back with the same id and new
+    /// control ids; the selection is the control at the same place. The same after a tree from the
+    /// middle of a rebuild.
+    #[test]
+    fn the_selection_comes_back_with_an_app_that_attaches_again() {
+        let (mut host, _sent, to_ui) = wired(connected());
+        let id = host.ui.state.tree.nodes[host.ui.state.rows[3].node].id;
+        host.ui.state.selected = Some(3);
+        let apps = host.ui.state.apps.clone();
+        let mut rebuilt = host.ui.state.tree.clone();
+        for n in &mut rebuilt.nodes {
+            n.id += 50_000;
+            n.parent = n.parent.map(|p| p + 50_000);
+        }
+        rebuilt.revision += 1;
+        feed(&mut host, &to_ui, HubToEditor::Apps { apps: vec![], recent: vec![] });
+        feed(&mut host, &to_ui, HubToEditor::Apps { apps: apps.clone(), recent: vec![] });
+        feed(&mut host, &to_ui, HubToEditor::FromApp { app: 1, msg: AppMsg::Tree(rebuilt.clone()) });
+        assert_eq!(host.ui.state.selected_node().map(|n| n.id), Some(id + 50_000));
+        // A tree from the middle of a rebuild (the root only), then the whole one: selected again.
+        let mut half = rebuilt.clone();
+        half.nodes.truncate(1);
+        let mut again = rebuilt.clone();
+        for n in &mut again.nodes {
+            n.id += 50_000;
+            n.parent = n.parent.map(|p| p + 50_000);
+        }
+        feed(&mut host, &to_ui, HubToEditor::FromApp { app: 1, msg: AppMsg::Tree(half) });
+        assert!(host.ui.state.selected_node().is_none());
+        feed(&mut host, &to_ui, HubToEditor::FromApp { app: 1, msg: AppMsg::Tree(again) });
+        assert_eq!(host.ui.state.selected_node().map(|n| n.id), Some(id + 100_000));
     }
 
     /// A page's code.flush: Auto writes and answers once the writes are done; Manual answers at

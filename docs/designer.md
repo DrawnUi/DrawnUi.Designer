@@ -335,8 +335,10 @@ Two ways to add a control from the Controls panel:
   stack before the first child whose middle is below the pointer, in a row before the first one whose middle is to
   its right, in a wrap the same in reading order, in a layer or grid last. Over a control that holds none (a label,
   a button, an image) the new one goes next to it in its parent: before it when the pointer is in its first half
-  (top half in a stack, left half in a row or wrap), else after it (always after in a layer or grid). Where nothing
-  can take it (a list's cell made from a template, a page's own wrapper) there is no box and nothing is placed. Esc,
+  (top half in a stack, left half in a row or wrap), else after it (always after in a layer or grid). In DrawFiddle
+  the page's own wrapper is not shown: its empty area is the snippet's top control's, by the same rule (in a stack
+  by the pointer, else last). Where nothing can take it (a list's cell made from a template, a snippet whose top
+  control holds no children) there is no box and nothing is placed. Esc,
   a second click on the row, or Pick cancels; another row places that one instead. Enter on a row does the same as
   a click.
 - **Drag it onto Layers.** The rows move apart to open a gap where it will land: between two rows it goes there,

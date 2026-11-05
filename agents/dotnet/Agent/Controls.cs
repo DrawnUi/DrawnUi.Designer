@@ -524,11 +524,14 @@ namespace DrawnUi.Designer.Agent
         /// index the point is at (a column by its children's vertical middles, a row by their horizontal ones, a wrap in
         /// reading order, a layer or grid last). Otherwise the new one goes next to it in its parent: before it in the
         /// first half along the parent's direction, else after (in a layer or grid after). Nothing where neither takes it
-        /// (a template's cell, the page's own wrapper). The line where it goes, in a stack, row or wrap. UI thread.
+        /// (a template's cell). The page's own wrapper is not shown: its empty area is the snippet's root control's.
+        /// The line where it goes, in a stack, row or wrap. UI thread.
         /// </summary>
         private static (long? Container, int? Index, float[] Line) PlaceTarget(float x, float y)
         {
             var target = Pick(x, y) is { } picked ? Find(picked) : null;
+            if (target != null && target == PageWrapper)
+                target = AppChildren(target).FirstOrDefault();
             if (target == null)
                 return (null, null, null);
             static float Cx(float[] r) => r[0] + r[2] / 2;

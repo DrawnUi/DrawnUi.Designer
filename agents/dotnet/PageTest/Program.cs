@@ -144,8 +144,8 @@ var pastedFont = (string)Next("props")["props"].AsArray().First(p => (string)p["
 Check((string)pastedNode["text"] == "Pasted" && pastedFont == "30" && ((string)note["message"]).Contains("NoSuchProperty") && ((string)note["message"]).Contains("FontSize"),
     $"insert with props: text {pastedNode["text"]}, FontSize {pastedFont}; note: {note["message"]}");
 
-// the page's wrapper is not the snippet's code: never an insert target; a click on its empty area is refused and
-// place mode stays on (also with a leaf on top)
+// the page's wrapper is not the snippet's code: never an insert target; a click on its empty area is the snippet's
+// root's (at the end of a short column); with a leaf on top it is refused and place mode stays on
 await handle($"{{\"type\":\"insert\",\"request\":15,\"parent\":{wrapperId},\"typeName\":\"DrawnUi.Draw.SkiaLabel\"}}");
 var wrapperNote = Next("error");
 Check(Next("inserted")["node"] == null && ((string)wrapperNote["message"]).Contains("snippet"), $"insert into the page wrapper refused: {wrapperNote["message"]}");
@@ -155,9 +155,13 @@ host.AdvanceFrames(2, 16);
 await handle("{\"type\":\"placeMode\",\"typeName\":\"DrawnUi.Draw.SkiaShape\"}");
 robot.Tap(100, 140); // below the column: only the wrapper is there
 host.AdvanceFrames(3, 16);
-var wrapperArea = Next("error");
-Check((string)wrapperArea["message"] == "Click inside the snippet's layout" && column.Views.Count == 1,
-    $"place mode: a click on the wrapper's empty area is refused: {wrapperArea["message"]}");
+var wrapperArea = Next("inserted");
+Check((long?)wrapperArea["parent"] == columnId && (int?)wrapperArea["index"] == 1 && column.Views.Count == 2,
+    $"place mode: a click on the wrapper's empty area goes into the snippet's column, last: {wrapperArea}");
+Next("tree");
+column.RemoveSubView(column.Views[1]);
+host.AdvanceFrames(2, 16);
+while (outbox.TryTake(out _)) { }
 await handle("{\"type\":\"placeMode\",\"typeName\":null}");
 var leaf = new SkiaLabel { Text = "Leaf snippet" };
 wrapper.RemoveSubView(column);
@@ -331,7 +335,7 @@ var cr = PRect((long)pCell["id"]);
 var at7 = await PlaceAt(cr[0] + 10, cr[1] + 10);
 Check(at7 == (null, null), $"place: nothing inside a template's cell -> {at7}");
 var at8 = await PlaceAt(380, 280);
-Check(at8 == (null, null), $"place: nothing on the page's own wrapper -> {at8}");
+Check(at8 == (pRootId, 5), $"place: the page's own wrapper's empty area is the snippet's root, last -> {at8}");
 // a control that fills the canvas (the page's wrapper here): its box shows along the canvas's edges
 await handle($"{{\"type\":\"highlight\",\"node\":{wrapperId}}}");
 host.RenderFrame(16);
