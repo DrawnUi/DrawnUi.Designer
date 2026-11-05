@@ -1540,6 +1540,16 @@ fn layers_panel(app: &mut App) -> Build<SkiaLayout> {
                 .fill()
                 .assign(&mut app.layers_scroll)
                 .on_scrolled(|_me, app: &mut App, _cx, offset| (app.layers_offset_x, app.layers_offset) = (offset.x, offset.y))
+                // A click on the empty space below the last row lets go of the selection.
+                .accessibility_label(tr("panel-layers"))
+                .on_tapped(|me, app: &mut App, cx| {
+                    let Some(at) = cx.gesture().filter(|_| left_click(cx)).map(|g| g.location) else { return };
+                    let base = me.base();
+                    let y = (at.y - base.rect.top) / base.scale.max(0.1) - app.layers_offset;
+                    if y > 4.0 + app.rows.len() as f32 * ROW {
+                        app.deselect(cx);
+                    }
+                })
                 .content(SkiaStack::new().spacing(0).padding((0, 4)).observe(|me, app: &App| me.set_minimum_width_request(app.layers_width)).accessibility_role(Aria::LIST).accessibility_label(tr("panel-layers")).assign(&mut app.tree_list).items(
                 |app: &App| app.rows.len(),
                 || {

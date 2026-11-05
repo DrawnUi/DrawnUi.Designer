@@ -1585,6 +1585,26 @@ impl App {
         cx.items_reset(self.props_list);
     }
 
+    /// No control selected (a click on Layers' empty space): an open edit ends, Properties empties
+    /// and the box in the app goes away.
+    pub(crate) fn deselect(&mut self, cx: &mut Cx) {
+        if self.selected.is_none() {
+            return;
+        }
+        if self.edit_prop.is_some() || self.popup.is_some() {
+            if cx.focused() == Some(self.editor.into()) {
+                cx.focus(None::<ControlId>);
+            }
+            self.end_edit(cx);
+        }
+        self.selected = None;
+        self.props.clear();
+        self.prop_rows.clear();
+        self.send(HubToApp::Highlight { node: None, color: self.settings.selection_color.clone() });
+        cx.items_reset(self.tree_list);
+        cx.items_reset(self.props_list);
+    }
+
     /// A tap on row `index` of the properties list: a header folds or unfolds its group, a
     /// property starts editing.
     fn tap_prop_row(&mut self, index: usize, cx: &mut Cx) {
@@ -6090,6 +6110,22 @@ mod shots {
         });
         assert_eq!(back.as_deref(), Some("#FFFFFFFF"), "Esc puts the old color back");
         assert!(host.ui.state.pending.is_empty());
+    }
+
+    /// A click on Layers' empty space below the rows lets go of the selection; a click on a row selects.
+    #[test]
+    fn a_click_below_the_rows_deselects() {
+        let mut host = host(connected_to("designersample/home.json", "DesignerSample"));
+        let rows = host.ui.state.rows.len();
+        let row = row_at(1);
+        host.pan(row, row, 16.0, 1);
+        host.settle();
+        assert!(host.ui.state.selected.is_some(), "a row click selects");
+        let below = (row.0, row_at(rows).1 + view::ROW * 3.0);
+        host.pan(below, below, 16.0, 1);
+        host.settle();
+        assert_eq!(host.ui.state.selected, None, "the empty space deselects");
+        assert!(host.ui.state.props.is_empty());
     }
 
     /// Enter in the color picker keeps the color and closes it: after a drag on the square, and
