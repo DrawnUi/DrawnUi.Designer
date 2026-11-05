@@ -90,6 +90,8 @@ enum Finished {
     Broadcast(HubToEditor),
     Written { editor: u32, request: u32, node: NodeId, result: Result<(String, source::EditorRange, Written), Refusal>, change: Option<(AppId, live::Change)> },
     Undone { editor: u32, request: u32, written: Written, result: Result<(), Refusal> },
+    /// The names the code gives controls of an app's tree.
+    MadeBy { app: AppId, revision: u64, names: Vec<(NodeId, String)> },
 }
 
 /// The hub's state.
@@ -195,6 +197,7 @@ impl HubCore {
             AppMsg::Props { node, .. } => Some(*node),
             _ => None,
         };
+        let new_tree = matches!(msg, AppMsg::Tree(_));
         // Editors hear where the changes went before the tree that shows them.
         let mut out = vec![];
         let mut sends = vec![];
@@ -204,6 +207,16 @@ impl HubCore {
         }
         out.push(Out::ToEditor(None, HubToEditor::FromApp { app: id, msg }));
         out.extend(sends.into_iter().map(|m| Out::ToApp(id, m)));
+        // A new tree: the names its code gives the controls helpers made, read off the app's code.
+        if new_tree
+            && let (Some(project), Some(tree)) = (app.info.project.clone().or_else(|| self.page_project.clone()), app.tree.as_ref().map(|t| app.live.code_view(t, None)))
+        {
+            let (cache, store) = (self.code.clone(), self.store.clone());
+            out.push(Out::Work(Work(Box::new(move || {
+                let names = cache.lock().unwrap().made_by(&*store, id, &project, &tree);
+                Done(Finished::MadeBy { app: id, revision: tree.revision, names })
+            }))));
+        }
         // Right after a control's properties: which of them its code sets.
         if let Some(node) = props_of {
             // Matched with the tree the code makes (live changes not written left out).
@@ -426,6 +439,21 @@ impl HubCore {
         match done.0 {
             Finished::Nothing => vec![],
             Finished::Broadcast(msg) => vec![Out::ToEditor(None, msg)],
+            Finished::MadeBy { app, revision, names } => {
+                // Kept on the hub's copy of the tree (the MCP server reads it), only for that tree.
+                let Some(tree) = self.apps.get_mut(&app).and_then(|a| a.tree.as_mut()).filter(|t| t.revision == revision) else { return vec![] };
+                let mut told = vec![];
+                for n in tree.nodes.iter_mut().filter(|n| n.made_by.is_none()) {
+                    if let Some((_, name)) = names.iter().find(|(id, _)| *id == n.id) {
+                        n.made_by = Some(name.clone());
+                        told.push((n.id, name.clone()));
+                    }
+                }
+                if told.is_empty() {
+                    return vec![];
+                }
+                vec![Out::ToEditor(None, HubToEditor::MadeBy { app, revision, names: told })]
+            }
             Finished::Written { editor, request, node, result, change } => match result {
                 Ok((uri, range, mut written)) => {
                     if let Some((app, c)) = &change

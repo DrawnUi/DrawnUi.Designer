@@ -356,7 +356,7 @@ impl Designer {
         }
     }
 
-    #[tool(description = "The app's control tree as it is drawn now, parents before children: id, parent, type (short class name), field (the app field holding the control, from .Assign(out _field)), tag, rect [x, y, width, height] in canvas pixels, visible, templated (true on a layout that makes its children from items: nothing is inserted or moved into it), item (for a recycled cell of a templated list: the item index it shows; the tree is taken again when a scroll comes to rest), and source (file:line of the code that creates the control, when found; every cell of one template has the same). Library-made parts are left out unless include_internal is true.")]
+    #[tool(description = "The app's control tree as it is drawn now, parents before children: id, parent, type (short class name), madeBy (the name the code gives it: the helper method, local function or React component that made it, e.g. Circle for `Circle(..) => new SkiaShape { .. }`), field (the app field holding the control, from .Assign(out _field)), tag, rect [x, y, width, height] in canvas pixels, visible, templated (true on a layout that makes its children from items: nothing is inserted or moved into it), item (for a recycled cell of a templated list: the item index it shows; the tree is taken again when a scroll comes to rest), and source (file:line of the code that creates the control, when found; every cell of one template has the same). Library-made parts are left out unless include_internal is true.")]
     async fn get_tree(&self, Parameters(TreeArg { app, include_internal }): Parameters<TreeArg>) -> Result<CallToolResult, ErrorData> {
         let tree = match ask(&self.hub, app, |_| vec![HubToApp::GetTree], |_, m| matches!(m, AppMsg::Tree(_)), WAIT).await {
             Ok(AppMsg::Tree(t)) => t,
@@ -379,6 +379,10 @@ impl Designer {
                 let m = o.as_object_mut().unwrap();
                 if let Some(f) = &n.field {
                     m.insert("field".into(), json!(f));
+                }
+                // The name the code gives it: the helper or component that made it.
+                if let Some(name) = &n.made_by {
+                    m.insert("madeBy".into(), json!(name));
                 }
                 if let Some(t) = &n.tag {
                     m.insert("tag".into(), json!(t));

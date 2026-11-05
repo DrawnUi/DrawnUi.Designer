@@ -284,9 +284,13 @@ fn type_icon(type_name: &str, own_class: bool) -> (&'static str, Tone) {
 /// A panel: a header with an uppercase title, then the body filling the rest.
 fn panel(title: &str, extra: impl IntoChildren, body: impl IntoChildren) -> Build<SkiaLayout> {
     SkiaGrid::new().fill().row_definitions("34, *").background_color(c(PANEL)).children((
-        SkiaLayout::new().fill().background_color(c(HEADER)).padding((12, 0)).row(0).children((
-            bold(11.0, MUTED).text(title.to_uppercase()).vertical_options(LayoutOptions::Center).accessibility_role(Aria::HEADING).accessibility_label(title),
-            SkiaRow::new().spacing(8).horizontal_options(LayoutOptions::End).vertical_options(LayoutOptions::Center).children(extra),
+        // The title, then what the panel has on the right: in a narrow panel that is cut on its left,
+        // never drawn over the title.
+        SkiaGrid::new().fill().background_color(c(HEADER)).padding((12, 0)).row(0).column_definitions("Auto, *").column_spacing(8).children((
+            bold(11.0, MUTED).text(title.to_uppercase()).vertical_options(LayoutOptions::Center).accessibility_role(Aria::HEADING).accessibility_label(title).column(0),
+            SkiaLayer::new().fill().column(1).is_clipped_to_bounds(true).children(
+                SkiaRow::new().spacing(8).horizontal_options(LayoutOptions::End).vertical_options(LayoutOptions::Center).children(extra),
+            ),
         )),
         SkiaLayer::new().fill().row(1).children(body),
     ))
@@ -413,8 +417,10 @@ fn designer(app: &mut App) -> Build<SkiaLayout> {
 /// The menu bar at the start, then the shown app as a pill (the window's own title names the
 /// designer), Settings and Help at the far end.
 fn title_bar(app: &mut App) -> Build<SkiaLayout> {
-    SkiaLayout::new().fill().background_color(c(HEADER)).padding((6, 0, 14, 0)).children((
-        SkiaRow::new().spacing(10).vertical_options(LayoutOptions::Center).children((
+    // Settings and Help keep their place at the right; the menu bar, the apps and Pick are cut on
+    // their right where the window is narrow, never drawn under them.
+    SkiaGrid::new().fill().background_color(c(HEADER)).padding((6, 0, 14, 0)).column_definitions("*, Auto").column_spacing(10).children((
+        SkiaLayer::new().fill().column(0).is_clipped_to_bounds(true).children(SkiaRow::new().spacing(10).vertical_options(LayoutOptions::Center).children((
             menubar::menu_bar(app),
             SkiaShape::new().width_request(1).height_request(18).vertical_options(LayoutOptions::Center).background_color(c(LINE)).accessibility_role(Aria::SEPARATOR),
             SkiaRow::new()
@@ -429,9 +435,9 @@ fn title_bar(app: &mut App) -> Build<SkiaLayout> {
                 bind_pill,
             ),
             top_pick_button(),
-        )),
-        SkiaRow::new().spacing(10).horizontal_options(LayoutOptions::End).vertical_options(LayoutOptions::Center).children((
-            changes_button(false),
+        ))),
+        SkiaRow::new().spacing(10).column(1).vertical_options(LayoutOptions::Center).children((
+            changes_button(),
             // Help last, at the far end, as in most desktop tools.
             icon_button(icons::SETTINGS, &tr("settings"), |app, cx| app.open_settings(cx)).assign(&mut app.settings_button),
             icon_button(icons::CIRCLE_QUESTION_MARK, &tr("help"), |app, cx| app.open_help(cx)).assign(&mut app.help_button),
@@ -1551,16 +1557,18 @@ fn layers_panel(app: &mut App) -> Build<SkiaLayout> {
             text(11.0, FAINT).vertical_options(LayoutOptions::Center).observe(|me, app: &App| {
                 me.set_text(if app.rows.is_empty() && !(app.app.is_some() && app.tree.revision > 0) { String::new() } else { tr_args("controls-count", &[("count", app.rows.len().into())]) })
             }),
-            changes_button(true),
             // The desktop window has Pick in its title bar.
             pick_button().observe(|me, app: &App| me.set_is_visible(app.embedded)),
         ),
         (
+            changes_strip(),
             // Both ways: a deep tree in a narrow panel scrolls sideways too (its width from layers_width).
+            // In a page, under the strip of changes not in code while it shows.
             panel_scroll()
                 .orientation(ScrollOrientation::Both)
                 .scroll_bar_horizontal(scroll_bar())
                 .fill()
+                .observe(|me, app: &App| me.set_margin(Thickness::new(0.0, if changes_strip_shown(app) { CHANGES_STRIP } else { 0.0 }, 0.0, 0.0)))
                 .assign(&mut app.layers_scroll)
                 .on_scrolled(|_me, app: &mut App, _cx, offset| (app.layers_offset_x, app.layers_offset) = (offset.x, offset.y))
                 // A click on the empty space below the last row lets go of the selection.
@@ -1642,11 +1650,16 @@ fn layers_panel(app: &mut App) -> Build<SkiaLayout> {
                         me.set_is_visible(row.has_children);
                     }
                     cell_icon(cx, cell, svg, color, Some((row, fold)));
-                    set(cx, cell.label, short_type(&node.type_name).to_owned());
+                    // The name the code gives it first (the helper that made it), then its type, dimmed.
+                    set(cx, cell.label, node.made_by.clone().unwrap_or_else(|| short_type(&node.type_name).to_owned()));
                     let named = match (&node.field, &node.tag) {
                         (Some(f), _) => f.rsplit('.').next().unwrap_or(f).to_owned(),
                         (None, Some(t)) => format!("#{t}"),
                         _ => String::new(),
+                    };
+                    let named = match &node.made_by {
+                        Some(_) => [short_type(&node.type_name).to_owned(), named].into_iter().filter(|s| !s.is_empty()).collect::<Vec<_>>().join(" · "),
+                        None => named,
                     };
                     // A recycled cell: the item it showed when the tree was taken.
                     let item = node.template_index.map(|i| tr_args("row-item", &[("index", (i as i64).into())]));
@@ -1698,9 +1711,13 @@ fn layers_panel(app: &mut App) -> Build<SkiaLayout> {
                             };
                             folded = format!("{folded}, {}", tr(key));
                         }
+                        // The code's name and the type: "Circle, SkiaShape".
+                        let name = match &node.made_by {
+                            Some(made_by) => format!("{made_by}, {}", short_type(&node.type_name)),
+                            None => short_type(&node.type_name).to_owned(),
+                        };
                         me.set_accessibility_label(format!(
-                            "{}{field}{text}, {}{folded}{}",
-                            short_type(&node.type_name),
+                            "{name}{field}{text}, {}{folded}{}",
                             tr_args("row-level", &[("level", (row.depth + 1).into())]),
                             if selected { format!(", {}", tr("row-selected")) } else { String::new() }
                         ));
@@ -1862,15 +1879,21 @@ fn properties_panel(app: &mut App) -> Build<SkiaLayout> {
     )
 }
 
+/// Properties' header for the selected control: the name the code gives it (the helper that made it),
+/// else its type; under it its type when the name is the code's, then the field that holds it.
+pub(crate) fn selection_names(app: &App) -> (String, String) {
+    let Some(n) = app.selected_node() else { return (String::new(), String::new()) };
+    let field = n.field.as_deref().map(|f| f.rsplit('.').take(2).collect::<Vec<_>>().into_iter().rev().collect::<Vec<_>>().join("."));
+    let kind = n.made_by.is_some().then(|| short_type(&n.type_name).to_owned());
+    (n.made_by.clone().unwrap_or_else(|| short_type(&n.type_name).to_owned()), [kind, field].into_iter().flatten().collect::<Vec<_>>().join(" · "))
+}
+
 /// The selected control: its type, the field that holds it, and one line for what the last edit
 /// did. That line always takes its place, so the list below never moves.
 fn selection_header() -> Build<SkiaLayout> {
     SkiaLayout::new().fill_x().padding((12, 10, 12, 8)).children(SkiaStack::new().spacing(2).children((
-        bold(15.0, TEXT).observe(|me, app: &App| me.set_text(app.selected_node().map_or(String::new(), |n| short_type(&n.type_name).to_owned()))),
-        text(12.0, FIELD).height_request(17).observe(|me, app: &App| {
-            let detail = app.selected_node().and_then(|n| n.field.clone()).map(|f| f.rsplit('.').take(2).collect::<Vec<_>>().into_iter().rev().collect::<Vec<_>>().join("."));
-            me.set_text(detail.unwrap_or_default());
-        }),
+        bold(15.0, TEXT).observe(|me, app: &App| me.set_text(selection_names(app).0)),
+        text(12.0, FIELD).height_request(17).observe(|me, app: &App| me.set_text(selection_names(app).1)),
         SkiaRow::new().spacing(6).height_request(17).children((
             SkiaSvg::from_string(icons::CIRCLE_CHECK).width_request(13).height_request(13).vertical_options(LayoutOptions::Center).observe(|me, app: &App| {
                 me.set_svg_string(if app.status_error { icons::CIRCLE_ALERT } else { icons::CIRCLE_CHECK });
@@ -2138,7 +2161,10 @@ fn scroll_bar() -> Build<SkiaScrollBar> {
 /// measuring rows that are not shown. Long text previews count up to 48 characters.
 pub(crate) fn layers_row_width(node: &designer_protocol::Node, depth: usize) -> f32 {
     let chars = |s: &str| s.chars().count() as f32;
-    let mut w = GUIDE_LEFT + (depth as f32 + 1.5) * GUIDE_STEP - 7.0 + 14.0 + 6.0 + chars(short_type(&node.type_name)) * 7.6;
+    let mut w = GUIDE_LEFT + (depth as f32 + 1.5) * GUIDE_STEP - 7.0 + 14.0 + 6.0 + chars(node.made_by.as_deref().unwrap_or_else(|| short_type(&node.type_name))) * 7.6;
+    if node.made_by.is_some() {
+        w += 6.0 + (chars(short_type(&node.type_name)) + 3.0) * 7.0;
+    }
     if let Some(name) = node.field.as_deref().map(|f| f.rsplit('.').next().unwrap_or(f)).or(node.tag.as_deref()) {
         w += 6.0 + (chars(name) + 1.0) * 7.0;
     }
@@ -2291,9 +2317,60 @@ fn top_pick_button() -> Build<SkiaShape> {
     )))
 }
 
-/// How many changes are not in code, with Write all: in the title bar on the desktop, in the Layers
-/// header in a page (`in_layers`). Shown while there are some.
-fn changes_button(in_layers: bool) -> Build<SkiaShape> {
+/// The height of the strip of changes not in code under the Layers header (in a page).
+const CHANGES_STRIP: f32 = 30.0;
+
+fn changes_strip_shown(app: &App) -> bool {
+    app.embedded && app.unwritten_count() > 0
+}
+
+/// In a page, under the Layers header while there are changes not in code: how many on the left (cut
+/// short with an ellipsis where Layers is narrow), Write all on the right.
+fn changes_strip() -> Build<SkiaLayout> {
+    SkiaGrid::new()
+        .fill_x()
+        .height_request(CHANGES_STRIP)
+        .vertical_options(LayoutOptions::Start)
+        .column_definitions("Auto, *, Auto")
+        .column_spacing(6)
+        .padding((12, 0, 8, 0))
+        .background_color(c(HEADER))
+        .is_visible(false)
+        .observe(|me, app: &App| me.set_is_visible(changes_strip_shown(app)))
+        .children((
+            icon(icons::CODE, 13.0, ACCENT).column(0).vertical_options(LayoutOptions::Center),
+            // The column's width: cut short with an ellipsis, never under Write all.
+            SkiaLayer::new().fill().column(1).is_clipped_to_bounds(true).children(
+                text(11.0, MUTED).max_lines(1).fill_x().vertical_options(LayoutOptions::Center).observe(|me, app: &App| me.set_text(tr_args("changes-not-in-code", &[("count", app.unwritten_count().into())]))),
+            ),
+            interactive(
+                SkiaShape::new()
+                    .corner_radius(6)
+                    .stroke_width(1)
+                    .stroke_color(c(ACCENT))
+                    .padding((8, 3))
+                    .column(2)
+                    .vertical_options(LayoutOptions::Center)
+                    .accessibility_role(Aria::BUTTON)
+                    .observe(|me, app: &App| {
+                        let label = tr_args("write-changes-label", &[("count", app.unwritten_count().into())]);
+                        me.set_accessibility_label(label.clone());
+                        me.set_tooltip(label);
+                    })
+                    .on_tapped(|_me, app: &mut App, cx| {
+                        if left_click(cx) {
+                            app.write_everything(cx);
+                        }
+                    }),
+                |_, _| c(PANEL),
+            )
+            .children(bold(11.0, TEXT).text(tr("write-all"))),
+        ))
+}
+
+/// How many changes are not in code, with Write all: in the desktop window's title bar, shown while
+/// there are some (a page has `changes_strip` under the Layers header instead).
+fn changes_button() -> Build<SkiaShape> {
     interactive(
         SkiaShape::new()
             .corner_radius(6)
@@ -2303,14 +2380,12 @@ fn changes_button(in_layers: bool) -> Build<SkiaShape> {
             .vertical_options(LayoutOptions::Center)
             .accessibility_role(Aria::BUTTON)
             .is_visible(false)
-            .observe(move |me, app: &App| {
+            .observe(|me, app: &App| {
                 let count = app.unwritten_count();
+                // The window's close button asks first while there are some.
                 #[cfg(not(target_os = "emscripten"))]
-                if !in_layers {
-                    // The window's close button asks first while there are some.
-                    crate::platform::hold_close(count > 0);
-                }
-                me.set_is_visible(count > 0 && app.embedded == in_layers);
+                crate::platform::hold_close(count > 0);
+                me.set_is_visible(count > 0 && !app.embedded);
                 me.set_accessibility_label(tr_args("write-changes-label", &[("count", count.into())]));
                 me.set_tooltip(tr_args("write-changes-label", &[("count", count.into())]));
             })

@@ -270,6 +270,31 @@ fn a_page_hub_writes_the_snippet_through_the_page() {
     assert_eq!(apply_utf16(&edited, &edits[0]), SNIPPET);
 }
 
+/// DrawFiddle's Kids preset builds its shapes with helpers: after a tree, the hub reads the names the
+/// code gives them, tells the editors, and keeps them on its copy of the tree (the MCP server's).
+#[test]
+fn a_tree_gets_the_names_the_code_gives_its_controls() {
+    let code = Arc::new(page::PageCode::new(|_| {}));
+    let mut core = HubCore::new(code.clone());
+    core.page_project = Some(page::PROJECT.into());
+    let (editor, _) = core.editor_hello(PROTOCOL_VERSION).unwrap();
+    let (app, _) = core.app_hello(AppInfo { platform: Some("web".into()), ..info("FiddleSnippet", 1, None) }).unwrap();
+    code.set_text("return Stack(Circle(Colors.Red), Square(Colors.Blue), Circle(Colors.Green));
+
+SkiaControl Stack(params SkiaControl[] shapes) => new SkiaStack { Children = shapes.ToList() };
+SkiaControl Circle(Color c) => new SkiaShape { BackgroundColor = c };
+SkiaControl Square(Color c) => new SkiaShape { BackgroundColor = c, CornerRadius = 4 };
+".into(), 1);
+    let n = |id, parent, t: &str| Node { id, parent, type_name: format!("DrawnUi.Draw.{t}"), ..Default::default() };
+    let tree = Tree { revision: 3, width: 100.0, height: 50.0, nodes: vec![n(1, None, "SkiaLayout"), n(2, Some(1), "SkiaStack"), n(3, Some(2), "SkiaShape"), n(4, Some(2), "SkiaShape"), n(5, Some(2), "SkiaShape")] };
+    let outs = ap(&mut core, app, AppMsg::Tree(tree));
+    let named = to_editor(&outs, editor).into_iter().find_map(|m| if let HubToEditor::MadeBy { revision: 3, names, .. } = m { Some(names.clone()) } else { None }).expect("MadeBy");
+    let s = |x: &str| x.to_string();
+    assert_eq!(named, [(2, s("Stack")), (3, s("Circle")), (4, s("Square")), (5, s("Circle"))]);
+    let kept: Vec<Option<String>> = core.apps[&app].tree.as_ref().unwrap().nodes.iter().map(|n| n.made_by.clone()).collect();
+    assert_eq!(kept, [None, Some(s("Stack")), Some(s("Circle")), Some(s("Square")), Some(s("Circle"))]);
+}
+
 /// A control taken out live is taken out of the code with the tree from before (the app's tree
 /// no longer has it), and Undo puts it back byte for byte.
 #[test]

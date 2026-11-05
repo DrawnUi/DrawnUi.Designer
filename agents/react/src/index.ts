@@ -494,6 +494,8 @@ async function sendTree(): Promise<void> {
       if (v.control.IsTemplated || v.control.ItemTemplate) node.templated = true;
       const s = sources.get(v.id);
       if (s) node.source = s;
+      const by = madeBy(v.control);
+      if (by) node.madeBy = by;
       return node;
     }),
   });
@@ -516,6 +518,25 @@ let designerSourceOf = (ReactEntry as Record<string, unknown>)[["Designer", "Sou
 function sourceOf(c: Ctl): DesignerSource | undefined {
   if (typeof designerSourceOf !== "function" || !c) return undefined;
   try { return designerSourceOf(c) ?? undefined; } catch { return undefined; }
+}
+
+/** drawnui-react's own components (the JSX tags' wrappers), looked through when naming a control. */
+const libraryComponents = new Set<unknown>(Object.values(ReactEntry as Record<string, unknown>));
+
+/**
+ * The name the app's code gives a control: the component whose own element it is (`function Circle() { return
+ * <SkiaShape .. /> }`), from the fiber that created it (development builds). drawnui-react's own components are
+ * looked through; a host element above first means the control is written in place inside another one: no name.
+ */
+function madeBy(c: Ctl): string | undefined {
+  for (let f = sourceOf(c)?.Fiber?.return, n = 0; f && n < 40; f = f.return, n++) {
+    const t = f.type;
+    if (typeof t === "string") return undefined;
+    if (!t || libraryComponents.has(t)) continue;
+    const name = typeof t === "function" ? t.displayName ?? t.name : t.render ? t.displayName ?? t.render.name : t.type ? t.displayName ?? t.type.displayName ?? t.type.name : undefined;
+    if (name && name !== "Canvas") return name;
+  }
+  return undefined;
 }
 
 /** The nearest function component above the root control (the page), for the root's `host`. */
@@ -1347,4 +1368,4 @@ async function openScreen(route: string): Promise<void> {
 }
 
 /** For tests: the agent's state. */
-export const __test = { state, walk, pickAt, hitPath, readProps, setLive, onFrame, sourceMapLookup, hover, click, setSourceOf: (f: typeof designerSourceOf) => { designerSourceOf = f; } };
+export const __test = { state, walk, pickAt, hitPath, readProps, setLive, onFrame, sourceMapLookup, hover, click, madeBy, setSourceOf: (f: typeof designerSourceOf) => { designerSourceOf = f; } };

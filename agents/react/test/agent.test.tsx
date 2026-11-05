@@ -9,6 +9,7 @@ import { SkiaButton, SkiaLabel, SkiaLayer, SkiaRow, SkiaStack } from "drawnui-re
 // the reconciler's root (not exported by the package; test/run.mjs resolves it): the same files as "drawnui-react"
 import { createDrawnRoot } from "drawnui-react/reconciler";
 import { attachPage, detach, __test } from "../src/index";
+import * as Lib from "drawnui-react";
 
 let failures = 0;
 const check = (name: string, ok: boolean, detail = "") => { if (!ok) failures++; console.log(`${ok ? "ok  " : "FAIL"} ${name}${ok ? "" : " " + detail}`); };
@@ -566,6 +567,48 @@ class TestCanvas {
     check("a lone empty root: the place hover boxes it inside the canvas", __test.state.highlight?.deref() === layer && edges.every((p) => p === "255,0,255,255"), JSON.stringify(edges));
     __test.state.pick = undefined;
     detach();
+    root.render(<SkiaStack />);
+    clearInterval(pump);
+  }
+
+  // the name the code gives a control: the component whose own element it is (from its fiber, development builds);
+  // drawnui-react's own components are looked through, an element written inside another one has none
+  {
+    const canvas = new TestCanvas(CK.MakeSurface(400, 300));
+    const pump = setInterval(() => { if (canvas.requested) canvas.Draw(); }, 2);
+    const root = createDrawnRoot(canvas as any);
+    const kids: any[] = [];
+    let stack: any;
+    root.render(
+      <SkiaStack ref={(c: any) => { if (c) stack = c; }}>
+        {[0, 1, 2].map((i) => <SkiaLabel key={i} ref={(c: any) => { if (c) kids[i] = c; }} Text={`c${i}`} />)}
+        <SkiaLabel Text="inline" />
+      </SkiaStack>,
+    );
+    await wait(30); canvas.Draw();
+    function Circle() { return null; }
+    function App() { return null; }
+    // a component of drawnui-react's own (looked through, as a wrapper of the app's element would be)
+    const libComponent = Object.entries(Lib).find(([k, v]) => typeof v === "function" && /^[A-Z]/.test(k))?.[1];
+    // Circle renders <SkiaLabel> (a host element) through a library component; App renders the stack; the last
+    // label is written inside the stack.
+    const fiberOf = (c: any) => {
+      if (kids.includes(c)) return { type: "SkiaLabel", return: { type: libComponent, return: { type: Circle, return: { type: "SkiaStack" } } } };
+      if (c === stack) return { type: "SkiaStack", return: { type: App } };
+      return { type: "SkiaLabel", return: { type: "SkiaStack" } };
+    };
+    __test.setSourceOf((c: any) => ({ Fiber: fiberOf(c) }));
+    const trees: any[] = [];
+    attachPage(canvas, (t) => { const m = JSON.parse(t); if (m.type === "tree") trees.push(m); });
+    for (let t = 0; t < 1000 && !trees.length; t += 5) await wait(5);
+    detach();
+    __test.setSourceOf(undefined);
+    const nodes = trees[0]?.nodes ?? [];
+    const by = (c: any) => nodes.find((n: any) => n.id === c.AccessibilityId)?.madeBy;
+    const inline = nodes.find((n: any) => n.text === "inline");
+    check("madeBy: Circle on each of its three labels, App on its stack, none written in place",
+      // (the bundler may rename the functions: their own names are what the fiber says)
+      kids.every((k) => by(k) === Circle.name) && by(stack) === App.name && inline && !("madeBy" in inline), JSON.stringify(nodes.map((n: any) => [n.typeName, n.text, n.madeBy])));
     root.render(<SkiaStack />);
     clearInterval(pump);
   }

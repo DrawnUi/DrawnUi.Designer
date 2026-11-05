@@ -1460,3 +1460,74 @@ fn move_element_reorders_and_moves_jsx_children() {
     tree.nodes[11].source = Some(format!("src/app.tsx:{}", APP_TSX[..at].matches('\n').count() + 1));
     assert_eq!(key(move_element(&files, &tree, 12, 6, 0)), "src-move-not-in-list");
 }
+
+
+/// DrawFiddle's Kids preset: the shapes come from local helper functions, which is what the code
+/// calls them.
+const KIDS_PRESET: &str = r#"// ===== YOUR CODE =====
+
+return Stack(
+    Text("Hello World!"),
+    Circle(Colors.Red, 110),
+    Square(Colors.Orange, 80),
+    Circle(Colors.Blue, 70)
+);
+
+// helpers
+SkiaControl Stack(params SkiaControl[] shapes) => new SkiaStack
+{
+    Spacing = 16,
+    Padding = new Thickness(30),
+    Children = shapes.ToList(),
+};
+
+SkiaControl Circle(Color colour, double size) => new SkiaShape
+{
+    Type = ShapeType.Circle,
+    WidthRequest = size, HeightRequest = size,
+    BackgroundColor = colour,
+};
+
+SkiaControl Square(Color colour, double size) => new SkiaShape
+{
+    Type = ShapeType.Rectangle, CornerRadius = 4,
+    WidthRequest = size, HeightRequest = size,
+    BackgroundColor = colour,
+};
+
+SkiaControl Text(string words) => new SkiaLabel(words)
+{
+    FontSize = 44,
+};
+"#;
+
+#[test]
+fn controls_made_by_helpers_carry_the_helpers_names() {
+    let files = vec![("fiddle:///snippet.cs".to_string(), KIDS_PRESET.to_string())];
+    let n = |id, parent, t: &str| designer_protocol::Node { id, parent, type_name: format!("DrawnUi.Draw.{t}"), ..Default::default() };
+    // The Fiddle's own layout, the snippet's stack, then Text, Circle, Square, Circle.
+    let tree = designer_protocol::Tree {
+        revision: 1,
+        nodes: vec![n(1, None, "SkiaLayout"), n(2, Some(1), "SkiaStack"), n(3, Some(2), "SkiaLabel"), n(4, Some(2), "SkiaShape"), n(5, Some(2), "SkiaShape"), n(6, Some(2), "SkiaShape")],
+        ..Default::default()
+    };
+    let names = made_by(&files, &match_runtime(&files, &tree));
+    let name = |id: u64| names.get(&id).map(String::as_str);
+    assert_eq!((name(2), name(3), name(4), name(5), name(6)), (Some("Stack"), Some("Text"), Some("Circle"), Some("Square"), Some("Circle")), "{names:?}");
+    assert_eq!(name(1), None, "the Fiddle's own layout");
+    // Written in place: no name; a helper of a class (a method), and a class instance (its type is its name).
+    let files = vec![("fiddle:///snippet.cs".to_string(), SNIPPET.to_string())];
+    let names = made_by(&files, &match_runtime(&files, &snippet_tree()));
+    assert_eq!(names.get(&4).map(String::as_str), Some("Card"), "{names:?}");
+    for written_in_place in [2, 3, 5, 7, 8, 9] {
+        assert!(!names.contains_key(&written_in_place), "{written_in_place}: {names:?}");
+    }
+    // A method of a class, returning the element through a fluent call.
+    let page = "class Page : SkiaLayer { public Page() { Children = new List<SkiaControl> { Badge(), new SkiaLabel() }; } SkiaControl Badge() { return new SkiaShape { Padding = 2 }.Assign(out _badge); } SkiaShape _badge; }";
+    assert_eq!(helper_names("page.cs", page).values().collect::<Vec<_>>(), [&"Badge".to_string()]);
+    // React: a component's own top-level element carries its name; what it holds is written in place.
+    let files = vec![("src/app.tsx".to_string(), APP_TSX.to_string())];
+    let names = made_by(&files, &match_runtime(&files, &app_tree()));
+    assert_eq!((names.get(&1).map(String::as_str), names.get(&3).map(String::as_str)), (Some("MainPage"), Some("Card")), "{names:?}");
+    assert!(!names.contains_key(&2) && !names.contains_key(&4) && !names.contains_key(&10), "{names:?}");
+}

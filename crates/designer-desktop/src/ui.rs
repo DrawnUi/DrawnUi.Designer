@@ -906,6 +906,16 @@ impl App {
             }
             // The app built its controls again and the hub put the changes not written back on them.
             Incoming::Hub(HubToEditor::Replayed { app, moved, replaying, lost }) if Some(app) == self.app => self.replayed(moved, replaying, lost),
+            // The names the code gives controls helpers made (read off the code by the hub after a tree).
+            Incoming::Hub(HubToEditor::MadeBy { app, revision, names }) if Some(app) == self.app && revision == self.tree.revision => {
+                for (id, name) in names {
+                    if let Some(n) = self.tree.nodes.iter_mut().find(|n| n.id == id && n.made_by.is_none()) {
+                        n.made_by = Some(name);
+                    }
+                }
+                self.rebuild_rows();
+                cx.items_reset(self.tree_list);
+            }
             Incoming::Hub(HubToEditor::CodeSet { app, node, names }) if Some(app) == self.app => {
                 self.code_set = Some((node, names));
                 if self.selected_node().is_some_and(|n| n.id == node) {
@@ -3174,6 +3184,76 @@ mod shots {
         // The desktop window: as before.
         let desktop = self::host(with_controls(with_props()));
         assert!((desktop.rect(desktop.ui.state.props_list).width() - 340.0).abs() < 2.0);
+    }
+
+    /// In a page the changes not in code are a strip of their own under the Layers header; the
+    /// header's title and what is on its right never overlap, down to a narrow Layers.
+    #[test]
+    fn layers_header_and_the_changes_strip_never_overlap() {
+        let shot = |props: f32, width: i32, name: &str| {
+            let mut state = with_controls(with_props());
+            state.embedded = true;
+            state.properties_w = props;
+            for (node, prop, value) in [(117u64, "FontSize", "30"), (118, "Text", "Changed")] {
+                state.live_original.insert((node, prop.into()), "x".into());
+                state.pending.insert((node, prop.into()), value.into());
+            }
+            let font = |name: &str| assets(&format!("assets/{name}")).expect("font file");
+            let ui = Ui::new(state, view::build).font_bytes("Default", &font("OpenSans-Regular.ttf")).font_bytes("Semibold", &font("OpenSans-Semibold.ttf")).background(view::window_background());
+            let mut host = Headless::new(keys(ui), width, 520, 1.0);
+            host.settle();
+            host.ui.set_accessibility_enabled(true);
+            host.frame_after(drawnui::ACCESSIBILITY_INTERVAL_MS);
+            let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/designer-shots");
+            std::fs::create_dir_all(&dir).unwrap();
+            host.save_png(dir.join(name).to_str().unwrap());
+            host
+        };
+        for (props, layers, name) in [(270.0, 345.0, "30-layers-345.png"), (355.0, 260.0, "31-layers-260.png")] {
+            let host = shot(props, 770, name);
+            let tree = host.rect(host.ui.state.layers_scroll);
+            assert!((tree.width() - layers).abs() < 12.0, "Layers {layers}: {tree:?}");
+            let nodes = host.ui.accessibility_nodes().to_vec();
+            let rect = |label: &str| nodes.iter().find(|n| n.label == label && n.rect.left >= tree.left - 1.0).map(|n| n.rect).unwrap_or_else(|| panic!("no {label}"));
+            let (title, pick, strip) = (rect("Layers"), rect("Pick a control in the app"), rect("Write all 2 changes to code"));
+            assert!(pick.left >= title.right, "{layers}: Pick right of the title: {title:?} {pick:?}");
+            assert!(strip.top >= title.bottom && strip.right <= tree.right + 1.0, "{layers}: Write all under the header, inside Layers: {strip:?}");
+            assert!(tree.top >= strip.bottom - 1.0, "{layers}: the rows start under the strip: {tree:?} {strip:?}");
+        }
+        // The narrowest the panels leave Layers in this frame, and a narrow desktop window: looked at by eye.
+        shot(480.0, 770, "32-layers-narrow.png");
+        let mut desktop = self::host(with_changes(WriteMode::Manual));
+        desktop.ui.set_accessibility_enabled(true);
+        desktop.frame_after(drawnui::ACCESSIBILITY_INTERVAL_MS);
+        let nodes = desktop.ui.accessibility_nodes().to_vec();
+        let at = |label: &str| nodes.iter().find(|n| n.label == label).map(|n| n.rect).unwrap_or_else(|| panic!("no {label}"));
+        assert!(at("Pick a control in the app (Ctrl+P)").right <= at("Write all 2 changes to code").left, "the title bar's two sides apart");
+        // A narrow desktop window: the left side is cut, Settings and Help keep their place.
+        let font = |name: &str| assets(&format!("assets/{name}")).expect("font file");
+        let ui = Ui::new(with_changes(WriteMode::Manual), view::build).font_bytes("Default", &font("OpenSans-Regular.ttf")).font_bytes("Semibold", &font("OpenSans-Semibold.ttf")).background(view::window_background());
+        let mut narrow = Headless::new(keys(ui), 640, 200, 1.0);
+        narrow.settle();
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/designer-shots");
+        narrow.save_png(dir.join("33-titlebar-640.png").to_str().unwrap());
+    }
+
+    /// A control a helper made reads by the helper's name, its type after it, dimmed: in its Layers
+    /// row, for screen readers, and in Properties' header.
+    #[test]
+    fn a_row_reads_the_name_the_code_gives_the_control() {
+        let (mut host, _sent, to_ui) = label_selected();
+        let revision = host.ui.state.tree.revision;
+        feed(&mut host, &to_ui, HubToEditor::MadeBy { app: 1, revision, names: vec![(117, "Heading".into())] });
+        host.ui.set_accessibility_enabled(true);
+        host.frame_after(drawnui::ACCESSIBILITY_INTERVAL_MS);
+        let labels: Vec<String> = host.ui.accessibility_nodes().iter().map(|n| n.label.clone()).collect();
+        assert!(labels.iter().any(|l| l.starts_with("Heading, SkiaLabel")), "{labels:?}");
+        // Properties' header: the name, then the type under it.
+        assert_eq!(view::selection_names(&host.ui.state).0, "Heading");
+        assert!(view::selection_names(&host.ui.state).1.starts_with("SkiaLabel"), "{:?}", view::selection_names(&host.ui.state));
+        // A name for another tree (an older revision) is not taken.
+        feed(&mut host, &to_ui, HubToEditor::MadeBy { app: 1, revision: revision + 7, names: vec![(118, "Other".into())] });
+        assert!(host.ui.state.tree.nodes.iter().all(|n| n.made_by.as_deref() != Some("Other")));
     }
 
     /// The controls an app can create, as its agent lists them: some of every group, one with a

@@ -16,6 +16,8 @@ struct ProjectCode {
     stamps: HashMap<String, Stamp>,
     texts: HashMap<String, String>,
     code: HashMap<String, HashMap<String, ElementCode>>,
+    /// C# file uri -> the names its helpers give the elements they return.
+    helpers: HashMap<String, HashMap<String, String>>,
     /// Rises whenever a file is added, changed or removed.
     generation: u64,
 }
@@ -44,12 +46,16 @@ impl ProjectCode {
                 changed = true;
                 let Some(text) = store.read(&uri).ok().and_then(|b| utf8(&b).map(str::to_owned)) else { continue };
                 self.code.insert(uri.clone(), designer_sources::element_code(&uri, &text));
+                if !designer_sources::is_tsx(&uri) {
+                    self.helpers.insert(uri.clone(), designer_sources::helper_names(&uri, &text));
+                }
                 self.texts.insert(uri.clone(), text);
             }
             stamps.insert(uri, stamp);
         }
         self.texts.retain(|u, _| stamps.contains_key(u));
         self.code.retain(|u, _| stamps.contains_key(u));
+        self.helpers.retain(|u, _| stamps.contains_key(u));
         self.stamps = stamps;
         if changed {
             self.generation += 1;
@@ -64,6 +70,21 @@ impl CodeCache {
         if tree.nodes.iter().find(|n| n.id == node)?.internal {
             return None;
         }
+        let matches = self.matches(store, app, project, tree);
+        let m = matches.get(&node)?;
+        designer_sources::code_set_names(m, &self.projects[&project_key(project)].code)
+    }
+
+    /// The names the code of `project` gives the controls of the app's `tree` that helpers made
+    /// (`Circle(..) => new SkiaShape { .. }`, a React component's own element), in tree order.
+    pub fn made_by(&mut self, store: &dyn CodeStore, app: AppId, project: &str, tree: &Tree) -> Vec<(NodeId, String)> {
+        let matches: Vec<RuntimeMatch> = self.matches(store, app, project, tree).values().cloned().collect();
+        let names = designer_sources::made_by_named(&self.projects[&project_key(project)].helpers, &matches);
+        tree.nodes.iter().filter_map(|n| names.get(&n.id).map(|name| (n.id, name.clone()))).collect()
+    }
+
+    /// The match of the app's `tree` with the code of `project`, kept until either changes.
+    fn matches(&mut self, store: &dyn CodeStore, app: AppId, project: &str, tree: &Tree) -> Arc<HashMap<NodeId, RuntimeMatch>> {
         let pc = self.projects.entry(project_key(project)).or_default();
         pc.refresh(store, project_dir(project));
         let fingerprint = (tree.revision, tree.nodes.len(), tree.nodes.iter().fold(0u64, |s, n| s.wrapping_mul(31).wrapping_add(n.id)));
@@ -73,8 +94,7 @@ impl CodeCache {
             let matches = designer_sources::match_runtime(&texts, tree).into_iter().map(|m| (m.node, m)).collect();
             self.apps.insert(app, AppMatches { fingerprint, generation: pc.generation, matches: Arc::new(matches) });
         }
-        let m = self.apps[&app].matches.get(&node)?;
-        designer_sources::code_set_names(m, &pc.code)
+        self.apps[&app].matches.clone()
     }
 
     pub(crate) fn forget(&mut self, app: AppId) {

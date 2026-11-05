@@ -672,6 +672,68 @@ impl<'t> Walker<'t> {
 
 // ---------------------------------------------------------------- helpers
 
+/// What the code calls the controls its helpers make: for each method or local function that returns
+/// an element it creates itself (`SkiaControl Circle(..) => new SkiaShape { .. }`), the element's key
+/// and the helper's name. Through casts, parentheses and fluent calls on the element.
+pub fn helper_names(uri: &str, text: &str) -> HashMap<String, String> {
+    let ts = parse(text);
+    let (fresh, handles) = walk(&ts, text, uri);
+    let elements: HashMap<usize, usize> = (0..fresh.nodes.len()).filter(|&i| fresh.nodes[i].role == SourceRole::Element).map(|i| (handles[i].id(), i)).collect();
+    let mut helpers = vec![];
+    collect_kind(ts.root_node(), "method_declaration", &mut helpers);
+    collect_kind(ts.root_node(), "local_function_statement", &mut helpers);
+    let mut out = HashMap::new();
+    for f in helpers {
+        let (Some(name), Some(mut e)) = (f.child_by_field_name("name"), returned_expr(f)) else { continue };
+        loop {
+            e = match e.kind() {
+                "parenthesized_expression" => match e.named_child(0) {
+                    Some(x) => x,
+                    None => break,
+                },
+                "cast_expression" => match e.child_by_field_name("value") {
+                    Some(x) => x,
+                    None => break,
+                },
+                // `new X { .. }.Assign(out _x)`: the element the chain starts from.
+                "invocation_expression" => match e.child_by_field_name("function").filter(|f| f.kind() == "member_access_expression").and_then(|f| f.child_by_field_name("expression")) {
+                    Some(x) => x,
+                    None => break,
+                },
+                _ => break,
+            };
+        }
+        if let Some(&i) = elements.get(&e.id()) {
+            out.insert(fresh.nodes[i].key.clone(), text[name.byte_range()].to_owned());
+        }
+    }
+    out
+}
+
+/// The name the code gives each matched control, when a helper made it: a C# method or local
+/// function that returns it ([`helper_names`]), or a React component whose top-level element it is
+/// (`Card/0`). Controls written in place have none (their type is their name).
+pub fn made_by(files: &[(String, String)], matches: &[RuntimeMatch]) -> HashMap<designer_protocol::NodeId, String> {
+    let helpers: HashMap<String, HashMap<String, String>> = files.iter().filter(|(u, _)| !crate::tsx::is_tsx(u)).map(|(u, t)| (u.clone(), helper_names(u, t))).collect();
+    made_by_named(&helpers, matches)
+}
+
+/// [`made_by`] with each C# file's [`helper_names`] read already (file uri -> names).
+pub fn made_by_named(helpers: &HashMap<String, HashMap<String, String>>, matches: &[RuntimeMatch]) -> HashMap<designer_protocol::NodeId, String> {
+    let mut out = HashMap::new();
+    for m in matches {
+        let name = if crate::tsx::is_tsx(&m.uri) {
+            m.key.split_once('/').filter(|(c, i)| c.chars().next().is_some_and(char::is_uppercase) && i.chars().all(|d| d.is_ascii_digit())).map(|(c, _)| c.to_owned())
+        } else {
+            helpers.get(m.uri.as_str()).and_then(|n| n.get(&m.key)).cloned()
+        };
+        if let Some(name) = name {
+            out.insert(m.node, name);
+        }
+    }
+    out
+}
+
 /// A call to a helper method of the same file, and the element that helper returns.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HelperLink {

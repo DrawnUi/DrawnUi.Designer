@@ -256,7 +256,7 @@ Enter runs the item, Esc closes one level; Esc on the bar, or Alt again, gives t
 A click outside closes everything. Each item does what its button
 or key does, shows that key, and is dimmed when it cannot act now. The keys work with the menus closed too,
 while no text field has the keyboard; on macOS they use Command. In a page (DrawFiddle) there is no title bar: Pick
-and the count of changes not in code are in the Layers header.
+is in the Layers header, and the count of changes not in code is a strip of its own under it.
 
 **Screens.** The pages your app's shell can open. Tap one to open it in the app.
 
@@ -265,7 +265,10 @@ create, as its agent lists them: the library's by kind (Layout, Text, Media, Inp
 classes under **This app**, each group A to Z. Click a group's header to fold it; type in the search field to find a
 control by name. See [Placing controls](#placing-controls).
 
-**Layers.** The controls of the current screen as a tree. Each row shows the control's type, the field that
+**Layers.** The controls of the current screen as a tree. A control a helper of the code made reads by the name the
+code gives it, its type after it dimmed: `Circle(..) => new SkiaShape { .. }` reads "Circle · SkiaShape" (C#
+methods and local functions, found in the code by the designer; React components, from a development build of the
+app or the code in a page). Each row shows the control's type, the field that
 holds it (from `.Assign(out _field)`) and its text when it has one. Click a row to select the control: a box
 appears around it in the app. Double-click a row, or click its box on the tree line, to fold or unfold it. Parts
 the library builds for itself, such as a button's inner label, are left out, because no code of yours creates
@@ -419,7 +422,7 @@ Settings, Code, **Write changes to code**:
   a drop, paste, duplicate, move, delete or paste style. Never while you type or drag.
 
 In every mode the title bar shows how many changes are not in code yet, with **Write all**, which writes them all as
-one step of the history (in a page this is in the Layers header). What cannot be written stays live with its dot:
+one step of the history (in a page this is a strip under the Layers header). What cannot be written stays live with its dot:
 an app with no code the designer writes into (DrawnUI for Rust), a value the code computes, a write the code refuses.
 With Manual, Restart app and Run app ask first: write the changes, go on without them, or cancel. Closing the
 designer with changes not in code asks the same (Windows; on macOS and Linux the window closes at once). An app
@@ -500,7 +503,7 @@ The server runs only while a designer window or the VS Code panel is open.
 | `allow_devices` | `on` | Lets apps on other devices (a phone, another computer on the network) connect, or stops new ones. Returns the address with its secret token. |
 | `list_screens` | `app` | The shell routes and their titles. |
 | `open_screen` | `app`, `route` | Opens a screen. Call `get_tree` about a second later. |
-| `get_tree` | `app`, `include_internal` (default false) | The controls drawn now: `id`, `parent`, `type`, `field`, `tag`, `rect` [x, y, width, height] in canvas pixels, `visible`, `host` on a root (the page, or `popup 1` for a popup window's content), `templated: true` on a layout that makes its children from items (nothing goes into it), `item` on a cell made from them (the item it shows), and `source` (file:line of the code that creates it). |
+| `get_tree` | `app`, `include_internal` (default false) | The controls drawn now: `id`, `parent`, `type`, `madeBy` (the name the code gives it: the helper or component that made it), `field`, `tag`, `rect` [x, y, width, height] in canvas pixels, `visible`, `host` on a root (the page, or `popup 1` for a popup window's content), `templated: true` on a layout that makes its children from items (nothing goes into it), `item` on a cell made from them (the item it shows), and `source` (file:line of the code that creates it). |
 | `get_properties` | `app`, `node` | Each property's name, .NET type, current value, and whether it was set. |
 | `select` | `app`, `node` (omit to clear) | Draws a box around the control in the app. |
 | `pick` | `app`, `x`, `y` | The topmost control at a canvas point. |

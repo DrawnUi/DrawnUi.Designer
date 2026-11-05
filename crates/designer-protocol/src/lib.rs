@@ -193,6 +193,11 @@ pub struct Node {
     /// the class that declares it: `Namespace.Page._title`.
     #[serde(default)]
     pub field: Option<String>,
+    /// The name the app's code gives the control, when a helper made it: the method or local
+    /// function that returns it (`Circle(..) => new SkiaShape { .. }`), the React component whose
+    /// own element it is. Left out when the code writes the control in place, or nobody tells.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub made_by: Option<String>,
     /// On a root node: the app type (page or view) that holds the canvas, such as
     /// `DrawnUI.Tutorials.FirstApp.FirstAppPageCode`.
     #[serde(default)]
@@ -447,6 +452,9 @@ pub enum HubToEditor {
     /// after the app's [`AppMsg::Props`] for that control. `names: None` when no code was found for it
     /// (XAML, parts the library builds): an editor then falls back to set-and-not-default.
     CodeSet { app: AppId, node: NodeId, names: Option<Vec<String>> },
+    /// The names the app's code gives controls of its tree `revision` ([`Node::made_by`]), found by the
+    /// hub's code reader after the tree came: the hub's own copy of the tree has them too.
+    MadeBy { app: AppId, revision: u64, names: Vec<(NodeId, String)> },
     /// The address apps on other devices connect to (with its token), `None` when they cannot;
     /// `refusal` says why turning it on failed. Sent on [`EditorMsg::AllowDevices`] and on connect.
     Devices {
