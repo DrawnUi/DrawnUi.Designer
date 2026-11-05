@@ -52,7 +52,7 @@ build the agent's targets file; your project file stays as it is:
 ```powershell
 dotnet build agents\dotnet\Agent -c Release
 cd <your app>
-dotnet watch run --non-interactive --property:CustomAfterMicrosoftCommonTargets=<ToolBox>\agents\dotnet\DrawnUi.Designer.targets
+dotnet watch run --non-interactive --property:CustomAfterMicrosoftCommonTargets=<this repository>\agents\dotnet\DrawnUi.Designer.targets
 ```
 
 A .NET MAUI app on Windows also needs `-f net10.0-windows10.0.19041.0` (its Windows target). The agent then comes from
@@ -105,7 +105,7 @@ its id in the designer and in MCP (same name, process and platform).
 
 ```toml
 [dependencies]
-drawnui-designer-agent = { path = "<ToolBox>/agents/rust" }
+drawnui-designer-agent = { git = "https://github.com/DrawnUi/DrawnUi.Designer" }
 ```
 
 ```rust
@@ -113,8 +113,7 @@ drawnui::run("My app", || drawnui_designer_agent::attach!(Ui::new(App::default()
 ```
 
 `attach!` returns the app with the agent around it in debug builds and the app as it is in release builds. The crate
-turns on drawnui's `designer` feature itself; until a drawnui release carries that feature, the app's workspace
-needs the same `[patch.crates-io]` line for drawnui as `agents/rust/Cargo.toml` (the engine's `main` branch). The
+turns on drawnui's `designer` feature itself (drawnui 0.1.0-preview.31 or newer from crates.io). The
 app shows up with engine `rust`, its exe name, and its crate's `Cargo.toml` as the project. The tree lists the
 controls with their type, tag, text and where they are drawn, the engine's own parts (a button's caption, a
 switch's look, scroll bars) marked as the library's; each open popup window (a menu, a dropdown) follows as a root
@@ -175,8 +174,8 @@ the script playing the page and the designer.
 the `<Canvas>` ref gives:
 
 ```
-cd <ToolBox>/agents/react && npm install && npm run build     # once: builds dist/
-cd <your app> && npm i -D <ToolBox>/agents/react
+cd <this repository>/agents/react && npm install && npm run build     # once: builds dist/
+cd <your app> && npm i -D <this repository>/agents/react
 ```
 
 ```tsx

@@ -40,19 +40,50 @@ Six themes, six languages (English, Deutsch, Español, Français, Русский
 
 ## Get started
 
-1. **Run the designer.** `cargo run -p designer-desktop --release` from this repository (Rust needed), or the
-   VS Code extension below.
-2. **Add the agent to your app.** Apps on DrawnUi 1.10.8.15 or newer (DrawnUi.Maui, DrawnUi.Wpf) have it already.
-   Otherwise reference the NuGet package
-   [`DrawnUi.Designer.Agent`](https://www.nuget.org/packages/DrawnUi.Designer.Agent). It is active in Debug builds
-   only, and Release builds contain nothing of it. Set `DrawnUiDesigner=false` in your project to turn it off.
-3. **Run your app in Debug.** It appears in the designer's title bar. Click a screen to open it in the app, click a
-   control to select it.
+**1. Run the designer.** `cargo run -p designer-desktop --release` from this repository (Rust needed), or the
+[VS Code extension](#vs-code).
 
-Apps you ran before stay in the title bar with a button to run them again.
+**2. Add the agent to your app.** It is active in debug and development builds only; release builds carry nothing
+of it.
+
+- **.NET (DrawnUi MAUI, WPF):** apps on DrawnUi 1.10.8.15 or newer have it already. Otherwise reference the NuGet
+  package [`DrawnUi.Designer.Agent`](https://www.nuget.org/packages/DrawnUi.Designer.Agent). Set
+  `DrawnUiDesigner=false` in your project to turn it off.
+- **Rust (DrawnUI for Rust):** add the agent crate and wrap your `Ui` where you hand it to `drawnui::run`:
+
+  ```toml
+  [dependencies]
+  drawnui-designer-agent = { git = "https://github.com/DrawnUi/DrawnUi.Designer" }
+  ```
+
+  ```rust
+  drawnui::run("My app", || drawnui_designer_agent::attach!(Ui::new(App::default(), build)));
+  ```
+
+  `DRAWNUI_DESIGNER=0` turns it off.
+- **React (DrawnUi.React):** build the agent package once from a clone of this repository, add it to your app and
+  attach it to the canvas:
+
+  ```powershell
+  cd agents/react; npm install; npm run build
+  cd <your app>; npm i -D <this repository>/agents/react
+  ```
+
+  ```tsx
+  import { attach } from "drawnui-react-designer-agent";
+
+  <Canvas ref={(c) => { if (c) attach(c, { name: "My app", project: "<folder of your .tsx files>" }); }}>
+  ```
+
+  `project` lets Write to code edit your `.tsx` files.
+- **In DrawFiddle:** nothing to install. The Visual view is the designer, for C#, TSX and Rust snippets.
+
+**3. Run your app** in Debug (`cargo run`, `npm run dev`). It appears in the designer's title bar. Click a screen to
+open it in the app, click a control to select it. Apps you ran before stay in the title bar with a button to run
+them again.
 
 The [designer guide](docs/designer.md) covers everything else: attaching without the package, phones, Wi-Fi,
-hot reload, which code the designer can write to, and every MCP tool.
+the browser, hot reload, which code the designer can write to, and every MCP tool.
 
 ### Which apps
 
