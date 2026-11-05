@@ -30,54 +30,6 @@ pub fn remember_window_place() {
     windows::remember_place();
 }
 
-/// With changes not in code the window's close button (and File, Exit) asks first: the close is held
-/// and the designer is woken to ask. Windows only: elsewhere the window closes at once.
-static HOLD_CLOSE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-static CLOSE_ASKED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-static CLOSE_ALLOWED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-static ON_CLOSE_ASKED: std::sync::OnceLock<Box<dyn Fn() + Send + Sync>> = std::sync::OnceLock::new();
-
-/// Whether a close asks first (there are changes not in code).
-pub fn hold_close(on: bool) {
-    HOLD_CLOSE.store(on, std::sync::atomic::Ordering::Relaxed);
-}
-
-/// What wakes the designer when a close was held.
-pub fn on_close_asked(wake: impl Fn() + Send + Sync + 'static) {
-    let _ = ON_CLOSE_ASKED.set(Box::new(wake));
-}
-
-/// A close was held since the last call.
-pub fn take_close_asked() -> bool {
-    CLOSE_ASKED.swap(false, std::sync::atomic::Ordering::Relaxed)
-}
-
-/// The next close goes through (the changes were written, or the person chose to close anyway).
-pub fn allow_close() {
-    CLOSE_ALLOWED.store(true, std::sync::atomic::Ordering::Relaxed);
-}
-
-/// A close request now: held when there are changes not in code and it was not allowed.
-#[cfg_attr(not(windows), allow(dead_code))]
-fn hold_this_close() -> bool {
-    use std::sync::atomic::Ordering::Relaxed;
-    if !HOLD_CLOSE.load(Relaxed) || CLOSE_ALLOWED.load(Relaxed) {
-        return false;
-    }
-    CLOSE_ASKED.store(true, Relaxed);
-    if let Some(wake) = ON_CLOSE_ASKED.get() {
-        wake();
-    }
-    true
-}
-
-/// Closes the window as its close button does (File, Exit): the place is saved, the program ends.
-pub fn close_window() {
-    #[cfg(windows)]
-    windows::close();
-    #[cfg(not(windows))]
-    std::process::exit(0);
-}
 
 #[cfg(windows)]
 mod windows {
@@ -163,11 +115,7 @@ mod windows {
     unsafe extern "system" fn watch(hwnd: HWND, msg: u32, wparam: usize, lparam: isize, _id: usize, _data: usize) -> isize {
         use windows_sys::Win32::UI::Shell::DefSubclassProc;
         use windows_sys::Win32::UI::WindowsAndMessaging::{WM_CLOSE, WM_DESTROY, WM_EXITSIZEMOVE};
-        // Changes not in code: the designer asks before the window goes.
-        if msg == WM_CLOSE && super::hold_this_close() {
-            return 0;
-        }
-        // The close request too: DrawnUI ends the program on it, before WM_DESTROY.
+        // The close request too: the program may end on it, before WM_DESTROY.
         if msg == WM_EXITSIZEMOVE || msg == WM_CLOSE || msg == WM_DESTROY {
             save(hwnd);
         }
@@ -188,16 +136,6 @@ mod windows {
             }
         }
         unsafe { SetWindowSubclass(hwnd, Some(watch), 1, 0) };
-    }
-
-    pub fn close() {
-        use windows_sys::Win32::UI::WindowsAndMessaging::{PostMessageW, WM_CLOSE};
-        match own_window() {
-            Some(hwnd) => unsafe {
-                PostMessageW(hwnd, WM_CLOSE, 0, 0);
-            },
-            None => std::process::exit(0),
-        }
     }
 
     pub fn no_maximize() {

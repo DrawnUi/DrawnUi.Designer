@@ -200,8 +200,9 @@ impl Cmd {
             Cmd::Restart => app.restart_pill(0, cx),
             Cmd::Settings => app.open_settings(cx),
             Cmd::Exit => {
-                #[cfg(not(target_os = "emscripten"))]
-                crate::platform::close_window();
+                if app.closing(cx) {
+                    cx.close_app();
+                }
             }
             Cmd::Act(a) => app.run_action(a, cx),
             Cmd::Pick => app.toggle_pick(),

@@ -2854,11 +2854,6 @@ impl Control for Inbox {
             }
             app.inbox_rx = Some(rx);
             app.write_if_due(cx);
-            // The window's close button with changes not in code: the question first.
-            #[cfg(not(target_os = "emscripten"))]
-            if crate::platform::take_close_asked() && app.confirm.is_none() && !app.changes_first(writes::AfterFlush::Close, cx) {
-                app.go_on(writes::AfterFlush::Close, cx);
-            }
         });
     }
 }
@@ -2910,7 +2905,10 @@ fn log(_text: &str) {
 /// The window's keys (the tests use the same): Esc cancels an edit, the field lets go of the
 /// keyboard and the value is what it was.
 fn keys(ui: Ui<App>) -> Ui<App> {
-    ui.on_key_down(|app: &mut App, key, cx| {
+    // Closing the window (its close button, Alt+F4, Cmd+Q) with changes not in code: they are
+    // written first, or the designer asks (Manual).
+    ui.on_app_closing(|app: &mut App, cx| app.closing(cx))
+    .on_key_down(|app: &mut App, key, cx| {
         // The menu bar's: Alt and a title's letter, Left and Right in an open menu.
         if !app.on_settings && !app.on_help && app.bar_key(key, cx) {
             return true;
@@ -3058,11 +3056,6 @@ fn make() -> Box<dyn drawnui::App> {
     let mut ui = ui;
     ui.state.waker = Some(ui.waker());
     let waker = ui.waker();
-    #[cfg(not(target_os = "emscripten"))]
-    {
-        let waker = waker.clone();
-        crate::platform::on_close_asked(move || waker.invalidate(inbox, Dirty::APPLY));
-    }
     let wake = move || waker.invalidate(inbox, Dirty::APPLY);
     #[cfg(not(target_os = "emscripten"))]
     crate::net::start(*PORT.get().expect("port set before run"), to_ui, from_ui, wake);
@@ -5498,6 +5491,49 @@ mod shots {
         host.tap(skip.0, skip.1);
         host.settle();
         assert_eq!((set_codes(&sent).len(), restarts(&sent), host.ui.state.pending.len()), (0, 1, 2));
+    }
+
+    /// Closing the window (its close button, Alt+F4, Cmd+Q): at once without changes not in code;
+    /// with some, Manual asks and Auto writes them first, then the designer ends itself.
+    #[test]
+    fn closing_with_changes_not_in_code_asks_first() {
+        // Nothing to write: closes at once.
+        let (mut host, _sent, _to_ui) = wired(with_props());
+        assert!(host.request_close());
+        // Manual: the window stays with the question; "write" ends it once the writes are answered.
+        let (mut host, sent, to_ui) = wired(with_changes(WriteMode::Manual));
+        assert!(!host.request_close());
+        host.settle();
+        assert!(host.ui.state.confirm.is_some() && !host.take_close_app());
+        assert!(!host.request_close(), "a second close while the question is open keeps the window");
+        let write = at_label(&mut host, "Write them, then close");
+        host.tap(write.0, write.1);
+        host.settle();
+        let writes = set_codes(&sent);
+        assert_eq!(writes.len(), 2);
+        assert!(!host.take_close_app(), "not before the writes are done");
+        for (request, node, _) in &writes {
+            edited(&mut host, &to_ui, *request, *node);
+        }
+        assert!(host.take_close_app());
+        // Manual, "Close without writing": ends at once, nothing written.
+        let (mut host, sent, _to_ui) = wired(with_changes(WriteMode::Manual));
+        assert!(!host.request_close());
+        host.settle();
+        let skip = at_label(&mut host, "Close without writing");
+        host.tap(skip.0, skip.1);
+        host.settle();
+        assert!(host.take_close_app() && set_codes(&sent).is_empty());
+        // Auto: written first, then the designer ends.
+        let (mut host, sent, to_ui) = wired(with_changes(WriteMode::Auto));
+        assert!(!host.request_close());
+        host.settle();
+        let writes = set_codes(&sent);
+        assert!(writes.len() == 2 && !host.take_close_app());
+        for (request, node, _) in &writes {
+            edited(&mut host, &to_ui, *request, *node);
+        }
+        assert!(host.take_close_app());
     }
 
     /// A page's code.flush: Auto writes and answers once the writes are done; Manual answers at

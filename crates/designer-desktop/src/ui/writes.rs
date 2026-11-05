@@ -160,14 +160,15 @@ impl App {
             }
             AfterFlush::Restart => self.restart_now(cx),
             AfterFlush::Run(project) => self.run_now(project, cx),
-            AfterFlush::Close => {
-                #[cfg(not(target_os = "emscripten"))]
-                {
-                    crate::platform::allow_close();
-                    crate::platform::close_window();
-                }
-            }
+            // Ends the designer without asking again.
+            AfterFlush::Close => cx.close_app(),
         }
+    }
+
+    /// The window's close button, Alt+F4, Cmd+Q, File Exit: true closes now. With changes not in code
+    /// the window stays while they are written (Auto, Always) or the question is open (Manual).
+    pub(crate) fn closing(&mut self, cx: &mut Cx) -> bool {
+        self.confirm.is_none() && !self.changes_first(AfterFlush::Close, cx)
     }
 
     /// Before Restart, Run or closing: the changes not in code are written first (Auto, Always), or

@@ -9,7 +9,7 @@ description = "DrawnUI Designer in-app agent for DrawnUI for Rust apps: connects
 [dependencies]
 # The designer API (`Tree::props`, `Tree::set_prop`, `Tree::drawn_rect`, `Ui::hit_test_visual`) is
 # behind the feature `designer`; it is turned on here, so an app adds only this crate.
-drawnui = { version = "0.1.0-preview.31", features = ["designer"] }
+drawnui = { version = "0.1.0-preview.32", features = ["designer"] }
 designer-protocol = { path = "../../crates/designer-protocol" }
 serde_json = "1"
 
@@ -19,7 +19,7 @@ tungstenite = { version = "0.28", default-features = false, features = ["handsha
 
 # Tests: the app state saved and restored through the wrapper, as the browser's hot reload does.
 [dev-dependencies]
-drawnui = { version = "0.1.0-preview.31", features = ["designer", "hot-reload"] }
+drawnui = { version = "0.1.0-preview.32", features = ["designer", "hot-reload"] }
 serde = { version = "1", features = ["derive"] }
 
 # Its own workspace, out of the ToolBox root one: the root's drawnui pin (designer-desktop) does not move.

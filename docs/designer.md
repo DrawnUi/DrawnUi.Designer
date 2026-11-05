@@ -113,7 +113,7 @@ drawnui::run("My app", || drawnui_designer_agent::attach!(Ui::new(App::default()
 ```
 
 `attach!` returns the app with the agent around it in debug builds and the app as it is in release builds. The crate
-turns on drawnui's `designer` feature itself (drawnui 0.1.0-preview.31 or newer from crates.io). The
+turns on drawnui's `designer` feature itself (drawnui 0.1.0-preview.32 or newer from crates.io). The
 app shows up with engine `rust`, its exe name, and its crate's `Cargo.toml` as the project. The tree lists the
 controls with their type, tag, text and where they are drawn, the engine's own parts (a button's caption, a
 switch's look, scroll bars) marked as the library's; each open popup window (a menu, a dropdown) follows as a root
@@ -425,8 +425,8 @@ In every mode the title bar shows how many changes are not in code yet, with **W
 one step of the history (in a page this is a strip under the Layers header). What cannot be written stays live with its dot:
 an app with no code the designer writes into (DrawnUI for Rust), a value the code computes, a write the code refuses.
 With Manual, Restart app and Run app ask first: write the changes, go on without them, or cancel. Closing the
-designer with changes not in code asks the same (Windows; on macOS and Linux the window closes at once). An app
-that closes by itself takes its live changes with it.
+designer (its close button, Alt+F4, Cmd+Q, File, Exit) with changes not in code goes the same way: Auto and Always
+write them first, then the window closes; Manual asks. An app that closes by itself takes its live changes with it.
 
 ## Undo
 

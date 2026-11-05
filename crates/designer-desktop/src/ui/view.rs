@@ -2383,9 +2383,6 @@ fn changes_button() -> Build<SkiaShape> {
             .is_visible(false)
             .observe(|me, app: &App| {
                 let count = app.unwritten_count();
-                // The window's close button asks first while there are some.
-                #[cfg(not(target_os = "emscripten"))]
-                crate::platform::hold_close(count > 0);
                 me.set_is_visible(count > 0 && !app.embedded);
                 me.set_accessibility_label(tr_args("write-changes-label", &[("count", count.into())]));
                 me.set_tooltip(tr_args("write-changes-label", &[("count", count.into())]));
