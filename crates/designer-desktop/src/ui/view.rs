@@ -234,6 +234,8 @@ pub fn window_background() -> Color {
 }
 
 pub const ROW: f32 = 26.0;
+/// Text size of the names in the Controls panel and the Properties list (one size, so they never drift).
+pub const LIST_TEXT: f32 = 12.0;
 
 pub fn hex(rgb: u32) -> Color {
     Color::from_rgb((rgb >> 16) as u8, (rgb >> 8) as u8, rgb as u8)
@@ -1443,7 +1445,7 @@ fn control_cell() -> (Build<SkiaLayout>, CtlHandles) {
     )
     .children(SkiaRow::new().spacing(8).margin((12, 0, 12, 0)).vertical_options(LayoutOptions::Center).children((
         SkiaSvg::from_string(icons::BOX).width_request(14).height_request(14).vertical_options(LayoutOptions::Center).assign(&mut h.icon),
-        text(13.0, TEXT).vertical_options(LayoutOptions::Center).assign(&mut h.name),
+        text(LIST_TEXT, TEXT).vertical_options(LayoutOptions::Center).assign(&mut h.name),
     )));
     (cell, h)
 }
@@ -1480,7 +1482,7 @@ fn bind_control(cell: &CtlHandles, app: &App, index: usize, cx: &mut Cx) {
             set(cx, cell.name, name.clone());
             if let Some(mut me) = cx.get_mut(cell.name) {
                 me.set_font_family("Default");
-                me.set_font_size(13.0);
+                me.set_font_size(LIST_TEXT);
                 me.set_text_color(c(TEXT));
             }
             if let Some(mut me) = cx.get_mut(cell.icon) {
@@ -2686,7 +2688,7 @@ fn prop_cell() -> (Build<SkiaLayout>, PropHandles) {
                 .vertical_options(LayoutOptions::Center)
                 .background_color(c(ACCENT))
                 .assign(&mut h.dot),
-            text(12.0, MUTED).width_request(140).margin((12, 0, 0, 0)).vertical_options(LayoutOptions::Center).assign(&mut h.name),
+            text(LIST_TEXT, MUTED).width_request(140).margin((12, 0, 0, 0)).vertical_options(LayoutOptions::Center).assign(&mut h.name),
             // The value as it reads.
             SkiaRow::new().spacing(6).margin((152.0, 0.0, ACTIONS, 0.0)).vertical_options(LayoutOptions::Center).assign(&mut h.display).children((
                 SkiaShape::new()
