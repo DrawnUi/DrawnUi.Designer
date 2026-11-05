@@ -41,7 +41,8 @@ Six themes, six languages (English, Deutsch, Español, Français, Русский
 ## Get started
 
 **1. Run the designer.** `cargo run -p designer-desktop --release` from this repository (Rust needed), or the
-[VS Code extension](#vs-code).
+[VS Code extension](#vs-code). Ready-to-run Windows builds are coming soon on the
+[Releases](https://github.com/DrawnUi/DrawnUi.Designer/releases) page, followed by builds for more platforms.
 
 **2. Add the agent to your app.** It is active in debug and development builds only; release builds carry nothing
 of it.
