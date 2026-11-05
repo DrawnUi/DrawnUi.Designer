@@ -6,6 +6,8 @@ param([switch]$NoBuild, [string]$Out)
 $ErrorActionPreference = "Stop"
 
 $crate = Resolve-Path "$PSScriptRoot\..\..\crates\designer-desktop"
+# DrawnUI for Rust from its source checkout when there is one (dev\cargo.ps1), else crates.io.
+$cargo = Resolve-Path "$PSScriptRoot\..\..\dev\cargo.ps1"
 $media = if ($Out) { [IO.Path]::GetFullPath($Out, (Get-Location).Path) } else { Join-Path $PSScriptRoot "..\media" }
 
 Push-Location $crate
@@ -26,11 +28,11 @@ try {
         $env:CXX_wasm32_unknown_emscripten = Join-Path $emscripten "em++$ext"
         $env:AR_wasm32_unknown_emscripten = Join-Path $emscripten "emar$ext"
         # Built from the crate folder: its .cargo/config.toml holds the web link flags.
-        cargo build -j 12 --release --target wasm32-unknown-emscripten
+        & $cargo build -j 12 --release --target wasm32-unknown-emscripten
         if ($LASTEXITCODE) { exit $LASTEXITCODE }
     }
     # -AsHashtable: crate features may differ only by case ("USB" / "usb"), which a PSObject cannot hold.
-    $metadata = cargo metadata --format-version 1 | ConvertFrom-Json -AsHashtable
+    $metadata = & $cargo metadata --format-version 1 | ConvertFrom-Json -AsHashtable
     $built = Join-Path $metadata.target_directory "wasm32-unknown-emscripten\release"
     $drawnui = $metadata.packages | Where-Object { $_.name -eq "drawnui" }
 

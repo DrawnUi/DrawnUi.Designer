@@ -13,7 +13,8 @@ Push-Location $repo
 try {
     $args = @('build', '-p', 'designer-desktop')
     if ($Release) { $args += '--release' }
-    & cargo @args
+    # DrawnUI for Rust from its source checkout when there is one (dev\cargo.ps1).
+    & (Join-Path $PSScriptRoot 'cargo.ps1') @args
     if ($LASTEXITCODE -ne 0) { throw "build failed" }
     # The .NET agent apps get when the designer runs them (its targets take this repo's build).
     & dotnet build agents\dotnet\Agent -c Release -v q -nologo | Out-Null

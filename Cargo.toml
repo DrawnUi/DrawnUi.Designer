@@ -22,7 +22,4 @@ opt-level = 3
 lto = "thin"
 panic = "abort"
 
-# DrawnUI for Rust from its repository until the next crate: the popup-window keyboard fix,
-# Cx::set_accessibility_focus and keyboard_wrap (DrawnUi.Rust bb81036). Remove once a crate ships it.
-[patch.crates-io]
-drawnui = { git = "https://github.com/DrawnUi/DrawnUi.Rust", rev = "fa8ec45fbef9e99a3526f915b490fb9ca1345c09" }
+# DrawnUI for Rust comes from crates.io; dev\cargo.ps1 builds it from a source checkout instead.
