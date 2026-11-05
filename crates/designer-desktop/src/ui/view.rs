@@ -1671,7 +1671,8 @@ fn layers_panel(app: &mut App) -> Build<SkiaLayout> {
             // In DrawFiddle the user writes the code: the hint says where.
             empty_state(icons::LAYOUT_PANEL_TOP, &tr("empty-tree-title"), &tr(if app.embedded { "empty-tree-hint-page" } else { "empty-tree-hint" }))
                 .assign(&mut app.empty_tree)
-                .observe(|me, app: &App| me.set_is_visible(app.app.is_some() && app.tree.revision > 0 && app.tree.nodes.len() <= 1)),
+                // No control of the app's own to list (none, or only a page's own wrapper).
+                .observe(|me, app: &App| me.set_is_visible(app.app.is_some() && app.tree.revision > 0 && app.outline.is_empty())),
             SkiaStack::new()
                 .spacing(14)
                 .center()

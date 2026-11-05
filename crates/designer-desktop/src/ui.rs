@@ -14,7 +14,17 @@ pub enum Incoming {
     /// The hosting page's look (DrawFiddle): a theme id, "dark" and "light" included.
     #[cfg_attr(not(target_os = "emscripten"), allow(dead_code))]
     Theme(String),
+    /// Page mode: where the editor's frame sits in the page (CSS pixels), for a drag carried out of it.
+    #[cfg_attr(not(target_os = "emscripten"), allow(dead_code))]
+    FrameOffset(f32, f32),
+    /// Page mode: a control dragged from Controls and dropped on the app's canvas, at that canvas
+    /// point (pixels): it goes where a place-mode click there puts it.
+    #[cfg_attr(not(target_os = "emscripten"), allow(dead_code))]
+    Place { type_name: String, x: f32, y: f32 },
 }
+
+/// Sends one message to the hosting page (page mode).
+type ToPage = Box<dyn Fn(serde_json::Value)>;
 
 /// Sends one message to the hub.
 type ToHub = Box<dyn Fn(EditorMsg)>;
@@ -276,6 +286,12 @@ pub struct App {
     light_segment: Handle<SkiaLayout>,
     inbox_rx: Option<Receiver<Incoming>>,
     to_hub: Option<ToHub>,
+    /// Page mode: messages to the hosting page (`drag.out`).
+    pub(crate) to_page: Option<ToPage>,
+    /// Page mode: where the editor's frame sits in the page (CSS pixels), from `frame.offset`.
+    pub(crate) frame_offset: (f32, f32),
+    /// Page mode: a Controls drag carried out of the editor's frame (the page shows where it lands).
+    drag_out: bool,
     connected: bool,
     apps: Vec<ConnectedApp>,
     /// Apps that connected before and are not connected now, newest first (the hub remembers them).
@@ -599,6 +615,8 @@ impl App {
     fn apply(&mut self, incoming: Incoming, cx: &mut Cx) {
         match incoming {
             Incoming::Theme(id) => self.set_theme(view::Theme::by_id(&id), cx),
+            Incoming::FrameOffset(x, y) => self.frame_offset = (x, y),
+            Incoming::Place { type_name, x, y } => self.place_at(type_name, x, y),
             Incoming::Connected(on) => {
                 self.connected = on;
                 if on && self.settings.allow_devices {
@@ -935,10 +953,7 @@ impl App {
         // of the app declares them. Their app-made children hang under the nearest shown ancestor.
         // So is a page's own wrapper (DrawFiddle's C# snippet): the snippet's root is the top row.
         let mut depth: std::collections::HashMap<u64, Option<usize>> = std::collections::HashMap::new();
-        // Only a root (an empty DrawFiddle snippet: the page's own layout) is no control to list:
-        // Layers shows its empty state instead.
-        let lone_root = self.tree.nodes.len() <= 1;
-        for (index, node) in self.tree.nodes.iter().enumerate().filter(|_| !lone_root) {
+        for (index, node) in self.tree.nodes.iter().enumerate() {
             let parent_depth = node.parent.and_then(|p| depth.get(&p).copied().flatten());
             if (node.internal && !self.settings.show_internal) || node.page_root {
                 depth.insert(node.id, parent_depth);
@@ -1882,6 +1897,23 @@ impl App {
         self.placing = Some(type_name);
     }
 
+    /// A control of `type_name` put at the app's canvas point `x`, `y` (pixels), where a place-mode
+    /// click there puts it: the page's drop of a drag carried out of the editor. Its `inserted`
+    /// (request 0) is recorded as a placed control's.
+    fn place_at(&mut self, type_name: String, x: f32, y: f32) {
+        self.cancel_place();
+        self.placing = Some(type_name.clone());
+        self.send(HubToApp::PlaceAt { type_name, x, y });
+    }
+
+    /// Page mode: a Controls drag outside the editor's frame, told to the page in its own CSS pixels
+    /// (`phase`: "move", "drop" or "cancel").
+    fn post_drag_out(&self, phase: &str, at: drawnui::skia::Point) {
+        let Some(DragWhat::Control(k)) = self.drag.map(|d| d.what) else { return };
+        let (Some(post), Some(kind)) = (&self.to_page, self.kinds().get(k)) else { return };
+        post(serde_json::json!({ "type": "drag.out", "typeName": kind.type_name, "x": self.frame_offset.0 + at.x, "y": self.frame_offset.1 + at.y, "phase": phase }));
+    }
+
     /// Place mode ends without placing anything.
     fn cancel_place(&mut self) {
         if self.placing.take().is_some() {
@@ -2012,6 +2044,22 @@ impl App {
         if starts && matches!(d.what, DragWhat::Row(_)) {
             cx.items_reset(self.tree_list);
         }
+        // Page mode: a control carried out of the editor's frame goes on in the page (it may be
+        // dropped on the app's canvas); back in, it is a drag over Layers again.
+        if self.embedded && d.active && matches!(d.what, DragWhat::Control(_)) {
+            let size = cx.canvas_size();
+            if d.at.x < 0.0 || d.at.y < 0.0 || d.at.x >= size.width || d.at.y >= size.height {
+                self.drag_out = true;
+                self.post_drag_out("move", d.at);
+                if self.drop.take().is_some() {
+                    self.aim_gap(cx);
+                }
+                return;
+            }
+            if std::mem::take(&mut self.drag_out) {
+                self.post_drag_out("cancel", d.at);
+            }
+        }
         let drop = if d.active { self.drop_target(at, cx) } else { None };
         if drop != self.drop {
             self.drop = drop;
@@ -2021,6 +2069,16 @@ impl App {
 
     /// The drag ends: a drop on Layers inserts the control there, live. True when it was a drag.
     fn end_drag(&mut self, cancelled: bool, cx: &mut Cx) -> bool {
+        // Let go outside the editor's frame: the page places it (or not: off its canvas).
+        if std::mem::take(&mut self.drag_out)
+            && let Some(d) = self.drag
+        {
+            self.post_drag_out(if cancelled { "cancel" } else { "drop" }, d.at);
+            self.drag = None;
+            self.drop = None;
+            self.gap.target_open = 0.0;
+            return true;
+        }
         let (Some(d), drop) = (self.drag.take(), self.drop.take()) else { return false };
         // Cancelled, the gap slides shut; dropped, the control's row takes its place at once.
         self.gap.target_open = 0.0;
@@ -2803,6 +2861,8 @@ fn make() -> Box<dyn drawnui::App> {
         persist: true,
         #[cfg(target_os = "emscripten")]
         embedded: crate::web::embedded(),
+        #[cfg(target_os = "emscripten")]
+        to_page: Some(Box::new(crate::web::post_page)),
         inbox_rx: Some(inbox_rx),
         to_hub: Some(to_hub),
         ..Default::default()
@@ -4808,20 +4868,28 @@ mod shots {
         assert!(!host.ui.state.can_undo(font_size), "nothing left to undo");
     }
 
-    /// An app with no controls of its own (an empty DrawFiddle snippet) shows an empty state in Layers.
+    /// An app with no controls of its own (a page's own wrapper and nothing in it) shows an empty
+    /// state in Layers. A snippet's lone root (a new React or Rust snippet: one empty layer) is a row,
+    /// ready for drops.
     #[test]
     fn an_empty_app_says_so_in_layers() {
-        let mut state = connected();
-        let root = state.tree.nodes[0].clone();
-        let mut tree = state.tree.clone();
-        tree.nodes = vec![root];
-        tree.revision = 2;
-        state.set_tree(tree);
-        let mut host = host(state);
-        host.settle();
+        let lone = |page_root: bool| {
+            let mut state = connected();
+            let mut root = state.tree.nodes[0].clone();
+            root.page_root = page_root;
+            let mut tree = state.tree.clone();
+            tree.nodes = vec![root];
+            tree.revision = 2;
+            state.set_tree(tree);
+            let mut host = host(state);
+            host.settle();
+            host
+        };
         let shown = |h: &Headless<App>| h.ui.tree.base(h.ui.state.empty_tree).is_some_and(|b| b.p.is_visible);
-        assert!(shown(&host), "the empty state shows");
-        assert!(host.ui.state.rows.is_empty(), "and no row for the lone root");
+        let host = lone(true);
+        assert!(shown(&host) && host.ui.state.rows.is_empty(), "only the page's wrapper: the empty state, no row");
+        let host = lone(false);
+        assert!(!shown(&host) && host.ui.state.rows.len() == 1, "a lone root of the app's own: its row");
         let mut host = self::host(connected());
         host.settle();
         assert!(!shown(&host), "not with controls");
@@ -4948,6 +5016,72 @@ mod shots {
         drag_steps(&mut host, from, (from.0, from.1 + view::ROW * 3.4), 6, false);
         assert_eq!(host.ui.state.dragged_node(), None);
         assert!(!sent.lock().unwrap().iter().any(|m| matches!(m, EditorMsg::ToApp { msg: HubToApp::Move { .. }, .. })), "{:?}", sent.lock().unwrap());
+    }
+
+    /// Page mode: a control dragged from Controls out of the editor's frame goes on in the page, told
+    /// in the page's pixels; let go there, the page places it. Back in, it is a drag over Layers again.
+    /// The desktop window never tells anyone.
+    #[test]
+    fn a_controls_drag_out_of_the_frame_goes_on_in_the_page() {
+        let run = |embedded: bool| {
+            let posted = std::sync::Arc::new(std::sync::Mutex::new(Vec::<serde_json::Value>::new()));
+            let mut state = with_controls(connected());
+            state.embedded = embedded;
+            state.frame_offset = (100.0, 50.0);
+            let log = posted.clone();
+            state.to_page = Some(Box::new(move |m| log.lock().unwrap().push(m)));
+            let (mut host, sent, _to_ui) = wired(state);
+            let from = at_label(&mut host, "SkiaLabel, Text");
+            (host, sent, posted, from)
+        };
+        let phases = |posted: &std::sync::Mutex<Vec<serde_json::Value>>| posted.lock().unwrap().iter().map(|m| m["phase"].as_str().unwrap_or("").to_owned()).collect::<Vec<_>>();
+        let inserts = |sent: &std::sync::Mutex<Vec<EditorMsg>>| sent.lock().unwrap().iter().filter(|m| matches!(m, EditorMsg::ToApp { msg: HubToApp::Insert { .. }, .. })).count();
+
+        // Out to the left of the frame, let go there: moves, then the drop, at the page's point.
+        let (mut host, sent, posted, from) = run(true);
+        drag_steps(&mut host, from, (-40.0, from.1), 6, false);
+        let got = phases(&posted);
+        assert!(got.len() >= 2 && got[..got.len() - 1].iter().all(|p| p == "move") && got.last().map(String::as_str) == Some("drop"), "{got:?}");
+        let last = posted.lock().unwrap().last().cloned().unwrap();
+        assert_eq!((last["type"].as_str(), last["typeName"].as_str()), (Some("drag.out"), Some("DrawnUi.Draw.SkiaLabel")));
+        assert!((last["x"].as_f64().unwrap() - 60.0).abs() < 0.5 && (last["y"].as_f64().unwrap() - (50.0 + from.1 as f64)).abs() < 0.5, "{last}");
+        assert!(host.ui.state.drag.is_none() && inserts(&sent) == 0, "the editor inserts nothing itself");
+
+        // Out, then back in over Layers: the page hears "cancel", the drop goes into Layers as before.
+        posted.lock().unwrap().clear();
+        let list = host.rect(host.ui.state.layers_scroll);
+        let onto = (list.left + 120.0, list.top + view::PROPS_PAD + view::ROW * 0.5);
+        drag_steps(&mut host, from, (-40.0, from.1), 6, true);
+        for k in 1..=6 {
+            let f = k as f32 / 6.0;
+            let t = host.time_ms();
+            host.ui.pointer(drawnui::PointerKind::Move, -40.0 + (onto.0 + 40.0) * f, from.1 + (onto.1 - from.1) * f, t);
+            host.frame_after(16.0);
+        }
+        let t = host.time_ms();
+        host.ui.pointer(drawnui::PointerKind::Up, onto.0, onto.1, t);
+        host.frame_after(16.0);
+        let got = phases(&posted);
+        assert_eq!(got.last().map(String::as_str), Some("cancel"), "{got:?}");
+        assert!(!got.iter().any(|p| p == "drop"), "{got:?}");
+        assert_eq!(inserts(&sent), 1, "dropped on Layers: inserted there");
+
+        // The desktop window: the same drag tells no page.
+        let (mut host, sent, posted, from) = run(false);
+        drag_steps(&mut host, from, (-40.0, from.1), 6, false);
+        assert!(posted.lock().unwrap().is_empty() && inserts(&sent) == 0);
+    }
+
+    /// Page mode: the page's drop on the app's canvas goes to the app as a place there, and its answer
+    /// is recorded as a placed control's.
+    #[test]
+    fn the_pages_drop_on_the_canvas_places_the_control() {
+        let (mut host, sent, to_ui) = wired(with_controls(connected()));
+        to_ui.send(Incoming::Place { type_name: "DrawnUi.Draw.SkiaLabel".into(), x: 40.0, y: 30.0 }).unwrap();
+        host.ui.waker().invalidate(host.ui.state.inbox, Dirty::APPLY);
+        host.settle();
+        assert!(sent.lock().unwrap().iter().any(|m| matches!(m, EditorMsg::ToApp { msg: HubToApp::PlaceAt { type_name, x, y }, .. } if type_name == "DrawnUi.Draw.SkiaLabel" && *x == 40.0 && *y == 30.0)), "{:?}", sent.lock().unwrap());
+        assert_eq!(host.ui.state.placing.as_deref(), Some("DrawnUi.Draw.SkiaLabel"), "its inserted answer names the type");
     }
 
     /// The hosting page (DrawFiddle) sets the look: the designer takes that theme.

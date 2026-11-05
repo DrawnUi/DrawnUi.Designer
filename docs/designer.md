@@ -324,13 +324,22 @@ Values are typed as text: `18`, `true`, `Hello`, `Center`, `#FF0000` for colors 
 Two ways to add a control from the Controls panel:
 
 - **Click it, then click in the app.** The row stays pressed and Properties says "Click in the app where it goes.
-  Esc cancels." In the app the pointer highlights the layout the control would go into (the deepest one under it);
-  the click puts it there, after the control under the pointer. Esc, a second click on the row, or Pick cancels;
-  another row places that one instead. Enter on a row does the same as a click.
+  Esc cancels." In the app the pointer boxes the layout the control would go into, with a line where it goes in a
+  stack, row or wrap; the click puts it there. The control under the pointer takes it when it holds children: in a
+  stack before the first child whose middle is below the pointer, in a row before the first one whose middle is to
+  its right, in a wrap the same in reading order, in a layer or grid last. Over a control that holds none (a label,
+  a button, an image) the new one goes next to it in its parent: before it when the pointer is in its first half
+  (top half in a stack, left half in a row or wrap), else after it (always after in a layer or grid). Where nothing
+  can take it (a list's cell made from a template, a page's own wrapper) there is no box and nothing is placed. Esc,
+  a second click on the row, or Pick cancels; another row places that one instead. Enter on a row does the same as
+  a click.
 - **Drag it onto Layers.** The rows move apart to open a gap where it will land: between two rows it goes there,
   among the lower row's siblings; over a layout's row that row lights up and the gap opens after what it holds: it
   goes inside, last. Near the top or bottom of Layers the list moves along. Esc cancels and the gap slides shut. Only layouts take children: the app's Controls list says which types do. A list
   that makes its cells from a template takes none (add an item to its ItemsSource instead).
+- **Drag it onto the app** (in a page that hosts the editor, such as DrawFiddle). Carried out of the editor, the
+  page shows where it lands; let go on the app and it goes where a click there puts it. Back over the editor it is a
+  drag onto Layers again.
 
 The new control is selected and shown in Layers. It is in the running app only: its row has the dot of a live change
 and two buttons. **Write** (`<>`) adds `new T { .. }` with its starting values to the code that makes the parent's
@@ -571,6 +580,11 @@ The iframe sends:
 - `{ channel, type: "code.edit", version, edits: [{ start, end, text }] }`: write to the code. The offsets are
   UTF-16 code units of the text at `version` (as a JS string or Monaco counts). Apply all edits as one undo
   step. Write to code and its Undo both send it.
+- `{ channel, type: "drag.out", typeName, x, y, phase }`: a control dragged from Controls is outside the iframe,
+  the button still held (the iframe keeps the pointer). `x`, `y` are in the page's client coordinates
+  (`frame.offset` added). `phase` is `"move"` while it is carried, `"drop"` when it is let go outside the iframe,
+  `"cancel"` on Esc or when it comes back into the iframe (then it is a drag onto Layers again). A drop outside the
+  app's canvas places nothing: the page treats it as a cancel.
 
 The page sends:
 
@@ -581,6 +595,11 @@ The page sends:
   `graphite`, `paper`, `high-contrast`). Send it once at start and again whenever the page's theme changes.
 - `{ channel, type: "code", uri: "fiddle:///snippet.cs", text, version }`: the code. The answer to `code.get`,
   and sent again on every change in the page's editor, with a new version.
+- `{ channel, type: "frame.offset", x, y }`: where the iframe sits in the page (CSS pixels, the left and top of its
+  client box). Send it once at start and again on every resize or scroll that moves it.
+- `{ channel, type: "place", typeName, x, y }`: a `drag.out` dropped on the app's canvas, at that canvas point in
+  the app's pixels. The editor sends the app `placeAt`: the control goes where a place-mode click at that point puts
+  it, and it is recorded, undone and written as a placed control.
 
 The hub treats the app's code as one file, `fiddle:///snippet.cs` (the app's hello has no project): the
 snippet's last top-level `return` is what the Fiddle's own layout holds. After a `code.edit` the iframe uses
@@ -588,16 +607,17 @@ the new text at once; the next `code` message with a newer version is the truth 
 version the edit was made against, or older, is the text from before the edit and waits for the edit). A second write before that message
 is refused ("the editor has not taken the last edit yet") and the iframe asks for the code again.
 
-`dev/fiddle-probe/index.html` is a stand-in for such a page (a fake agent and a textarea): serve the repo
-root, then open `/dev/fiddle-probe/`.
+`dev/fiddle-probe/index.html` is a stand-in for such a page (a fake agent, its preview as the app's canvas, and a
+textarea): serve the repo root, then open `/dev/fiddle-probe/`. Drag a control from Controls onto the preview to
+see `drag.out`, `frame.offset` and `place` at work.
 
 ## Limits
 
 - Apps: DrawnUi.Net WPF and DrawnUi.Maui (Windows, Android, iPhone, iPad, Mac), DrawnUI for Rust on Windows (live
   edits, Pick, snapshots, Bring to front; no Write to code yet), DrawnUI for React in the browser (live edits, Pick,
   add / copy / delete, snapshots, Write to code into `.tsx`).
-- Controls can be added, pasted, duplicated and deleted (Placing controls; Copy, paste and styles); moving
-  controls is not supported yet.
+- Controls can be added, pasted, duplicated, moved and deleted (Placing controls; Move controls; Copy, paste and
+  styles).
 - Gradients and shadows are edited as text.
 - `snapshot` of a hidden or minimized app can show GPU-cached controls as blank.
 - Only UTF-8 source files are edited. Files in UTF-16 are never written.

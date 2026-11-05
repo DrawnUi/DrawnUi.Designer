@@ -86,6 +86,12 @@ fn post(msg: Value) {
     unsafe { designer_post(text.as_ptr(), text.len()) }
 }
 
+/// One message of the editor's own to the parent page (`drag.out`), on the designer's channel.
+pub fn post_page(mut msg: Value) {
+    msg["channel"] = CHANNEL.into();
+    post(msg);
+}
+
 fn deliver(incoming: Incoming) {
     LINK.with(|link| {
         if let Some((to_ui, wake)) = &*link.borrow() {
@@ -145,6 +151,19 @@ pub extern "C" fn designer_page(text: *const u8, len: usize) {
     if m["type"] == "theme" {
         if let Some(theme) = m["theme"].as_str() {
             deliver(Incoming::Theme(theme.to_owned()));
+        }
+        return;
+    }
+    // Where the editor's frame sits in the page (CSS pixels): a drag carried out of it is told in the
+    // page's coordinates.
+    if m["type"] == "frame.offset" {
+        deliver(Incoming::FrameOffset(m["x"].as_f64().unwrap_or(0.0) as f32, m["y"].as_f64().unwrap_or(0.0) as f32));
+        return;
+    }
+    // A control dragged out of the editor and dropped on the app's canvas, at that canvas point (pixels).
+    if m["type"] == "place" {
+        if let (Some(type_name), Some(x), Some(y)) = (m["typeName"].as_str(), m["x"].as_f64(), m["y"].as_f64()) {
+            deliver(Incoming::Place { type_name: type_name.to_owned(), x: x as f32, y: y as f32 });
         }
         return;
     }

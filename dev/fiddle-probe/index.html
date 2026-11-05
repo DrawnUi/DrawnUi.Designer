@@ -3,7 +3,9 @@
      editor in a page"): a fake app (the Fiddle's layout -> SkiaStack -> SkiaLabel "Hi") and the code in
      a textarea. Serve the repo root and open /dev/fiddle-probe/ after dev/build-fiddle-editor.ps1.
      Every message both ways is logged as "[page] <- / ->" and kept in window.probe.
-     /dev/fiddle-probe/?tsx plays a React page: a .tsx snippet, its stack as the tree's root. -->
+     /dev/fiddle-probe/?tsx plays a React page: a .tsx snippet, its stack as the tree's root.
+     The preview box plays the app's canvas (400 x 300 pixels): a control dragged out of the editor's Controls shows
+     a marker there (drag.out), and dropped on it goes back to the editor as `place` at that canvas point. -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -13,12 +15,14 @@
   #side { width: 380px; display: flex; flex-direction: column; gap: 8px; padding: 12px; box-sizing: border-box; }
   textarea { flex: 1; background: #15161a; color: #e6e6e6; border: 1px solid #3a3d46; border-radius: 6px; padding: 8px; font: 12px ui-monospace, Consolas, monospace; resize: none; }
   #label { padding: 10px; border: 1px dashed #4a4e58; border-radius: 6px; font-size: 18px; }
+  #preview { position: relative; height: 150px; border: 1px solid #3a3d46; border-radius: 6px; padding: 8px; box-sizing: border-box; }
+  #marker { position: absolute; width: 10px; height: 10px; margin: -5px 0 0 -5px; border-radius: 50%; background: #4cc2ff; display: none; pointer-events: none; }
   iframe { flex: 1; border: 0; border-left: 1px solid #2c2e35; }
 </style>
 </head>
 <body>
 <div id="side">
-  <div>App preview (fake agent): <span id="label">Hi</span></div>
+  <div id="preview" aria-label="App canvas">App preview (fake agent): <span id="label">Hi</span><div id="marker"></div></div>
   <div>Code (version <span id="version">1</span>)</div>
   <textarea id="code" spellcheck="false" aria-label="Code">// Café ☕ 🎨 the emoji moves every offset after it
 return new SkiaStack { Children = { new SkiaLabel { Text = "Hi", FontSize = 18, TextColor = Color.Parse("#E6E6E6"), HorizontalOptions = LayoutOptions.Center, Margin = new Thickness(8, 4) } } };
@@ -123,8 +127,15 @@ const props = (n) => n !== 3 ? [] : [
 fromApp({ role: "app", protocol: "0.1.0", name: "FiddleSnippet", engine: "dotnet-blazor", pid: 1, project: null, platform: "web" });
 fromApp({ type: "screens", screens: [] });
 fromApp(tree());
+let placed = 0;
 const app = (m) => {
   if (m.type === "getTree") fromApp(tree());
+  else if (m.type === "placeAt") {
+    // as a place-mode click there: the fake app puts it last in its stack
+    placed++;
+    fromApp({ type: "inserted", request: 0, node: 100 + placed, parent: 2, index: 1 });
+    fromApp(tree());
+  }
   else if (m.type === "getProps") fromApp({ type: "props", node: m.node, props: props(m.node) });
   else if (m.type === "setProperty" && m.node === 3 && m.name === "Text") {
     labelText = m.value;
@@ -135,6 +146,27 @@ const app = (m) => {
 
 area.addEventListener("input", () => { version++; showVersion(); sendCode(); });
 
+// Where the iframe sits in the page, for drag.out's coordinates: once, and again when it moves.
+const sendOffset = () => { const r = frame.getBoundingClientRect(); toIframe({ type: "frame.offset", x: r.left, y: r.top }); };
+sendOffset();
+addEventListener("resize", sendOffset);
+addEventListener("scroll", sendOffset, true);
+
+// A control carried out of the editor: a marker over the preview (the app's canvas); dropped on it, `place` at that
+// canvas point; dropped anywhere else, nothing.
+const preview = document.getElementById("preview");
+const marker = document.getElementById("marker");
+const onCanvas = (x, y) => {
+  const r = preview.getBoundingClientRect();
+  return x >= r.left && x < r.right && y >= r.top && y < r.bottom ? { x: ((x - r.left) / r.width) * 400, y: ((y - r.top) / r.height) * 300, r } : null;
+};
+const dragOut = (m) => {
+  const at = onCanvas(m.x, m.y);
+  marker.style.display = m.phase === "move" && at ? "block" : "none";
+  if (at) { marker.style.left = `${m.x - at.r.left}px`; marker.style.top = `${m.y - at.r.top}px`; }
+  if (m.phase === "drop" && at) toIframe({ type: "place", typeName: m.typeName, x: at.x, y: at.y });
+};
+
 window.addEventListener("message", (e) => {
   if (e.source !== frame.contentWindow || e.data?.channel !== CHANNEL) return;
   const m = e.data;
@@ -142,6 +174,7 @@ window.addEventListener("message", (e) => {
   console.log("[page] <- " + JSON.stringify(m));
   if (held) { const h = held; held = null; h.forEach(toIframe); }
   if (m.type === "toApp") app(m.msg);
+  else if (m.type === "drag.out") dragOut(m);
   else if (m.type === "code.get") sendCode();
   else if (m.type === "code.edit") {
     if (m.version !== version) { console.log(`[page] edit at version ${m.version} refused: the code is at ${version}`); return sendCode(); }
