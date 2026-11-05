@@ -429,6 +429,44 @@ class TestCanvas {
     clearInterval(pump);
   }
 
+  // place mode right after the page mounted a new snippet: the hover boxes the layout under the pointer, the click
+  // puts the control there and answers inserted with its id (the pointer events come through hover / click here:
+  // Node has no DOM)
+  {
+    const canvas = new TestCanvas(CK.MakeSurface(400, 300));
+    const pump = setInterval(() => { if (canvas.requested) canvas.Draw(); }, 2);
+    const root = createDrawnRoot(canvas as any);
+    let layer: any, caption: any;
+    root.render(
+      <SkiaLayer ref={(c: any) => { if (c) layer = c; }} HorizontalOptions="Fill" VerticalOptions="Fill">
+        <SkiaLabel ref={(c: any) => { if (c) caption = c; }} Text="Hi" WidthRequest={100} HeightRequest={30} />
+      </SkiaLayer>,
+    );
+    await wait(30); canvas.Draw();
+    const got: any[] = [];
+    attachPage(canvas, (t) => got.push(JSON.parse(t)));
+    for (let t = 0; t < 1000 && !got.some((m) => m.type === "tree"); t += 5) await wait(5);
+    __test.state.pick = { unhook: () => {} } as any;
+    __test.hover(20, 10);
+    check("pick mode: the hover boxes the control under the pointer", __test.state.highlight?.deref() === caption);
+    __test.state.pick = undefined;
+    __test.state.highlight = undefined;
+    __test.state.pick = { place: "SkiaLabel", unhook: () => {} } as any;
+    __test.hover(200, 150);
+    check("place mode: the hover boxes the layout under the pointer", __test.state.highlight?.deref() === layer);
+    const from = got.length;
+    __test.click(200, 150);
+    for (let t = 0; t < 1000 && !got.slice(from).some((m) => m.type === "tree"); t += 5) await wait(5);
+    const after = got.slice(from);
+    const ins = after.find((m) => m.type === "inserted");
+    const tree = after.find((m) => m.type === "tree");
+    check("place mode: the click inserts and answers its id", !!ins?.node && ins.parent === layer.AccessibilityId && !after.some((m) => m.type === "error")
+      && tree?.nodes.some((n: any) => n.id === ins.node && n.parent === layer.AccessibilityId), JSON.stringify(after).slice(0, 300));
+    detach();
+    root.render(<SkiaStack />);
+    clearInterval(pump);
+  }
+
   // source map lookup: a TSX file through esbuild's JSX transform; the generated jsx(...) call maps back to its "<"
   const tsx = "import { SkiaLabel } from 'x';\nexport const Page = () => (\n  <SkiaLabel Text=\"a\" />\n);\n";
   const out = transformSync(tsx, { loader: "tsx", jsx: "automatic", sourcemap: "external", sourcefile: "Page.tsx", format: "esm" });

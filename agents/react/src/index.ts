@@ -951,8 +951,10 @@ function hover(x: number, y: number): void {
   const pick = state.pick;
   if (!pick) return;
   try {
-    const node = pick.place ? placeTarget(x, y).container : undefined; const nodeId = pick.place ? (node ? idOf(node) : undefined) : pickAt(x, y);
-    if (node !== pick.hover) { pick.hover = node; setHighlight(node === undefined ? undefined : find(node)); }
+    // place mode: the layout a click would put the control into; pick mode: the control a click would pick
+    const picked = pick.place ? undefined : pickAt(x, y);
+    const node = pick.place ? placeTarget(x, y).container : picked === undefined ? undefined : find(picked);
+    if (node !== pick.hover) { pick.hover = node; setHighlight(node); }
   } catch { /* never into the app */ }
 }
 
@@ -971,7 +973,8 @@ function click(x: number, y: number): void {
         return;
       }
       const r = insertControl(container, index, type, [], [], []);
-      setHighlight(find(r.id));
+      // the control itself: its id is in the agent's map once a tree has walked it
+      setHighlight(r.control);
       sendMsg({ type: "inserted", request: 0, node: r.id, parent: container.AccessibilityId, index: r.index });
       enqueue(async () => { await settle(); await sendTree(); });
       return;
@@ -1074,7 +1077,7 @@ function appChildren(parent: Ctl): Ctl[] {
   return childrenOf(parent).filter((v) => !gone(v) && (v.IsChildrenItem || inserted.has(v)));
 }
 
-function insertControl(parent: Ctl, index: number | undefined, typeName: string, props: [string, string][], children: any[], skipped: string[]): { id: number; index: number } {
+function insertControl(parent: Ctl, index: number | undefined, typeName: string, props: [string, string][], children: any[], skipped: string[]): { id: number; index: number; control: Ctl } {
   const why = notAContainer(parent);
   if (why) throw new Error(why);
   // a React-owned control the designer took out comes back (Restore): shown again, not a copy
@@ -1086,7 +1089,7 @@ function insertControl(parent: Ctl, index: number | undefined, typeName: string,
     for (const [n, v] of props) { try { setLive(hidden, n, v); } catch (e) { skipped.push(`${n} (${errorText(e)})`); } }
     hidden.Update?.();
     changed();
-    return { id: hidden.AccessibilityId, index: appChildren(parent).indexOf(hidden) };
+    return { id: hidden.AccessibilityId, index: appChildren(parent).indexOf(hidden), control: hidden };
   }
   const ctor = classOf(typeName);
   const control = build(ctor, props.length || children.length ? props : defaultsFor(defaultOf({ constructor: ctor }) ?? new ctor(), groupOfClass(defaultOf({ constructor: ctor }))), "", skipped);
@@ -1097,7 +1100,7 @@ function insertControl(parent: Ctl, index: number | undefined, typeName: string,
   for (const spec of children) buildChild(control, spec, typeName, skipped);
   parent.Update?.();
   changed();
-  return { id: control.AccessibilityId, index: at };
+  return { id: control.AccessibilityId, index: at, control };
 }
 
 function build(ctor: Ctor, props: [string, string][], where: string, skipped: string[]): Ctl {
@@ -1271,4 +1274,4 @@ async function openScreen(route: string): Promise<void> {
 }
 
 /** For tests: the agent's state. */
-export const __test = { state, walk, pickAt, hitPath, readProps, setLive, onFrame, sourceMapLookup, setSourceOf: (f: typeof designerSourceOf) => { designerSourceOf = f; } };
+export const __test = { state, walk, pickAt, hitPath, readProps, setLive, onFrame, sourceMapLookup, hover, click, setSourceOf: (f: typeof designerSourceOf) => { designerSourceOf = f; } };
