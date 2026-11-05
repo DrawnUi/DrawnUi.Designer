@@ -7,15 +7,20 @@
 > settings can still change between versions. Issues and feedback are welcome.
 
 **See your running DrawnUI app, change it live, and write every change into your code.** For DrawnUI apps in
-.NET, Rust and React, on Windows, Android, iPhone and in the browser. In its own window, inside VS Code, and for
-AI agents.
+.NET, Rust and React, on Windows, Android, iPhone and in the browser.
+
+- **Desktop app** for Windows and macOS: your app runs in its own window or on a phone, the designer beside it.
+- **Inside [DrawFiddle](https://drawfiddle.com):** the Visual view of C#, TSX and Rust snippets is this designer,
+  nothing to install.
+- **Inside VS Code** as an extension, beside your code.
+- **For AI agents** through MCP: the same view and the same edits.
 
 ### 🦀 Built with [DrawnUI for Rust](https://github.com/DrawnUi/DrawnUi.Rust)
 
 The designer is itself a DrawnUI app. Every panel, the menu bar, the layers tree, the color and gradient editors
 are drawn by [DrawnUI for Rust](https://github.com/DrawnUi/DrawnUi.Rust) on one Skia canvas, with keyboard and
-screen reader support. The same Rust code runs as a native window, inside VS Code and in the browser
-(WebAssembly).
+screen reader support. The same Rust code runs as a native desktop app, inside VS Code and in the browser
+(WebAssembly) inside DrawFiddle.
 
 ## What it does
 
