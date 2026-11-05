@@ -1,0 +1,11 @@
+[package]
+name = "designer-hubcore"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "The designer hub's logic without IO: driven by the native hub (sockets, MCP) and by a hub inside a browser page."
+
+[dependencies]
+designer-protocol.workspace = true
+designer-sources.workspace = true

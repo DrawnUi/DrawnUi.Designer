@@ -1,0 +1,10 @@
+target/
+bin/
+obj/
+*.user
+vscode/node_modules/
+vscode/dist/
+vscode/media/
+vscode/bin/
+*.vsix
+web/fiddle/

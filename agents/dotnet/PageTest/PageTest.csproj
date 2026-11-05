@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <!-- Headless check of the agent's page transport (Attach.AttachPage) on a DrawnUi.Net canvas: dotnet run. -->
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>disable</Nullable>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="DrawnUi.Net" Version="1.10.8.19" />
+        <ProjectReference Include="..\Agent\DrawnUi.Designer.Agent.csproj" SetTargetFramework="TargetFramework=net8.0" />
+    </ItemGroup>
+
+</Project>

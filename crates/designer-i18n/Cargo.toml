@@ -1,0 +1,12 @@
+[package]
+name = "designer-i18n"
+version.workspace = true
+edition.workspace = true
+description = "The DrawnUI Designer's texts in its languages (Fluent), shared by the window and the hub."
+
+[dependencies]
+fluent-bundle = "0.16"
+fluent-syntax = "0.12"
+
+[target.'cfg(not(target_os = "emscripten"))'.dependencies]
+sys-locale = "0.3"

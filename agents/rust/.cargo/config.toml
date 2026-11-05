@@ -1,0 +1,16 @@
+# The browser build of the sample (and the page check, sample/web/page-check.cjs): the drawnui link
+# flags every app copies (drawnui-rust), plus what the agent's page link needs: `addFunction` for
+# the page's sink and a function table that can grow.
+[target.wasm32-unknown-emscripten]
+linker = "em++"
+rustflags = [
+    "-C", "link-arg=-sMAX_WEBGL_VERSION=2",
+    "-C", "link-arg=-sMODULARIZE=1",
+    "-C", "link-arg=-sEXPORT_NAME=createDrawnUi",
+    "-C", "link-arg=-sEXPORTED_RUNTIME_METHODS=GL,HEAPU8,UTF8ToString,addFunction",
+    "-C", "link-arg=-sALLOW_TABLE_GROWTH=1",
+    "-C", "link-arg=-sALLOW_MEMORY_GROWTH=1",
+    "-C", "link-arg=-sSTACK_SIZE=1048576",
+    "-C", "link-arg=-sSTACK_OVERFLOW_CHECK=1",
+    "-C", "link-arg=-sERROR_ON_UNDEFINED_SYMBOLS=0",
+]

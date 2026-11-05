@@ -1,0 +1,53 @@
+// Theme change reveal: the new theme (B) opens from the click as an exact circle with a soft, feathered
+// border. Just ahead of the border, where A is still fully opaque, A bends outward a few points, like a
+// lens passing over it, and a faint soft light rides the border. Sizes are in points (times scale), so it looks the same at
+// every display scaling. Every value comes from a uniform, and A is exact at progress 0 and gone at 1 for
+// any of them.
+
+uniform shader old;      // A, the window as drawn before the change, canvas pixels
+uniform float2 center;   // the click, pixels
+uniform float progress;  // 0..1, already eased
+uniform float reach;     // pixels from center to the farthest window corner
+uniform float scale;     // pixels per point
+uniform float feather;   // soft width of the border, points
+uniform float bend;      // how far A bends ahead of the border, points (0 = no bend)
+uniform float light;     // soft light on the border, 0..1 (0 = none)
+
+const float BEND_REACH = 0.8133;  // the bend reaches this share of the border width ahead of it
+
+half4 main(float2 p) {
+    if (progress <= 0.0) {
+        return old.eval(p);
+    }
+    if (progress >= 1.0) {
+        return half4(0.0);
+    }
+
+    float band = max(feather * scale, 1.0);
+    float bendWidth = BEND_REACH * band;
+
+    // the border: an exact circle around the click, from half a band short of the click to half a band
+    // past the farthest corner
+    float2 toP = p - center;
+    float r = length(toP);
+    float front = mix(-0.5 * band, reach + 0.5 * band, progress);
+    float ahead = r - front;
+
+    // the bend and the light ease in at the start, so the first frames match A
+    float easeIn = smoothstep(0.0, 0.12, progress);
+
+    // A bends outward only where it is still fully opaque: the bend zone starts where the border's fade
+    // ends (cover = 1), so nothing shifted is ever seen half-transparent over B
+    float x = (ahead - 0.5 * band) / bendWidth;
+    float shift = bend * scale * x * exp(-x * x) * 2.33 * step(0.0, x) * easeIn;
+    float2 dir = toP / max(r, 1.0);
+    half4 a = old.eval(p - dir * shift);
+
+    // soft light on the border
+    float glow = exp(-pow(ahead / (0.6 * band), 2.0)) * light * easeIn;
+    a.rgb = min(a.rgb + half3(glow) * a.a, a.a);
+
+    // feathered coverage: 0 behind the border (B), 1 ahead of it (A)
+    float cover = smoothstep(-0.5 * band, 0.5 * band, ahead);
+    return a * half(cover);
+}

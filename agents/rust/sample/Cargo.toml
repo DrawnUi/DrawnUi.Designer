@@ -1,0 +1,13 @@
+[package]
+name = "designer-agent-sample"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[dependencies]
+drawnui = "0.1.0-preview.30"
+drawnui-designer-agent = { path = ".." }
+
+[build-dependencies]
+embed-resource = "3"

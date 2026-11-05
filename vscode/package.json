@@ -1,0 +1,59 @@
+{
+  "name": "drawnui-designer",
+  "displayName": "DrawnUI Designer",
+  "description": "See and edit running DrawnUI apps from VS Code: their screens, live control tree and properties, with changes written back to your C# code.",
+  "publisher": "drawnui",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "icon": "icon.png",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Visualization",
+    "Other"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "drawnuiDesigner.open",
+        "title": "DrawnUI: Open Designer"
+      }
+    ],
+    "configuration": {
+      "title": "DrawnUI Designer",
+      "properties": {
+        "drawnuiDesigner.port": {
+          "type": "number",
+          "default": 54270,
+          "description": "Port of the designer hub on 127.0.0.1 (the DRAWNUI_DESIGNER_PORT environment variable wins)."
+        },
+        "drawnuiDesigner.sidecarPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path of drawnui-designer.exe, started with --sidecar to run the hub. Empty: the bundled one, else the workspace build."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run build",
+    "build": "node esbuild.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "typecheck": "tsc --noEmit",
+    "media": "pwsh -NoProfile -File scripts/build-media.ps1",
+    "package": "vsce package --no-dependencies --allow-missing-repository --skip-license"
+  },
+  "devDependencies": {
+    "@types/node": "20.17.10",
+    "@types/vscode": "1.90.0",
+    "@vscode/vsce": "4.0.0",
+    "esbuild": "0.28.2",
+    "typescript": "5.6.3"
+  }
+}

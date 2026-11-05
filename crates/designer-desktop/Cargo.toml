@@ -1,0 +1,37 @@
+[package]
+name = "designer-desktop"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "drawnui-designer"
+path = "src/main.rs"
+
+[dependencies]
+designer-protocol.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+drawnui = "0.1.0-preview.30"
+designer-i18n.workspace = true
+
+[target.'cfg(not(target_os = "emscripten"))'.dependencies]
+designer-core.workspace = true
+tokio = { version = "1", features = ["rt", "net", "sync", "time", "macros"] }
+tokio-tungstenite = "0.30"
+futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
+
+# The web build's page mode runs the hub in the page (src/web.rs).
+[target.'cfg(target_os = "emscripten")'.dependencies]
+designer-hubcore.workspace = true
+
+[build-dependencies]
+embed-resource = "3"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_UI_WindowsAndMessaging", "Win32_Foundation", "Win32_System_Threading", "Win32_UI_Shell", "Win32_Graphics_Gdi", "Win32_UI_HiDpi"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSApplication", "NSWindow", "NSResponder", "NSButton", "NSControl", "NSView"] }

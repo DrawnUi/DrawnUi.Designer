@@ -1,0 +1,41 @@
+<Project>
+  <!-- The targets of DrawnUi.Designer.targets (properties and items there), imported by the copy that won. -->
+  <Target Name="DrawnUiDesignerGenerateAttach" BeforeTargets="CoreCompile" Condition="'$(_DrawnUiDesignerAttachApp)' == 'true'">
+    <Error Condition="!Exists('$(DrawnUiDesignerAgentAssembly)')"
+           Text="DrawnUI Designer: no agent at $(DrawnUiDesignerAgentAssembly). Build it first (dotnet build &lt;ToolBox&gt;/agents/dotnet/Agent -c Release -f net8.0) or reference the DrawnUi.Designer.Agent package." />
+    <!-- the agent's hash goes into the generated file: a changed agent DLL changes the app's own assembly, so the
+         steps after the compile (bundle, APK) take the new DLL even when they only look at the app's files -->
+    <GetFileHash Files="$(DrawnUiDesignerAgentAssembly)">
+      <Output TaskParameter="Hash" PropertyName="_DrawnUiDesignerAgentHash" />
+    </GetFileHash>
+    <PropertyGroup>
+      <_DrawnUiDesignerAttachFile>$(IntermediateOutputPath)DrawnUiDesignerAttach.g.cs</_DrawnUiDesignerAttachFile>
+      <_DrawnUiDesignerAttachUrl>$([MSBuild]::Escape($(DrawnUiDesignerUrl.Replace('"', '""'))))</_DrawnUiDesignerAttachUrl>
+      <_DrawnUiDesignerAttachProject>$([MSBuild]::Escape($(MSBuildProjectDirectory.Replace('"', '""'))))</_DrawnUiDesignerAttachProject>
+    </PropertyGroup>
+    <ItemGroup>
+      <_DrawnUiDesignerAttachLine Include="// &lt;auto-generated/&gt; by DrawnUi.Designer.targets: starts the DrawnUI Designer agent (Debug build)" />
+
+      <_DrawnUiDesignerAttachLine Include="namespace DrawnUiDesignerGenerated" />
+      <_DrawnUiDesignerAttachLine Include="{" />
+      <_DrawnUiDesignerAttachLine Include="    internal static class AttachDesigner" />
+      <_DrawnUiDesignerAttachLine Include="    {" />
+      <_DrawnUiDesignerAttachLine Include="        internal const string Agent = &quot;$(_DrawnUiDesignerAgentHash)&quot;%3B" />
+      <_DrawnUiDesignerAttachLine Include="#pragma warning disable CA2255" />
+      <_DrawnUiDesignerAttachLine Include="        [global::System.Runtime.CompilerServices.ModuleInitializer]" />
+      <_DrawnUiDesignerAttachLine Include="#pragma warning restore CA2255" />
+      <_DrawnUiDesignerAttachLine Include="        internal static void Run() =&gt; global::DrawnUi.Designer.Agent.Attach.Start(@&quot;$(_DrawnUiDesignerAttachUrl)&quot;, @&quot;$(_DrawnUiDesignerAttachProject)&quot;, $([MSBuild]::ValueOrDefault('$(_DrawnUiDesignerCable)', 'false')))%3B" />
+      <_DrawnUiDesignerAttachLine Include="    }" />
+      <_DrawnUiDesignerAttachLine Include="}" />
+    </ItemGroup>
+    <WriteLinesToFile File="$(_DrawnUiDesignerAttachFile)" Lines="@(_DrawnUiDesignerAttachLine)" Overwrite="true" WriteOnlyWhenDifferent="true" />
+    <ItemGroup>
+      <Compile Include="$(_DrawnUiDesignerAttachFile)" />
+      <FileWrites Include="$(_DrawnUiDesignerAttachFile)" />
+    </ItemGroup>
+  </Target>
+
+  <Target Name="DrawnUiDesignerReleaseCheck" AfterTargets="Build" Condition="'$(Optimize)' == 'true' And Exists('$(OutDir)DrawnUi.Designer.Agent.dll')">
+    <Warning Text="DrawnUI Designer: the agent DLL is in an optimized (Release) output, $(OutDir)DrawnUi.Designer.Agent.dll. Release builds must not ship it: remove the reference that brings it." />
+  </Target>
+</Project>

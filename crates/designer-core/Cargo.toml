@@ -1,0 +1,24 @@
+[package]
+name = "designer-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+designer-i18n.workspace = true
+designer-protocol.workspace = true
+designer-hubcore.workspace = true
+designer-sources.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio = { version = "1", features = ["rt-multi-thread", "net", "sync", "macros", "time", "process", "io-util"] }
+tokio-tungstenite = "0.30"
+futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
+rmcp = { version = "3.8.0", features = ["server", "macros", "transport-streamable-http-server", "schemars"] }
+axum = { version = "0.8", default-features = false, features = ["http1", "tokio"] }
+sysinfo = { version = "0.38.4", default-features = false, features = ["system"] }
+
+[dev-dependencies]
+reqwest = { version = "0.13.5", default-features = false, features = ["json"] }
+rmcp = { version = "3.8.0", features = ["client", "transport-streamable-http-client-reqwest"] }

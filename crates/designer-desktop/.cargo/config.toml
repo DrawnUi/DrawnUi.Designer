@@ -1,0 +1,18 @@
+# The web build (wasm32-unknown-emscripten), built from this folder (cargo reads this file only when
+# building here): emsdk's tools on PATH (emsdk_env), em++ links. The page script's functions come in
+# through --js-library (build.rs).
+[target.wasm32-unknown-emscripten]
+linker = "em++"
+rustflags = [
+    "-C", "link-arg=-sMAX_WEBGL_VERSION=2",
+    "-C", "link-arg=-sMODULARIZE=1",
+    "-C", "link-arg=-sEXPORT_NAME=createDrawnUi",
+    "-C", "link-arg=-sEXPORTED_RUNTIME_METHODS=GL,HEAPU8,UTF8ToString",
+    "-C", "link-arg=-sALLOW_MEMORY_GROWTH=1",
+    # A 1 MB main-thread stack (emscripten's default 64 KB overflows on deep trees) and the check that
+    # turns an overflow into a clear abort instead of silent memory corruption. Keep both.
+    "-C", "link-arg=-sSTACK_SIZE=1048576",
+    "-C", "link-arg=-sSTACK_OVERFLOW_CHECK=1",
+    # Skia references __gxx_personality_v0, which emscripten no longer stubs.
+    "-C", "link-arg=-sERROR_ON_UNDEFINED_SYMBOLS=0",
+]

@@ -1,0 +1,89 @@
+<Project>
+  <!--
+    Attaches the DrawnUI Designer agent to a .NET app in Debug builds, without editing the app's project.
+
+    Two ways in, same file:
+    - the NuGet package DrawnUi.Designer.Agent (this file is its buildTransitive/DrawnUi.Designer.Agent.targets): every
+      app that references it, directly or through a DrawnUi package, gets the agent from the package;
+    - CustomAfterMicrosoftCommonTargets = the path of this file in the ToolBox repo (MSBuild imports it in every project
+      of the build); the agent then comes from the repo's Release build (agents/dotnet/Agent/bin/Release).
+    When both are there, the first one imported is used.
+
+    Windows and other desktops (WPF, MAUI Windows): the agent DLL is copied into the Debug output and named in the app's
+    runtimeconfig.json as a startup hook (STARTUP_HOOKS). The .NET host loads it together with DOTNET_STARTUP_HOOKS: dotnet watch sets that variable to its
+    own hot reload hook, but the runtimeconfig entry stays. DRAWNUI_DESIGNER_AGENT (variable or property) overrides the DLL.
+
+    iOS, Mac Catalyst, Android: no startup hooks there. The app references the agent and gets a generated module
+    initializer that starts it, with the project folder baked in (the PDB paths are not on the device).
+    - DrawnUiDesignerUrl = the hub, passed to the agent unchanged (a query such as ?token=... included); without it the
+      build's DRAWNUI_DESIGNER_URL.
+    - iOS without a URL: the USB cable. The agent listens on the phone's 127.0.0.1, port 54273 (or the next free one up
+      to 54282), and the designer connects through usbmux.
+    - Android without a URL: ws://127.0.0.1:54270, which the designer forwards to itself over the cable (adb reverse).
+    - Mac Catalyst without a URL: ws://127.0.0.1:54270, the designer on the same Mac.
+    - DrawnUiDesignerAgentAssembly picks another agent DLL.
+
+    Every platform: only builds that do not optimize (Debug) get the agent, only the app (not its libraries), and
+    DrawnUiDesigner=false turns it off. A build that optimizes warns when the agent DLL is in its output anyway (a
+    Release build after a Debug one into the same folder, or a reference that brings it).
+  -->
+  <PropertyGroup Condition="'$(_DrawnUiDesignerImported)' == ''">
+    <_DrawnUiDesignerImported>$(MSBuildThisFileFullPath)</_DrawnUiDesignerImported>
+    <_DrawnUiDesignerPlatform>$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)'))</_DrawnUiDesignerPlatform>
+    <_DrawnUiDesignerMobile Condition="'$(_DrawnUiDesignerPlatform)' == 'ios' Or '$(_DrawnUiDesignerPlatform)' == 'maccatalyst' Or '$(_DrawnUiDesignerPlatform)' == 'android'">true</_DrawnUiDesignerMobile>
+    <!-- inside the package the DLLs sit in agent/<tfm>/ next to this folder; in the ToolBox repo in the agent's bin -->
+    <_DrawnUiDesignerPackage>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)../agent/'))</_DrawnUiDesignerPackage>
+    <_DrawnUiDesignerPackage Condition="!Exists('$(_DrawnUiDesignerPackage)net8.0/DrawnUi.Designer.Agent.dll')"></_DrawnUiDesignerPackage>
+    <DrawnUiDesignerUrl Condition="'$(DrawnUiDesignerUrl)' == ''">$(DRAWNUI_DESIGNER_URL)</DrawnUiDesignerUrl>
+    <DrawnUiDesignerAgentAssembly Condition="'$(DrawnUiDesignerAgentAssembly)' == '' And '$(_DrawnUiDesignerPackage)' != ''">$([System.IO.Path]::GetFullPath('$(_DrawnUiDesignerPackage)net8.0/DrawnUi.Designer.Agent.dll'))</DrawnUiDesignerAgentAssembly>
+    <DrawnUiDesignerAgentAssembly Condition="'$(DrawnUiDesignerAgentAssembly)' == ''">$(MSBuildThisFileDirectory)Agent/bin/Release/net8.0/DrawnUi.Designer.Agent.dll</DrawnUiDesignerAgentAssembly>
+    <!-- the startup hook: DRAWNUI_DESIGNER_AGENT, else the package's DLL for this head -->
+    <_DrawnUiDesignerHook>$(DRAWNUI_DESIGNER_AGENT)</_DrawnUiDesignerHook>
+    <!-- a copy inside this project (its own Debug output, as an older agent reported it to the designer) is not a
+         source: building from it would keep that copy forever; the package or repo DLL below is used instead -->
+    <_DrawnUiDesignerHook Condition="'$(_DrawnUiDesignerHook)' != '' And $([System.IO.Path]::GetFullPath('$(_DrawnUiDesignerHook)').ToUpperInvariant().StartsWith($([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)/').ToUpperInvariant())))"></_DrawnUiDesignerHook>
+    <_DrawnUiDesignerHook Condition="'$(_DrawnUiDesignerHook)' == '' And '$(_DrawnUiDesignerPackage)' != '' And '$(_DrawnUiDesignerPlatform)' == 'windows'">$([System.IO.Path]::GetFullPath('$(_DrawnUiDesignerPackage)net8.0-windows/DrawnUi.Designer.Agent.dll'))</_DrawnUiDesignerHook>
+    <_DrawnUiDesignerHook Condition="'$(_DrawnUiDesignerHook)' == '' And '$(_DrawnUiDesignerPackage)' != ''">$([System.IO.Path]::GetFullPath('$(_DrawnUiDesignerPackage)net8.0/DrawnUi.Designer.Agent.dll'))</_DrawnUiDesignerHook>
+    <!-- the ToolBox repo: its own Release build of the agent, when there is one -->
+    <_DrawnUiDesignerRepoHook Condition="'$(_DrawnUiDesignerPlatform)' == 'windows'">$(MSBuildThisFileDirectory)Agent/bin/Release/net8.0-windows/DrawnUi.Designer.Agent.dll</_DrawnUiDesignerRepoHook>
+    <_DrawnUiDesignerRepoHook Condition="'$(_DrawnUiDesignerPlatform)' != 'windows'">$(MSBuildThisFileDirectory)Agent/bin/Release/net8.0/DrawnUi.Designer.Agent.dll</_DrawnUiDesignerRepoHook>
+    <_DrawnUiDesignerHook Condition="'$(_DrawnUiDesignerHook)' == '' And Exists('$(_DrawnUiDesignerRepoHook)')">$([System.IO.Path]::GetFullPath('$(_DrawnUiDesignerRepoHook)'))</_DrawnUiDesignerHook>
+    <_DrawnUiDesignerOn Condition="'$(Optimize)' != 'true' And '$(DrawnUiDesigner)' != 'false'">true</_DrawnUiDesignerOn>
+    <!-- Android apps build as a Library with AndroidApplication=true -->
+    <_DrawnUiDesignerAttachApp Condition="'$(_DrawnUiDesignerOn)' == 'true' And '$(_DrawnUiDesignerMobile)' == 'true' And ('$(OutputType)' == 'Exe' Or '$(AndroidApplication)' == 'true')">true</_DrawnUiDesignerAttachApp>
+    <!-- iPhone without a URL: the USB cable, the agent listens on the phone's loopback and the designer connects through usbmux -->
+    <_DrawnUiDesignerCable Condition="'$(_DrawnUiDesignerCable)' == '' And '$(_DrawnUiDesignerPlatform)' == 'ios' And '$(DrawnUiDesignerUrl)' == ''">true</_DrawnUiDesignerCable>
+  </PropertyGroup>
+
+  <!--
+    Desktop apps: the agent DLL is copied into the Debug output (a Reference, so it is listed in the app's deps.json) and
+    the startup hook names it by assembly name: the Debug folder keeps working when copied to another machine, where a
+    missing hook path would stop the app at startup. The mobile runtimes would try to load a build-machine path as a
+    startup hook and fail: build-time attach there.
+  -->
+  <ItemGroup Condition="'$(_DrawnUiDesignerImported)' == '$(MSBuildThisFileFullPath)' And '$(_DrawnUiDesignerHook)' != '' And '$(_DrawnUiDesignerOn)' == 'true' And '$(_DrawnUiDesignerMobile)' != 'true' And ('$(OutputType)' == 'Exe' Or '$(OutputType)' == 'WinExe')">
+    <Reference Include="DrawnUi.Designer.Agent">
+      <HintPath>$(_DrawnUiDesignerHook)</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <RuntimeHostConfigurationOption Include="STARTUP_HOOKS" Value="DrawnUi.Designer.Agent" />
+    <!-- the agent tells the designer where the build took it from (the app runs a copy) -->
+    <RuntimeHostConfigurationOption Include="DrawnUi.Designer.AgentSource" Value="$(_DrawnUiDesignerHook)" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(_DrawnUiDesignerImported)' == '$(MSBuildThisFileFullPath)' And '$(_DrawnUiDesignerAttachApp)' == 'true'">
+    <Reference Include="DrawnUi.Designer.Agent">
+      <HintPath>$(DrawnUiDesignerAgentAssembly)</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <RuntimeHostConfigurationOption Include="DrawnUi.Designer.AgentSource" Value="$([System.IO.Path]::GetFullPath('$(DrawnUiDesignerAgentAssembly)'))" />
+  </ItemGroup>
+
+  <!--
+    The targets live in a second file imported by the winning copy only: with both the package and the ToolBox file in
+    a build, two definitions of one target would let the later one (maybe an older package) run with the other's
+    properties. Names differ from the single-file packages up to 0.1.0-preview.5 (target DrawnUiDesignerAttach, property
+    _DrawnUiDesignerAttach), so an older package in the same build stays inert when this copy won.
+  -->
+  <Import Project="$(MSBuildThisFileDirectory)DrawnUi.Designer.Run.targets" Condition="'$(_DrawnUiDesignerImported)' == '$(MSBuildThisFileFullPath)'" />
+</Project>

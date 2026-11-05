@@ -1,0 +1,25 @@
+<!doctype html>
+<!-- The designer editor for an iframe in a page that holds the app and the code (DrawFiddle):
+     the hub runs inside (designerHub: "page"), every path is relative to this file.
+     dev/build-fiddle-editor.ps1 puts it in web/fiddle/ with the files it loads. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DrawnUI Designer</title>
+<style>html,body{margin:0;height:100%;overflow:hidden;background:#16181d}canvas{width:100vw;height:100vh;display:block;touch-action:none}</style>
+</head>
+<body>
+<canvas id="canvas"></canvas>
+<script src="drawnui-designer.js"></script>
+<script src="drawnui_host.js"></script>
+<script src="designer.js"></script>
+<script>
+DrawnUiDesigner.start({
+  canvas: document.getElementById("canvas"),
+  designerHub: "page",
+  log: (text) => console.log("[designer] " + text),
+}).catch((error) => console.error("[designer] start: " + error));
+</script>
+</body>
+</html>

@@ -1,0 +1,3578 @@
+{
+  "type": "tree",
+  "revision": 2,
+  "width": 1207,
+  "height": 978,
+  "nodes": [
+    {
+      "id": 1,
+      "parent": null,
+      "typeName": "DrawnUi.Draw.SkiaLayer",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        0,
+        0,
+        1207,
+        978
+      ],
+      "visible": true
+    },
+    {
+      "id": 2,
+      "parent": 1,
+      "typeName": "DrawnUi.Draw.SkiaShell",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        0,
+        0,
+        1207,
+        978
+      ],
+      "visible": true
+    },
+    {
+      "id": 3,
+      "parent": 2,
+      "typeName": "DrawnUi.Draw.SkiaLayer",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": true,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        0,
+        0,
+        1207,
+        978
+      ],
+      "visible": true
+    },
+    {
+      "id": 4,
+      "parent": 3,
+      "typeName": "HelloWpf.Pages.RootPage",
+      "assembly": "HelloWpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        0,
+        0,
+        1207,
+        978
+      ],
+      "visible": false
+    },
+    {
+      "id": 5,
+      "parent": 4,
+      "typeName": "DrawnUi.Draw.SkiaScroll",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        0,
+        0,
+        1207,
+        978
+      ],
+      "visible": false
+    },
+    {
+      "id": 6,
+      "parent": 5,
+      "typeName": "DrawnUi.Draw.SkiaStack",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": "HelloWpf.Pages.RootPage._content",
+      "rect": [
+        91,
+        0,
+        1025,
+        2324
+      ],
+      "visible": false
+    },
+    {
+      "id": 7,
+      "parent": 6,
+      "typeName": "DrawnUi.Draw.SkiaSvg",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        529,
+        50,
+        150,
+        150
+      ],
+      "visible": false
+    },
+    {
+      "id": 8,
+      "parent": 6,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        356,
+        230,
+        496,
+        82
+      ],
+      "visible": false
+    },
+    {
+      "id": 9,
+      "parent": 6,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        154,
+        327,
+        899,
+        27
+      ],
+      "visible": false
+    },
+    {
+      "id": 10,
+      "parent": 6,
+      "typeName": "DrawnUi.Draw.SkiaWrap",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        121,
+        384,
+        965,
+        1820
+      ],
+      "visible": false
+    },
+    {
+      "id": 11,
+      "parent": 10,
+      "typeName": "DrawnUi.Draw.SkiaShape",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        121,
+        384,
+        472,
+        142
+      ],
+      "visible": false
+    },
+    {
+      "id": 12,
+      "parent": 11,
+      "typeName": "DrawnUi.Draw.SkiaStack",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        122,
+        385,
+        470,
+        140
+      ],
+      "visible": false
+    },
+    {
+      "id": 13,
+      "parent": 12,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        152,
+        410,
+        185,
+        38
+      ],
+      "visible": false
+    },
+    {
+      "id": 14,
+      "parent": 12,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        152,
+        456,
+        370,
+        44
+      ],
+      "visible": false
+    },
+    {
+      "id": 15,
+      "parent": 11,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        555,
+        431,
+        12,
+        48
+      ],
+      "visible": false
+    },
+    {
+      "id": 16,
+      "parent": 10,
+      "typeName": "DrawnUi.Draw.SkiaShape",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        613,
+        384,
+        472,
+        164
+      ],
+      "visible": false
+    },
+    {
+      "id": 17,
+      "parent": 16,
+      "typeName": "DrawnUi.Draw.SkiaStack",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        614,
+        385,
+        470,
+        162
+      ],
+      "visible": false
+    },
+    {
+      "id": 18,
+      "parent": 17,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        644,
+        410,
+        170,
+        38
+      ],
+      "visible": false
+    },
+    {
+      "id": 19,
+      "parent": 17,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        644,
+        456,
+        359,
+        66
+      ],
+      "visible": false
+    },
+    {
+      "id": 20,
+      "parent": 16,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        1047,
+        442,
+        12,
+        48
+      ],
+      "visible": false
+    },
+    {
+      "id": 21,
+      "parent": 10,
+      "typeName": "DrawnUi.Draw.SkiaShape",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        121,
+        568,
+        472,
+        142
+      ],
+      "visible": false
+    },
+    {
+      "id": 22,
+      "parent": 21,
+      "typeName": "DrawnUi.Draw.SkiaStack",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        122,
+        569,
+        470,
+        140
+      ],
+      "visible": false
+    },
+    {
+      "id": 23,
+      "parent": 22,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        152,
+        594,
+        97,
+        38
+      ],
+      "visible": false
+    },
+    {
+      "id": 24,
+      "parent": 22,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        152,
+        640,
+        374,
+        44
+      ],
+      "visible": false
+    },
+    {
+      "id": 25,
+      "parent": 21,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        555,
+        615,
+        12,
+        48
+      ],
+      "visible": false
+    },
+    {
+      "id": 26,
+      "parent": 10,
+      "typeName": "DrawnUi.Draw.SkiaShape",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        613,
+        568,
+        472,
+        142
+      ],
+      "visible": false
+    },
+    {
+      "id": 27,
+      "parent": 26,
+      "typeName": "DrawnUi.Draw.SkiaStack",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        614,
+        569,
+        470,
+        140
+      ],
+      "visible": false
+    },
+    {
+      "id": 28,
+      "parent": 27,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        644,
+        594,
+        53,
+        38
+      ],
+      "visible": false
+    },
+    {
+      "id": 29,
+      "parent": 27,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        644,
+        640,
+        334,
+        44
+      ],
+      "visible": false
+    },
+    {
+      "id": 30,
+      "parent": 26,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        1047,
+        615,
+        12,
+        48
+      ],
+      "visible": false
+    },
+    {
+      "id": 31,
+      "parent": 10,
+      "typeName": "DrawnUi.Draw.SkiaShape",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        121,
+        730,
+        472,
+        142
+      ],
+      "visible": false
+    },
+    {
+      "id": 32,
+      "parent": 31,
+      "typeName": "DrawnUi.Draw.SkiaStack",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        122,
+        731,
+        470,
+        140
+      ],
+      "visible": false
+    },
+    {
+      "id": 33,
+      "parent": 32,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        152,
+        756,
+        97,
+        38
+      ],
+      "visible": false
+    },
+    {
+      "id": 34,
+      "parent": 32,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        152,
+        802,
+        367,
+        44
+      ],
+      "visible": false
+    },
+    {
+      "id": 35,
+      "parent": 31,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        555,
+        777,
+        12,
+        48
+      ],
+      "visible": false
+    },
+    {
+      "id": 36,
+      "parent": 10,
+      "typeName": "DrawnUi.Draw.SkiaShape",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        613,
+        730,
+        472,
+        142
+      ],
+      "visible": false
+    },
+    {
+      "id": 37,
+      "parent": 36,
+      "typeName": "DrawnUi.Draw.SkiaStack",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        614,
+        731,
+        470,
+        140
+      ],
+      "visible": false
+    },
+    {
+      "id": 38,
+      "parent": 37,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        644,
+        756,
+        58,
+        38
+      ],
+      "visible": false
+    },
+    {
+      "id": 39,
+      "parent": 37,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        644,
+        802,
+        353,
+        44
+      ],
+      "visible": false
+    },
+    {
+      "id": 40,
+      "parent": 36,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        1047,
+        777,
+        12,
+        48
+      ],
+      "visible": false
+    },
+    {
+      "id": 41,
+      "parent": 10,
+      "typeName": "DrawnUi.Draw.SkiaShape",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        121,
+        892,
+        472,
+        142
+      ],
+      "visible": false
+    },
+    {
+      "id": 42,
+      "parent": 41,
+      "typeName": "DrawnUi.Draw.SkiaStack",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        122,
+        893,
+        470,
+        140
+      ],
+      "visible": false
+    },
+    {
+      "id": 43,
+      "parent": 42,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        152,
+        918,
+        106,
+        38
+      ],
+      "visible": false
+    },
+    {
+      "id": 44,
+      "parent": 42,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        152,
+        964,
+        376,
+        44
+      ],
+      "visible": false
+    },
+    {
+      "id": 45,
+      "parent": 41,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        555,
+        939,
+        12,
+        48
+      ],
+      "visible": false
+    },
+    {
+      "id": 46,
+      "parent": 10,
+      "typeName": "DrawnUi.Draw.SkiaShape",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        613,
+        892,
+        472,
+        164
+      ],
+      "visible": false
+    },
+    {
+      "id": 47,
+      "parent": 46,
+      "typeName": "DrawnUi.Draw.SkiaStack",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        614,
+        893,
+        470,
+        162
+      ],
+      "visible": false
+    },
+    {
+      "id": 48,
+      "parent": 47,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        644,
+        918,
+        245,
+        38
+      ],
+      "visible": false
+    },
+    {
+      "id": 49,
+      "parent": 47,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        644,
+        964,
+        362,
+        66
+      ],
+      "visible": false
+    },
+    {
+      "id": 50,
+      "parent": 46,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        1047,
+        950,
+        12,
+        48
+      ],
+      "visible": false
+    },
+    {
+      "id": 51,
+      "parent": 10,
+      "typeName": "DrawnUi.Draw.SkiaShape",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        121,
+        1076,
+        472,
+        164
+      ],
+      "visible": false
+    },
+    {
+      "id": 52,
+      "parent": 51,
+      "typeName": "DrawnUi.Draw.SkiaStack",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        122,
+        1077,
+        470,
+        162
+      ],
+      "visible": false
+    },
+    {
+      "id": 53,
+      "parent": 52,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        152,
+        1102,
+        254,
+        38
+      ],
+      "visible": false
+    },
+    {
+      "id": 54,
+      "parent": 52,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        152,
+        1148,
+        350,
+        66
+      ],
+      "visible": false
+    },
+    {
+      "id": 55,
+      "parent": 51,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        555,
+        1134,
+        12,
+        48
+      ],
+      "visible": false
+    },
+    {
+      "id": 56,
+      "parent": 10,
+      "typeName": "DrawnUi.Draw.SkiaShape",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        613,
+        1076,
+        472,
+        164
+      ],
+      "visible": false
+    },
+    {
+      "id": 57,
+      "parent": 56,
+      "typeName": "DrawnUi.Draw.SkiaStack",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        614,
+        1077,
+        470,
+        162
+      ],
+      "visible": false
+    },
+    {
+      "id": 58,
+      "parent": 57,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        644,
+        1102,
+        157,
+        38
+      ],
+      "visible": false
+    },
+    {
+      "id": 59,
+      "parent": 57,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        644,
+        1148,
+        380,
+        66
+      ],
+      "visible": false
+    },
+    {
+      "id": 60,
+      "parent": 56,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        1047,
+        1134,
+        12,
+        48
+      ],
+      "visible": false
+    },
+    {
+      "id": 61,
+      "parent": 10,
+      "typeName": "DrawnUi.Draw.SkiaShape",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        121,
+        1260,
+        472,
+        142
+      ],
+      "visible": false
+    },
+    {
+      "id": 62,
+      "parent": 61,
+      "typeName": "DrawnUi.Draw.SkiaStack",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        122,
+        1261,
+        470,
+        140
+      ],
+      "visible": false
+    },
+    {
+      "id": 63,
+      "parent": 62,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        152,
+        1286,
+        65,
+        38
+      ],
+      "visible": false
+    },
+    {
+      "id": 64,
+      "parent": 62,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        152,
+        1332,
+        367,
+        44
+      ],
+      "visible": false
+    },
+    {
+      "id": 65,
+      "parent": 61,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        555,
+        1307,
+        12,
+        48
+      ],
+      "visible": false
+    },
+    {
+      "id": 66,
+      "parent": 10,
+      "typeName": "DrawnUi.Draw.SkiaShape",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        613,
+        1260,
+        472,
+        164
+      ],
+      "visible": false
+    },
+    {
+      "id": 67,
+      "parent": 66,
+      "typeName": "DrawnUi.Draw.SkiaStack",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        614,
+        1261,
+        470,
+        162
+      ],
+      "visible": false
+    },
+    {
+      "id": 68,
+      "parent": 67,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        644,
+        1286,
+        81,
+        38
+      ],
+      "visible": false
+    },
+    {
+      "id": 69,
+      "parent": 67,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        644,
+        1332,
+        362,
+        66
+      ],
+      "visible": false
+    },
+    {
+      "id": 70,
+      "parent": 66,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        1047,
+        1318,
+        12,
+        48
+      ],
+      "visible": false
+    },
+    {
+      "id": 71,
+      "parent": 10,
+      "typeName": "DrawnUi.Draw.SkiaShape",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        121,
+        1444,
+        472,
+        164
+      ],
+      "visible": false
+    },
+    {
+      "id": 72,
+      "parent": 71,
+      "typeName": "DrawnUi.Draw.SkiaStack",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        122,
+        1445,
+        470,
+        162
+      ],
+      "visible": false
+    },
+    {
+      "id": 73,
+      "parent": 72,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        152,
+        1470,
+        209,
+        38
+      ],
+      "visible": false
+    },
+    {
+      "id": 74,
+      "parent": 72,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        152,
+        1516,
+        367,
+        66
+      ],
+      "visible": false
+    },
+    {
+      "id": 75,
+      "parent": 71,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        555,
+        1502,
+        12,
+        48
+      ],
+      "visible": false
+    },
+    {
+      "id": 76,
+      "parent": 10,
+      "typeName": "DrawnUi.Draw.SkiaShape",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        613,
+        1444,
+        472,
+        164
+      ],
+      "visible": false
+    },
+    {
+      "id": 77,
+      "parent": 76,
+      "typeName": "DrawnUi.Draw.SkiaStack",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        614,
+        1445,
+        470,
+        162
+      ],
+      "visible": false
+    },
+    {
+      "id": 78,
+      "parent": 77,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        644,
+        1470,
+        130,
+        38
+      ],
+      "visible": false
+    },
+    {
+      "id": 79,
+      "parent": 77,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        644,
+        1516,
+        349,
+        66
+      ],
+      "visible": false
+    },
+    {
+      "id": 80,
+      "parent": 76,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        1047,
+        1502,
+        12,
+        48
+      ],
+      "visible": false
+    },
+    {
+      "id": 81,
+      "parent": 10,
+      "typeName": "DrawnUi.Draw.SkiaShape",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        121,
+        1628,
+        472,
+        164
+      ],
+      "visible": false
+    },
+    {
+      "id": 82,
+      "parent": 81,
+      "typeName": "DrawnUi.Draw.SkiaStack",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        122,
+        1629,
+        470,
+        162
+      ],
+      "visible": false
+    },
+    {
+      "id": 83,
+      "parent": 82,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        152,
+        1654,
+        109,
+        38
+      ],
+      "visible": false
+    },
+    {
+      "id": 84,
+      "parent": 82,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        152,
+        1700,
+        380,
+        66
+      ],
+      "visible": false
+    },
+    {
+      "id": 85,
+      "parent": 81,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        555,
+        1686,
+        12,
+        48
+      ],
+      "visible": false
+    },
+    {
+      "id": 86,
+      "parent": 10,
+      "typeName": "DrawnUi.Draw.SkiaShape",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        613,
+        1628,
+        472,
+        164
+      ],
+      "visible": false
+    },
+    {
+      "id": 87,
+      "parent": 86,
+      "typeName": "DrawnUi.Draw.SkiaStack",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        614,
+        1629,
+        470,
+        162
+      ],
+      "visible": false
+    },
+    {
+      "id": 88,
+      "parent": 87,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        644,
+        1654,
+        93,
+        38
+      ],
+      "visible": false
+    },
+    {
+      "id": 89,
+      "parent": 87,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        644,
+        1700,
+        380,
+        66
+      ],
+      "visible": false
+    },
+    {
+      "id": 90,
+      "parent": 86,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        1047,
+        1686,
+        12,
+        48
+      ],
+      "visible": false
+    },
+    {
+      "id": 91,
+      "parent": 10,
+      "typeName": "DrawnUi.Draw.SkiaShape",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        121,
+        1812,
+        472,
+        164
+      ],
+      "visible": false
+    },
+    {
+      "id": 92,
+      "parent": 91,
+      "typeName": "DrawnUi.Draw.SkiaStack",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        122,
+        1813,
+        470,
+        162
+      ],
+      "visible": false
+    },
+    {
+      "id": 93,
+      "parent": 92,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        152,
+        1838,
+        155,
+        38
+      ],
+      "visible": false
+    },
+    {
+      "id": 94,
+      "parent": 92,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        152,
+        1884,
+        374,
+        66
+      ],
+      "visible": false
+    },
+    {
+      "id": 95,
+      "parent": 91,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        555,
+        1870,
+        12,
+        48
+      ],
+      "visible": false
+    },
+    {
+      "id": 96,
+      "parent": 10,
+      "typeName": "DrawnUi.Draw.SkiaShape",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        613,
+        1812,
+        472,
+        208
+      ],
+      "visible": false
+    },
+    {
+      "id": 97,
+      "parent": 96,
+      "typeName": "DrawnUi.Draw.SkiaStack",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        614,
+        1813,
+        470,
+        206
+      ],
+      "visible": false
+    },
+    {
+      "id": 98,
+      "parent": 97,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        644,
+        1838,
+        210,
+        38
+      ],
+      "visible": false
+    },
+    {
+      "id": 99,
+      "parent": 97,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        644,
+        1884,
+        364,
+        110
+      ],
+      "visible": false
+    },
+    {
+      "id": 100,
+      "parent": 96,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        1047,
+        1892,
+        12,
+        48
+      ],
+      "visible": false
+    },
+    {
+      "id": 101,
+      "parent": 10,
+      "typeName": "DrawnUi.Draw.SkiaShape",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        121,
+        2040,
+        472,
+        164
+      ],
+      "visible": false
+    },
+    {
+      "id": 102,
+      "parent": 101,
+      "typeName": "DrawnUi.Draw.SkiaStack",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        122,
+        2041,
+        470,
+        162
+      ],
+      "visible": false
+    },
+    {
+      "id": 103,
+      "parent": 102,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        152,
+        2066,
+        68,
+        38
+      ],
+      "visible": false
+    },
+    {
+      "id": 104,
+      "parent": 102,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        152,
+        2112,
+        371,
+        66
+      ],
+      "visible": false
+    },
+    {
+      "id": 105,
+      "parent": 101,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        555,
+        2098,
+        12,
+        48
+      ],
+      "visible": false
+    },
+    {
+      "id": 106,
+      "parent": 10,
+      "typeName": "DrawnUi.Draw.SkiaShape",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        613,
+        2040,
+        472,
+        142
+      ],
+      "visible": false
+    },
+    {
+      "id": 107,
+      "parent": 106,
+      "typeName": "DrawnUi.Draw.SkiaStack",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        614,
+        2041,
+        470,
+        140
+      ],
+      "visible": false
+    },
+    {
+      "id": 108,
+      "parent": 107,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        644,
+        2066,
+        164,
+        38
+      ],
+      "visible": false
+    },
+    {
+      "id": 109,
+      "parent": 107,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        644,
+        2112,
+        343,
+        44
+      ],
+      "visible": false
+    },
+    {
+      "id": 110,
+      "parent": 106,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        1047,
+        2087,
+        12,
+        48
+      ],
+      "visible": false
+    },
+    {
+      "id": 111,
+      "parent": 6,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        409,
+        2254,
+        389,
+        20
+      ],
+      "visible": false
+    },
+    {
+      "id": 112,
+      "parent": 3,
+      "typeName": "DrawnUi.Draw.SkiaLayer",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": true,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        0,
+        0,
+        1207,
+        978
+      ],
+      "visible": true
+    },
+    {
+      "id": 113,
+      "parent": 112,
+      "typeName": "DrawnUi.Draw.SkiaLayer",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": true,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        0,
+        70,
+        1207,
+        908
+      ],
+      "visible": true
+    },
+    {
+      "id": 114,
+      "parent": 113,
+      "typeName": "HelloWpf.Pages.CellsPage",
+      "assembly": "HelloWpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        0,
+        70,
+        1207,
+        908
+      ],
+      "visible": true
+    },
+    {
+      "id": 115,
+      "parent": 114,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": "HelloWpf.Pages.CellsPage._status",
+      "rect": [
+        464,
+        82,
+        279,
+        22
+      ],
+      "visible": true
+    },
+    {
+      "id": 116,
+      "parent": 114,
+      "typeName": "DrawnUi.Draw.SkiaScroll",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": "HelloWpf.Pages.CellsPage._scroll",
+      "rect": [
+        0,
+        115,
+        1207,
+        863
+      ],
+      "visible": true
+    },
+    {
+      "id": 117,
+      "parent": 116,
+      "typeName": "DrawnUi.Draw.SkiaStack",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": "HelloWpf.Pages.CellsPage._feed",
+      "rect": [
+        0,
+        115,
+        1207,
+        11018
+      ],
+      "visible": true
+    },
+    {
+      "id": 118,
+      "parent": 117,
+      "typeName": "HelloWpf.Pages.ContactCell",
+      "assembly": "HelloWpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": 0,
+      "field": null,
+      "rect": [
+        20,
+        125,
+        1167,
+        76
+      ],
+      "visible": true
+    },
+    {
+      "id": 119,
+      "parent": 118,
+      "typeName": "DrawnUi.Draw.SkiaShape",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        35,
+        137,
+        52,
+        52
+      ],
+      "visible": true
+    },
+    {
+      "id": 120,
+      "parent": 119,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": "HelloWpf.Pages.ContactCell._initials",
+      "rect": [
+        56,
+        150,
+        10,
+        26
+      ],
+      "visible": true
+    },
+    {
+      "id": 121,
+      "parent": 118,
+      "typeName": "DrawnUi.Draw.SkiaStack",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        103,
+        138,
+        1069,
+        50
+      ],
+      "visible": true
+    },
+    {
+      "id": 122,
+      "parent": 121,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": "HelloWpf.Pages.ContactCell._title",
+      "rect": [
+        103,
+        138,
+        87,
+        26
+      ],
+      "visible": true
+    },
+    {
+      "id": 123,
+      "parent": 121,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": "HelloWpf.Pages.ContactCell._subtitle",
+      "rect": [
+        103,
+        168,
+        284,
+        20
+      ],
+      "visible": true
+    },
+    {
+      "id": 124,
+      "parent": 117,
+      "typeName": "HelloWpf.Pages.ContactCell",
+      "assembly": "HelloWpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": 1,
+      "field": null,
+      "rect": [
+        20,
+        211,
+        1167,
+        76
+      ],
+      "visible": true
+    },
+    {
+      "id": 125,
+      "parent": 124,
+      "typeName": "DrawnUi.Draw.SkiaShape",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        35,
+        223,
+        52,
+        52
+      ],
+      "visible": true
+    },
+    {
+      "id": 126,
+      "parent": 125,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": "HelloWpf.Pages.ContactCell._initials",
+      "rect": [
+        56,
+        236,
+        10,
+        26
+      ],
+      "visible": true
+    },
+    {
+      "id": 127,
+      "parent": 124,
+      "typeName": "DrawnUi.Draw.SkiaStack",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        103,
+        224,
+        1069,
+        50
+      ],
+      "visible": true
+    },
+    {
+      "id": 128,
+      "parent": 127,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": "HelloWpf.Pages.ContactCell._title",
+      "rect": [
+        103,
+        224,
+        87,
+        26
+      ],
+      "visible": true
+    },
+    {
+      "id": 129,
+      "parent": 127,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": "HelloWpf.Pages.ContactCell._subtitle",
+      "rect": [
+        103,
+        254,
+        284,
+        20
+      ],
+      "visible": true
+    },
+    {
+      "id": 130,
+      "parent": 117,
+      "typeName": "HelloWpf.Pages.ContactCell",
+      "assembly": "HelloWpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": 2,
+      "field": null,
+      "rect": [
+        20,
+        297,
+        1167,
+        76
+      ],
+      "visible": true
+    },
+    {
+      "id": 131,
+      "parent": 130,
+      "typeName": "DrawnUi.Draw.SkiaShape",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        35,
+        309,
+        52,
+        52
+      ],
+      "visible": true
+    },
+    {
+      "id": 132,
+      "parent": 131,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": "HelloWpf.Pages.ContactCell._initials",
+      "rect": [
+        56,
+        322,
+        10,
+        26
+      ],
+      "visible": true
+    },
+    {
+      "id": 133,
+      "parent": 130,
+      "typeName": "DrawnUi.Draw.SkiaStack",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        103,
+        310,
+        1069,
+        50
+      ],
+      "visible": true
+    },
+    {
+      "id": 134,
+      "parent": 133,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": "HelloWpf.Pages.ContactCell._title",
+      "rect": [
+        103,
+        310,
+        87,
+        26
+      ],
+      "visible": true
+    },
+    {
+      "id": 135,
+      "parent": 133,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": "HelloWpf.Pages.ContactCell._subtitle",
+      "rect": [
+        103,
+        340,
+        284,
+        20
+      ],
+      "visible": true
+    },
+    {
+      "id": 136,
+      "parent": 117,
+      "typeName": "HelloWpf.Pages.ContactCell",
+      "assembly": "HelloWpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": 3,
+      "field": null,
+      "rect": [
+        20,
+        383,
+        1167,
+        76
+      ],
+      "visible": true
+    },
+    {
+      "id": 137,
+      "parent": 136,
+      "typeName": "DrawnUi.Draw.SkiaShape",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        35,
+        395,
+        52,
+        52
+      ],
+      "visible": true
+    },
+    {
+      "id": 138,
+      "parent": 137,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": "HelloWpf.Pages.ContactCell._initials",
+      "rect": [
+        56,
+        408,
+        10,
+        26
+      ],
+      "visible": true
+    },
+    {
+      "id": 139,
+      "parent": 136,
+      "typeName": "DrawnUi.Draw.SkiaStack",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        103,
+        396,
+        1069,
+        50
+      ],
+      "visible": true
+    },
+    {
+      "id": 140,
+      "parent": 139,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": "HelloWpf.Pages.ContactCell._title",
+      "rect": [
+        103,
+        396,
+        87,
+        26
+      ],
+      "visible": true
+    },
+    {
+      "id": 141,
+      "parent": 139,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": "HelloWpf.Pages.ContactCell._subtitle",
+      "rect": [
+        103,
+        426,
+        284,
+        20
+      ],
+      "visible": true
+    },
+    {
+      "id": 142,
+      "parent": 117,
+      "typeName": "HelloWpf.Pages.ContactCell",
+      "assembly": "HelloWpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": 4,
+      "field": null,
+      "rect": [
+        20,
+        469,
+        1167,
+        76
+      ],
+      "visible": true
+    },
+    {
+      "id": 143,
+      "parent": 142,
+      "typeName": "DrawnUi.Draw.SkiaShape",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        35,
+        481,
+        52,
+        52
+      ],
+      "visible": true
+    },
+    {
+      "id": 144,
+      "parent": 143,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": "HelloWpf.Pages.ContactCell._initials",
+      "rect": [
+        56,
+        494,
+        10,
+        26
+      ],
+      "visible": true
+    },
+    {
+      "id": 145,
+      "parent": 142,
+      "typeName": "DrawnUi.Draw.SkiaStack",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        103,
+        482,
+        1069,
+        50
+      ],
+      "visible": true
+    },
+    {
+      "id": 146,
+      "parent": 145,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": "HelloWpf.Pages.ContactCell._title",
+      "rect": [
+        103,
+        482,
+        87,
+        26
+      ],
+      "visible": true
+    },
+    {
+      "id": 147,
+      "parent": 145,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": "HelloWpf.Pages.ContactCell._subtitle",
+      "rect": [
+        103,
+        512,
+        284,
+        20
+      ],
+      "visible": true
+    },
+    {
+      "id": 148,
+      "parent": 117,
+      "typeName": "HelloWpf.Pages.ContactCell",
+      "assembly": "HelloWpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": 5,
+      "field": null,
+      "rect": [
+        20,
+        555,
+        1167,
+        76
+      ],
+      "visible": true
+    },
+    {
+      "id": 149,
+      "parent": 148,
+      "typeName": "DrawnUi.Draw.SkiaShape",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        35,
+        567,
+        52,
+        52
+      ],
+      "visible": true
+    },
+    {
+      "id": 150,
+      "parent": 149,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": "HelloWpf.Pages.ContactCell._initials",
+      "rect": [
+        56,
+        580,
+        10,
+        26
+      ],
+      "visible": true
+    },
+    {
+      "id": 151,
+      "parent": 148,
+      "typeName": "DrawnUi.Draw.SkiaStack",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        103,
+        568,
+        1069,
+        50
+      ],
+      "visible": true
+    },
+    {
+      "id": 152,
+      "parent": 151,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": "HelloWpf.Pages.ContactCell._title",
+      "rect": [
+        103,
+        568,
+        87,
+        26
+      ],
+      "visible": true
+    },
+    {
+      "id": 153,
+      "parent": 151,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": "HelloWpf.Pages.ContactCell._subtitle",
+      "rect": [
+        103,
+        598,
+        284,
+        20
+      ],
+      "visible": true
+    },
+    {
+      "id": 154,
+      "parent": 117,
+      "typeName": "HelloWpf.Pages.ContactCell",
+      "assembly": "HelloWpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": 6,
+      "field": null,
+      "rect": [
+        20,
+        641,
+        1167,
+        76
+      ],
+      "visible": true
+    },
+    {
+      "id": 155,
+      "parent": 154,
+      "typeName": "DrawnUi.Draw.SkiaShape",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        35,
+        653,
+        52,
+        52
+      ],
+      "visible": true
+    },
+    {
+      "id": 156,
+      "parent": 155,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": "HelloWpf.Pages.ContactCell._initials",
+      "rect": [
+        56,
+        666,
+        10,
+        26
+      ],
+      "visible": true
+    },
+    {
+      "id": 157,
+      "parent": 154,
+      "typeName": "DrawnUi.Draw.SkiaStack",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        103,
+        654,
+        1069,
+        50
+      ],
+      "visible": true
+    },
+    {
+      "id": 158,
+      "parent": 157,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": "HelloWpf.Pages.ContactCell._title",
+      "rect": [
+        103,
+        654,
+        87,
+        26
+      ],
+      "visible": true
+    },
+    {
+      "id": 159,
+      "parent": 157,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": "HelloWpf.Pages.ContactCell._subtitle",
+      "rect": [
+        103,
+        684,
+        284,
+        20
+      ],
+      "visible": true
+    },
+    {
+      "id": 160,
+      "parent": 117,
+      "typeName": "HelloWpf.Pages.ContactCell",
+      "assembly": "HelloWpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": 7,
+      "field": null,
+      "rect": [
+        20,
+        727,
+        1167,
+        76
+      ],
+      "visible": true
+    },
+    {
+      "id": 161,
+      "parent": 160,
+      "typeName": "DrawnUi.Draw.SkiaShape",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        35,
+        739,
+        52,
+        52
+      ],
+      "visible": true
+    },
+    {
+      "id": 162,
+      "parent": 161,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": "HelloWpf.Pages.ContactCell._initials",
+      "rect": [
+        56,
+        752,
+        10,
+        26
+      ],
+      "visible": true
+    },
+    {
+      "id": 163,
+      "parent": 160,
+      "typeName": "DrawnUi.Draw.SkiaStack",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        103,
+        740,
+        1069,
+        50
+      ],
+      "visible": true
+    },
+    {
+      "id": 164,
+      "parent": 163,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": "HelloWpf.Pages.ContactCell._title",
+      "rect": [
+        103,
+        740,
+        87,
+        26
+      ],
+      "visible": true
+    },
+    {
+      "id": 165,
+      "parent": 163,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": "HelloWpf.Pages.ContactCell._subtitle",
+      "rect": [
+        103,
+        770,
+        284,
+        20
+      ],
+      "visible": true
+    },
+    {
+      "id": 166,
+      "parent": 117,
+      "typeName": "HelloWpf.Pages.ContactCell",
+      "assembly": "HelloWpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": 8,
+      "field": null,
+      "rect": [
+        20,
+        813,
+        1167,
+        76
+      ],
+      "visible": true
+    },
+    {
+      "id": 167,
+      "parent": 166,
+      "typeName": "DrawnUi.Draw.SkiaShape",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        35,
+        825,
+        52,
+        52
+      ],
+      "visible": true
+    },
+    {
+      "id": 168,
+      "parent": 167,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": "HelloWpf.Pages.ContactCell._initials",
+      "rect": [
+        56,
+        838,
+        10,
+        26
+      ],
+      "visible": true
+    },
+    {
+      "id": 169,
+      "parent": 166,
+      "typeName": "DrawnUi.Draw.SkiaStack",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        103,
+        826,
+        1069,
+        50
+      ],
+      "visible": true
+    },
+    {
+      "id": 170,
+      "parent": 169,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": "HelloWpf.Pages.ContactCell._title",
+      "rect": [
+        103,
+        826,
+        87,
+        26
+      ],
+      "visible": true
+    },
+    {
+      "id": 171,
+      "parent": 169,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": "HelloWpf.Pages.ContactCell._subtitle",
+      "rect": [
+        103,
+        856,
+        284,
+        20
+      ],
+      "visible": true
+    },
+    {
+      "id": 172,
+      "parent": 117,
+      "typeName": "HelloWpf.Pages.ContactCell",
+      "assembly": "HelloWpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": 9,
+      "field": null,
+      "rect": [
+        20,
+        899,
+        1167,
+        76
+      ],
+      "visible": true
+    },
+    {
+      "id": 173,
+      "parent": 172,
+      "typeName": "DrawnUi.Draw.SkiaShape",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        35,
+        911,
+        52,
+        52
+      ],
+      "visible": true
+    },
+    {
+      "id": 174,
+      "parent": 173,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": "HelloWpf.Pages.ContactCell._initials",
+      "rect": [
+        50,
+        924,
+        22,
+        26
+      ],
+      "visible": true
+    },
+    {
+      "id": 175,
+      "parent": 172,
+      "typeName": "DrawnUi.Draw.SkiaStack",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        103,
+        912,
+        1069,
+        50
+      ],
+      "visible": true
+    },
+    {
+      "id": 176,
+      "parent": 175,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": "HelloWpf.Pages.ContactCell._title",
+      "rect": [
+        103,
+        912,
+        98,
+        26
+      ],
+      "visible": true
+    },
+    {
+      "id": 177,
+      "parent": 175,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": "HelloWpf.Pages.ContactCell._subtitle",
+      "rect": [
+        103,
+        942,
+        292,
+        20
+      ],
+      "visible": true
+    },
+    {
+      "id": 178,
+      "parent": 114,
+      "typeName": "DrawnUi.Draw.SkiaWrap",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        262,
+        882,
+        683,
+        51
+      ],
+      "visible": true
+    },
+    {
+      "id": 179,
+      "parent": 178,
+      "typeName": "DrawnUi.Draw.SkiaButton",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        262,
+        882,
+        130,
+        51
+      ],
+      "visible": true
+    },
+    {
+      "id": 180,
+      "parent": 179,
+      "typeName": "DrawnUi.Draw.SkiaShape",
+      "assembly": "DrawnUi.Wpf",
+      "tag": "BtnShape",
+      "internal": true,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        262,
+        882,
+        130,
+        51
+      ],
+      "visible": true
+    },
+    {
+      "id": 181,
+      "parent": 179,
+      "typeName": "DrawnUi.Draw.SkiaLayout",
+      "assembly": "DrawnUi.Wpf",
+      "tag": "BtnWrapper",
+      "internal": true,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        292,
+        897,
+        70,
+        21
+      ],
+      "visible": true
+    },
+    {
+      "id": 182,
+      "parent": 181,
+      "typeName": "DrawnUi.Draw.SkiaButton\u002BButtonLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": "BtnText",
+      "internal": true,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        304,
+        897,
+        46,
+        21
+      ],
+      "visible": true
+    },
+    {
+      "id": 183,
+      "parent": 178,
+      "typeName": "DrawnUi.Draw.SkiaButton",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        400,
+        882,
+        130,
+        51
+      ],
+      "visible": true
+    },
+    {
+      "id": 184,
+      "parent": 183,
+      "typeName": "DrawnUi.Draw.SkiaShape",
+      "assembly": "DrawnUi.Wpf",
+      "tag": "BtnShape",
+      "internal": true,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        400,
+        882,
+        130,
+        51
+      ],
+      "visible": true
+    },
+    {
+      "id": 185,
+      "parent": 183,
+      "typeName": "DrawnUi.Draw.SkiaLayout",
+      "assembly": "DrawnUi.Wpf",
+      "tag": "BtnWrapper",
+      "internal": true,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        411,
+        897,
+        108,
+        21
+      ],
+      "visible": true
+    },
+    {
+      "id": 186,
+      "parent": 185,
+      "typeName": "DrawnUi.Draw.SkiaButton\u002BButtonLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": "BtnText",
+      "internal": true,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        423,
+        897,
+        84,
+        21
+      ],
+      "visible": true
+    },
+    {
+      "id": 187,
+      "parent": 178,
+      "typeName": "DrawnUi.Draw.SkiaButton",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        538,
+        882,
+        130,
+        51
+      ],
+      "visible": true
+    },
+    {
+      "id": 188,
+      "parent": 187,
+      "typeName": "DrawnUi.Draw.SkiaShape",
+      "assembly": "DrawnUi.Wpf",
+      "tag": "BtnShape",
+      "internal": true,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        538,
+        882,
+        130,
+        51
+      ],
+      "visible": true
+    },
+    {
+      "id": 189,
+      "parent": 187,
+      "typeName": "DrawnUi.Draw.SkiaLayout",
+      "assembly": "DrawnUi.Wpf",
+      "tag": "BtnWrapper",
+      "internal": true,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        562,
+        897,
+        82,
+        21
+      ],
+      "visible": true
+    },
+    {
+      "id": 190,
+      "parent": 189,
+      "typeName": "DrawnUi.Draw.SkiaButton\u002BButtonLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": "BtnText",
+      "internal": true,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        574,
+        897,
+        58,
+        21
+      ],
+      "visible": true
+    },
+    {
+      "id": 191,
+      "parent": 178,
+      "typeName": "DrawnUi.Draw.SkiaButton",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        676,
+        882,
+        130,
+        51
+      ],
+      "visible": true
+    },
+    {
+      "id": 192,
+      "parent": 191,
+      "typeName": "DrawnUi.Draw.SkiaShape",
+      "assembly": "DrawnUi.Wpf",
+      "tag": "BtnShape",
+      "internal": true,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        676,
+        882,
+        130,
+        51
+      ],
+      "visible": true
+    },
+    {
+      "id": 193,
+      "parent": 191,
+      "typeName": "DrawnUi.Draw.SkiaLayout",
+      "assembly": "DrawnUi.Wpf",
+      "tag": "BtnWrapper",
+      "internal": true,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        692,
+        897,
+        98,
+        21
+      ],
+      "visible": true
+    },
+    {
+      "id": 194,
+      "parent": 193,
+      "typeName": "DrawnUi.Draw.SkiaButton\u002BButtonLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": "BtnText",
+      "internal": true,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        704,
+        897,
+        74,
+        21
+      ],
+      "visible": true
+    },
+    {
+      "id": 195,
+      "parent": 178,
+      "typeName": "DrawnUi.Draw.SkiaButton",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        814,
+        882,
+        130,
+        51
+      ],
+      "visible": true
+    },
+    {
+      "id": 196,
+      "parent": 195,
+      "typeName": "DrawnUi.Draw.SkiaShape",
+      "assembly": "DrawnUi.Wpf",
+      "tag": "BtnShape",
+      "internal": true,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        814,
+        882,
+        130,
+        51
+      ],
+      "visible": true
+    },
+    {
+      "id": 197,
+      "parent": 195,
+      "typeName": "DrawnUi.Draw.SkiaLayout",
+      "assembly": "DrawnUi.Wpf",
+      "tag": "BtnWrapper",
+      "internal": true,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        851,
+        897,
+        56,
+        21
+      ],
+      "visible": true
+    },
+    {
+      "id": 198,
+      "parent": 197,
+      "typeName": "DrawnUi.Draw.SkiaButton\u002BButtonLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": "BtnText",
+      "internal": true,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        863,
+        897,
+        32,
+        21
+      ],
+      "visible": true
+    },
+    {
+      "id": 199,
+      "parent": 114,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": false,
+      "templateIndex": null,
+      "field": "HelloWpf.Pages.CellsPage._debug",
+      "rect": [
+        613,
+        983,
+        -19,
+        -10
+      ],
+      "visible": false
+    },
+    {
+      "id": 200,
+      "parent": 112,
+      "typeName": "DrawnUi.Draw.SkiaLayer",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": true,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        0,
+        0,
+        1207,
+        70
+      ],
+      "visible": true
+    },
+    {
+      "id": 201,
+      "parent": 200,
+      "typeName": "DrawnUi.Draw.SkiaButton",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": true,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        10,
+        9,
+        125,
+        52
+      ],
+      "visible": true
+    },
+    {
+      "id": 202,
+      "parent": 201,
+      "typeName": "DrawnUi.Draw.SkiaShape",
+      "assembly": "DrawnUi.Wpf",
+      "tag": "BtnShape",
+      "internal": true,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        10,
+        9,
+        125,
+        52
+      ],
+      "visible": true
+    },
+    {
+      "id": 203,
+      "parent": 201,
+      "typeName": "DrawnUi.Draw.SkiaLayout",
+      "assembly": "DrawnUi.Wpf",
+      "tag": "BtnWrapper",
+      "internal": true,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        31,
+        21,
+        83,
+        28
+      ],
+      "visible": true
+    },
+    {
+      "id": 204,
+      "parent": 203,
+      "typeName": "DrawnUi.Draw.SkiaButton\u002BButtonLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": "BtnText",
+      "internal": true,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        43,
+        21,
+        59,
+        28
+      ],
+      "visible": true
+    },
+    {
+      "id": 205,
+      "parent": 200,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": true,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        120,
+        20,
+        967,
+        30
+      ],
+      "visible": true
+    },
+    {
+      "id": 206,
+      "parent": 200,
+      "typeName": "DrawnUi.Draw.SkiaButton",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": true,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        1072,
+        9,
+        125,
+        52
+      ],
+      "visible": true
+    },
+    {
+      "id": 207,
+      "parent": 206,
+      "typeName": "DrawnUi.Draw.SkiaShape",
+      "assembly": "DrawnUi.Wpf",
+      "tag": "BtnShape",
+      "internal": true,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        1072,
+        9,
+        125,
+        52
+      ],
+      "visible": true
+    },
+    {
+      "id": 208,
+      "parent": 206,
+      "typeName": "DrawnUi.Draw.SkiaLayout",
+      "assembly": "DrawnUi.Wpf",
+      "tag": "BtnWrapper",
+      "internal": true,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        1093,
+        21,
+        83,
+        28
+      ],
+      "visible": true
+    },
+    {
+      "id": 209,
+      "parent": 208,
+      "typeName": "DrawnUi.Draw.SkiaButton\u002BButtonLabel",
+      "assembly": "DrawnUi.Wpf",
+      "tag": "BtnText",
+      "internal": true,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        1105,
+        21,
+        59,
+        28
+      ],
+      "visible": true
+    },
+    {
+      "id": 210,
+      "parent": 200,
+      "typeName": "DrawnUi.Draw.SkiaLayer",
+      "assembly": "DrawnUi.Wpf",
+      "tag": null,
+      "internal": true,
+      "templateIndex": null,
+      "field": null,
+      "rect": [
+        0,
+        69,
+        1207,
+        1
+      ],
+      "visible": true
+    }
+  ]
+}

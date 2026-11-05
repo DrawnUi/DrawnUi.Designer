@@ -1,0 +1,28 @@
+[workspace]
+resolver = "3"
+members = ["crates/designer-protocol", "crates/designer-hubcore", "crates/designer-core", "crates/designer-sources", "crates/designer-i18n", "crates/designer-desktop"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+designer-protocol = { path = "crates/designer-protocol" }
+designer-core = { path = "crates/designer-core" }
+designer-hubcore = { path = "crates/designer-hubcore" }
+designer-sources = { path = "crates/designer-sources" }
+designer-i18n = { path = "crates/designer-i18n" }
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+panic = "abort"
+
+# DrawnUI for Rust from its repository until the next crate: the popup-window keyboard fix,
+# Cx::set_accessibility_focus and keyboard_wrap (DrawnUi.Rust bb81036). Remove once a crate ships it.
+[patch.crates-io]
+drawnui = { git = "https://github.com/DrawnUi/DrawnUi.Rust", rev = "fa8ec45fbef9e99a3526f915b490fb9ca1345c09" }

@@ -1,0 +1,160 @@
+<!doctype html>
+<!-- A stand-in for the DrawFiddle page around the designer iframe (docs/designer.md, "Hosting the
+     editor in a page"): a fake app (the Fiddle's layout -> SkiaStack -> SkiaLabel "Hi") and the code in
+     a textarea. Serve the repo root and open /dev/fiddle-probe/ after dev/build-fiddle-editor.ps1.
+     Every message both ways is logged as "[page] <- / ->" and kept in window.probe.
+     /dev/fiddle-probe/?tsx plays a React page: a .tsx snippet, its stack as the tree's root. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Fiddle host probe</title>
+<style>
+  body { margin: 0; display: flex; height: 100vh; background: #1e1f24; color: #d6d8de; font: 13px system-ui, sans-serif; }
+  #side { width: 380px; display: flex; flex-direction: column; gap: 8px; padding: 12px; box-sizing: border-box; }
+  textarea { flex: 1; background: #15161a; color: #e6e6e6; border: 1px solid #3a3d46; border-radius: 6px; padding: 8px; font: 12px ui-monospace, Consolas, monospace; resize: none; }
+  #label { padding: 10px; border: 1px dashed #4a4e58; border-radius: 6px; font-size: 18px; }
+  iframe { flex: 1; border: 0; border-left: 1px solid #2c2e35; }
+</style>
+</head>
+<body>
+<div id="side">
+  <div>App preview (fake agent): <span id="label">Hi</span></div>
+  <div>Code (version <span id="version">1</span>)</div>
+  <textarea id="code" spellcheck="false" aria-label="Code">// Café ☕ 🎨 the emoji moves every offset after it
+return new SkiaStack { Children = { new SkiaLabel { Text = "Hi", FontSize = 18, TextColor = Color.Parse("#E6E6E6"), HorizontalOptions = LayoutOptions.Center, Margin = new Thickness(8, 4) } } };
+</textarea>
+</div>
+<iframe id="designer" src="../../web/fiddle/editor.html" title="DrawnUI Designer"></iframe>
+<script>
+const CHANNEL = "drawnui-designer";
+const TSX = new URLSearchParams(location.search).has("tsx");
+const URI = TSX ? "fiddle:///snippet.tsx" : "fiddle:///snippet.cs";
+const frame = document.getElementById("designer");
+const area = document.getElementById("code");
+let version = 1;
+let labelText = TSX ? "Hello React" : "Hi";
+if (TSX) {
+  area.value = `import { SkiaLabel, SkiaStack } from "drawnui-react";
+
+export default function App() {
+  return (
+    <SkiaStack Spacing={8}>
+      <SkiaLabel Text="Hello React" FontSize={18} />
+    </SkiaStack>
+  );
+}
+`;
+  document.getElementById("label").textContent = labelText;
+}
+// As the Fiddle: hold everything for the iframe until its first message.
+let held = [];
+window.probe = { fromIframe: [], toIframe: [], edits: [] };
+
+const toIframe = (msg) => {
+  if (held) return held.push(msg);
+  probe.toIframe.push(msg);
+  console.log("[page] -> " + JSON.stringify(msg));
+  frame.contentWindow.postMessage({ channel: CHANNEL, ...msg }, "*");
+};
+const fromApp = (msg) => toIframe({ type: "fromApp", msg });
+const sendCode = () => toIframe({ type: "code", uri: URI, text: area.value, version });
+const showVersion = () => (document.getElementById("version").textContent = version);
+
+// The fake agent.
+const node = (id, parent, typeName, rect, text) => ({ id, parent, typeName, assembly: "DrawnUi", tag: null, text, rect, visible: true });
+const tree = () => ({ type: "tree", revision: version, width: 400, height: 300, nodes: [
+  ...(TSX ? [] : [node(1, null, "DrawnUi.Draw.SkiaLayout", [0, 0, 400, 300])]),
+  node(2, TSX ? null : 1, "DrawnUi.Draw.SkiaStack", [0, 0, 400, 40]),
+  node(3, 2, "DrawnUi.Draw.SkiaLabel", [0, 0, 120, 40], labelText) ] });
+// A SkiaLabel's properties as the .NET agent lists them: 116, five of them set by the code.
+const NS = "DrawnUi.Draw.";
+const LAYOUT = ["Center", "Start", "End", "Fill"];
+const extra = (name, typeName, value, group, more) => ({ name, typeName, value, isSet: false, isDefault: true, group, ...more });
+const otherProps = [
+  ["AddMarginBottom", "System.Double", "0", "Layout"], ["AddMarginLeft", "System.Double", "0", "Layout"], ["AddMarginRight", "System.Double", "0", "Layout"],
+  ["AddMarginTop", "System.Double", "0", "Layout"], ["AnchorX", "System.Double", "0.5", "Transform"], ["AnchorY", "System.Double", "0.5", "Transform"],
+  ["AutoFont", "System.Boolean", "False", "Text"], ["BackgroundColor", "Microsoft.Maui.Graphics.Color", "#00000000", "Look"],
+  ["BlendMode", "SkiaSharp.SKBlendMode", "SrcOver", "Look", { choices: ["Clear", "Src", "Dst", "SrcOver", "DstOver"] }],
+  ["CharacterSpacing", "System.Double", "1", "Text"], ["ClipEffects", "System.Boolean", "True", "Behavior"], ["ClipWith", NS + "SkiaControl", "", "Behavior"],
+  ["Clipping", "System.Object", "", "Behavior"], ["ColumnSpan", "System.Int32", "1", "Layout"], ["Column", "System.Int32", "0", "Layout"],
+  ["DrawShadow", "System.Boolean", "False", "Look"], ["DropShadowColor", "Microsoft.Maui.Graphics.Color", "#FF000000", "Look"],
+  ["DropShadowOffsetX", "System.Double", "2", "Look"], ["DropShadowOffsetY", "System.Double", "2", "Look"], ["DropShadowSize", "System.Double", "2", "Look"],
+  ["ExpandDirtyRegion", "Microsoft.Maui.Thickness", "0,0,0,0", "Behavior"], ["FillBlendMode", "SkiaSharp.SKBlendMode", "SrcOver", "Look", { choices: ["Clear", "Src", "SrcOver"] }],
+  ["FillGradient", NS + "SkiaGradient", "", "Look"], ["FontAttributes", "Microsoft.Maui.Controls.FontAttributes", "None", "Text", { choices: ["None", "Bold", "Italic"], flags: true }],
+  ["FontFamily", "System.String", "", "Text"], ["FontWeight", "System.Int32", "0", "Text"], ["Height", "System.Double", "-1", "Layout"],
+  ["HeightRequest", "System.Double", "-1", "Layout"], ["HorizontalFillRatio", "System.Double", "1", "Layout"],
+  ["HorizontalPositionOffsetRatio", "System.Double", "0", "Layout"], ["HorizontalTextAlignment", NS + "DrawTextAlignment", "Start", "Text", { choices: ["Start", "Center", "End", "FillWords"] }],
+  ["InputTransparent", "System.Boolean", "False", "Behavior"], ["IsClippedToBounds", "System.Boolean", "False", "Behavior"], ["IsEnabled", "System.Boolean", "True", "Behavior"],
+  ["IsVisible", "System.Boolean", "True", "Behavior"], ["KeepSpacesOnLineBreaks", "System.Boolean", "False", "Text"], ["LineBreakMode", "Microsoft.Maui.LineBreakMode", "WordWrap", "Text", { choices: ["NoWrap", "WordWrap", "CharacterWrap", "HeadTruncation", "TailTruncation"] }],
+  ["LineHeight", "System.Double", "1", "Text"], ["LineSpacing", "System.Double", "0", "Text"], ["Lock", "System.Object", "", "Behavior"],
+  ["LockChildrenGestures", NS + "LockTouch", "Disabled", "Behavior", { choices: ["Disabled", "Enabled", "PassTap"] }], ["LockRatio", "System.Double", "0", "Layout"],
+  ["MarginBottom", "System.Double", "0", "Layout"], ["MarginLeft", "System.Double", "0", "Layout"], ["MarginRight", "System.Double", "0", "Layout"],
+  ["MarginTop", "System.Double", "0", "Layout"], ["MaxHeightRequest", "System.Double", "-1", "Layout"], ["MaxLines", "System.Int32", "-1", "Text"],
+  ["MaxWidthRequest", "System.Double", "-1", "Layout"], ["MinHeightRequest", "System.Double", "-1", "Layout"], ["MinWidthRequest", "System.Double", "-1", "Layout"],
+  ["MonoForDigits", "System.String", "", "Text"], ["Opacity", "System.Double", "1", "Look"], ["Padding", "Microsoft.Maui.Thickness", "0,0,0,0", "Layout"],
+  ["ParagraphSpacing", "System.Double", "0", "Text"], ["Perspective", "System.Double", "0", "Transform"], ["Rotation", "System.Double", "0", "Transform"],
+  ["RotationX", "System.Double", "0", "Transform"], ["RotationY", "System.Double", "0", "Transform"], ["RotationZ", "System.Double", "0", "Transform"],
+  ["Row", "System.Int32", "0", "Layout"], ["RowSpan", "System.Int32", "1", "Layout"], ["Scale", "System.Double", "1", "Transform"],
+  ["ScaleX", "System.Double", "1", "Transform"], ["ScaleY", "System.Double", "1", "Transform"], ["Selectable", "System.Boolean", "False", "Behavior"],
+  ["SkewX", "System.Double", "0", "Transform"], ["SkewY", "System.Double", "0", "Transform"], ["Spacing", "System.Double", "0", "Layout"],
+  ["StrokeBlendMode", "SkiaSharp.SKBlendMode", "SrcOver", "Look", { choices: ["Clear", "Src", "SrcOver"] }], ["StrokeColor", "Microsoft.Maui.Graphics.Color", "#00000000", "Look"],
+  ["StrokeWidth", "System.Double", "0", "Look"], ["Tag", "System.String", "", "Behavior"], ["TextTransform", "Microsoft.Maui.TextTransform", "None", "Text", { choices: ["None", "Default", "Lowercase", "Uppercase"] }],
+  ["TranslationX", "System.Double", "0", "Transform"], ["TranslationY", "System.Double", "0", "Transform"], ["TranslationZ", "System.Double", "0", "Transform"],
+  ["UpdateWhenReturnedFromBackgroundAsync", "System.Boolean", "False", "Behavior"], ["UseCache", NS + "SkiaCacheType", "None", "Behavior", { choices: ["None", "Operations", "Image", "GPU"] }],
+  ["VerticalFillRatio", "System.Double", "1", "Layout"], ["VerticalOptions", "Microsoft.Maui.Controls.LayoutOptions", "Start", "Layout", { choices: LAYOUT }],
+  ["VerticalPositionOffsetRatio", "System.Double", "0", "Layout"], ["VerticalTextAlignment", "Microsoft.Maui.TextAlignment", "Start", "Text", { choices: ["Start", "Center", "End"] }],
+  ["Width", "System.Double", "-1", "Layout"], ["WidthRequest", "System.Double", "-1", "Layout"], ["ZIndex", "System.Int32", "0", "Layout"],
+  ["Children", "System.Collections.Generic.IList", "", "Behavior"], ["CreateChildren", "System.Object", "", "Behavior"], ["DebugRendering", "System.Boolean", "False", "Behavior"],
+  ["DefaultContentCreated", "System.Boolean", "False", "Behavior"], ["DisableEffects", "System.Boolean", "False", "Look"], ["DrawingRect", "SkiaSharp.SKRect", "", "Behavior"],
+  ["EffectsState", "System.Object", "", "Behavior"], ["FastMeasurement", "System.Boolean", "False", "Behavior"], ["GradientByLines", "System.Boolean", "True", "Look"],
+  ["HasFocus", "System.Boolean", "False", "Behavior"], ["IsGhost", "System.Boolean", "False", "Behavior"], ["IsRootView", "System.Boolean", "False", "Behavior"],
+  ["ItemTemplate", "System.Object", "", "Behavior"], ["NeedAutoHeight", "System.Boolean", "True", "Layout"], ["NeedAutoWidth", "System.Boolean", "True", "Layout"],
+  ["RenderingScale", "System.Single", "1", "Behavior"], ["StrokeWithGradient", "System.Boolean", "False", "Look"], ["StyleId", "System.String", "", "Behavior"],
+  ["TextPaint", "SkiaSharp.SKPaint", "", "Behavior"], ["ThreadSafe", "System.Boolean", "False", "Behavior"], ["UsePixelSnapping", "System.Boolean", "True", "Behavior"],
+  ["VisualEffects", "System.Collections.Generic.IList", "", "Look"], ["WillClipBounds", "System.Boolean", "False", "Behavior"],
+].map(([name, typeName, value, group, more]) => extra(name, typeName, value, group, more));
+const props = (n) => n !== 3 ? [] : [
+  { name: "Text", typeName: "System.String", value: labelText, isSet: true, isDefault: false, group: "Text" },
+  { name: "FontSize", typeName: "System.Double", value: "18", isSet: true, isDefault: false, group: "Text" },
+  { name: "TextColor", typeName: "Microsoft.Maui.Graphics.Color", value: "#FFE6E6E6", isSet: true, isDefault: false, group: "Text" },
+  { name: "HorizontalOptions", typeName: "Microsoft.Maui.Controls.LayoutOptions", value: "Center", isSet: true, isDefault: false, group: "Layout", choices: LAYOUT },
+  { name: "Margin", typeName: "Microsoft.Maui.Thickness", value: "8,4,8,4", isSet: true, isDefault: false, group: "Layout" },
+  ...otherProps ];
+fromApp({ role: "app", protocol: "0.1.0", name: "FiddleSnippet", engine: "dotnet-blazor", pid: 1, project: null, platform: "web" });
+fromApp({ type: "screens", screens: [] });
+fromApp(tree());
+const app = (m) => {
+  if (m.type === "getTree") fromApp(tree());
+  else if (m.type === "getProps") fromApp({ type: "props", node: m.node, props: props(m.node) });
+  else if (m.type === "setProperty" && m.node === 3 && m.name === "Text") {
+    labelText = m.value;
+    document.getElementById("label").textContent = labelText;
+    fromApp(tree());
+  }
+};
+
+area.addEventListener("input", () => { version++; showVersion(); sendCode(); });
+
+window.addEventListener("message", (e) => {
+  if (e.source !== frame.contentWindow || e.data?.channel !== CHANNEL) return;
+  const m = e.data;
+  probe.fromIframe.push(m);
+  console.log("[page] <- " + JSON.stringify(m));
+  if (held) { const h = held; held = null; h.forEach(toIframe); }
+  if (m.type === "toApp") app(m.msg);
+  else if (m.type === "code.get") sendCode();
+  else if (m.type === "code.edit") {
+    if (m.version !== version) { console.log(`[page] edit at version ${m.version} refused: the code is at ${version}`); return sendCode(); }
+    // Offsets are UTF-16 code units, as JS strings count; the last edit first, so earlier offsets hold.
+    let text = area.value;
+    for (const ed of [...m.edits].sort((a, b) => b.start - a.start)) text = text.slice(0, ed.start) + ed.text + text.slice(ed.end);
+    probe.edits.push({ version: m.version, edits: m.edits, before: area.value, after: text });
+    area.value = text;
+    version++;
+    showVersion();
+    sendCode();
+  }
+});
+</script>
+</body>
+</html>

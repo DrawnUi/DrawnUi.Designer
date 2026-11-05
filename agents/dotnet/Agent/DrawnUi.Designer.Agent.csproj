@@ -1,0 +1,52 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <!--
+        DrawnUI Designer in-app agent for DrawnUi.Net WPF and DrawnUi.Maui apps.
+        Windows: loaded as a .NET startup hook (DOTNET_STARTUP_HOOKS or DrawnUi.Designer.targets), net8.0-windows build.
+        iOS, Mac Catalyst, Android: referenced at build time by DrawnUi.Designer.targets, net8.0 build.
+        No reference to DrawnUi, WPF or MAUI: the agent reaches the app's own loaded assemblies by reflection,
+        so one DLL works with whatever versions the app ships.
+
+        Packs as the NuGet DrawnUi.Designer.Agent: the DLLs go to agent/<tfm>/ (not lib/, so nothing reaches the app's
+        compile references or a Release output) and DrawnUi.Designer.targets to buildTransitive/, which adds the agent
+        to Debug builds of apps only.
+    -->
+    <PropertyGroup>
+        <TargetFrameworks>net8.0;net8.0-windows</TargetFrameworks>
+        <AssemblyName>DrawnUi.Designer.Agent</AssemblyName>
+        <RootNamespace>DrawnUi.Designer.Agent</RootNamespace>
+        <Nullable>disable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+    </PropertyGroup>
+
+    <PropertyGroup>
+        <PackageId>DrawnUi.Designer.Agent</PackageId>
+        <Version>0.1.0-preview.6</Version>
+        <Authors>Nick Kovalsky aka AppoMobi</Authors>
+        <Description>DrawnUI Designer agent: in Debug builds of a DrawnUi app it lets the DrawnUI Designer show the app's screens, control tree and properties, edit them live and write edits to code. Release builds get nothing.</Description>
+        <PackageTags>drawnui designer maui wpf skiasharp</PackageTags>
+        <PackageLicenseExpression>MIT</PackageLicenseExpression>
+        <PackageProjectUrl>https://github.com/DrawnUi/DrawnUi.Designer</PackageProjectUrl>
+        <RepositoryUrl>https://github.com/DrawnUi/DrawnUi.Designer</RepositoryUrl>
+        <RepositoryType>git</RepositoryType>
+        <PackageReadmeFile>README.md</PackageReadmeFile>
+        <IncludeBuildOutput>false</IncludeBuildOutput>
+        <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
+        <TargetsForTfmSpecificContentInPackage>$(TargetsForTfmSpecificContentInPackage);PackAgentDll</TargetsForTfmSpecificContentInPackage>
+        <!-- NU5100: the DLLs are outside lib/ on purpose; NU5128: no lib/ group either -->
+        <NoWarn>$(NoWarn);NU5100;NU5128</NoWarn>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <None Include="README.md" Pack="true" PackagePath="" />
+        <None Include="..\DrawnUi.Designer.targets" Pack="true" PackagePath="buildTransitive\DrawnUi.Designer.Agent.targets" />
+        <None Include="..\DrawnUi.Designer.Run.targets" Pack="true" PackagePath="buildTransitive\DrawnUi.Designer.Run.targets" />
+    </ItemGroup>
+
+    <Target Name="PackAgentDll">
+        <ItemGroup>
+            <TfmSpecificPackageFile Include="$(OutputPath)$(AssemblyName).dll" PackagePath="agent\$(TargetFramework)" />
+        </ItemGroup>
+    </Target>
+
+</Project>

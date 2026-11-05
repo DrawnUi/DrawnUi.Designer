@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <!-- Sample app for DrawnUI Designer: a small DrawnUi WPF app the designer may read and edit. -->
+    <PropertyGroup>
+        <OutputType>WinExe</OutputType>
+        <TargetFramework>net10.0-windows</TargetFramework>
+        <UseWPF>true</UseWPF>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>disable</Nullable>
+        <RootNamespace>DesignerSample</RootNamespace>
+        <ApplicationIcon>icon.ico</ApplicationIcon>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\..\..\..\DrawnUi\src\Wpf\Drawnui.Wpf\DrawnUi.Wpf.csproj" />
+    </ItemGroup>
+
+    <!-- Assets resolve relative to the output directory on this head, so they must be copied there. -->
+    <ItemGroup>
+        <Content Include="fonts\**\*.*">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </Content>
+    </ItemGroup>
+
+</Project>

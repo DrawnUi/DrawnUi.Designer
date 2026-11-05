@@ -1,0 +1,100 @@
+{
+  "type": "tree",
+  "revision": 1,
+  "width": 1080.0,
+  "height": 1976.0,
+  "nodes": [
+    {
+      "id": 30,
+      "parent": null,
+      "typeName": "DrawnUi.Draw.SkiaLayout",
+      "tag": null,
+      "rect": [
+        8.0,
+        335.0,
+        1064.0,
+        1306.0
+      ],
+      "visible": true
+    },
+    {
+      "id": 31,
+      "parent": 30,
+      "typeName": "DrawnUi.Draw.SkiaImage",
+      "tag": null,
+      "rect": [
+        240.0,
+        455.0,
+        600.0,
+        369.0
+      ],
+      "visible": true
+    },
+    {
+      "id": 32,
+      "parent": 30,
+      "typeName": "DrawnUi.Draw.SkiaLabel",
+      "tag": null,
+      "rect": [
+        148.0,
+        872.0,
+        784.0,
+        98.0
+      ],
+      "visible": true
+    },
+    {
+      "id": 33,
+      "parent": 30,
+      "typeName": "DrawnUi.Draw.SkiaRichLabel",
+      "tag": null,
+      "rect": [
+        146.0,
+        1018.0,
+        788.0,
+        65.0
+      ],
+      "visible": true
+    },
+    {
+      "id": 34,
+      "parent": 30,
+      "typeName": "DrawnUi.Draw.SkiaButton",
+      "tag": null,
+      "rect": [
+        390.0,
+        1131.0,
+        300.0,
+        123.0
+      ],
+      "visible": true,
+      "field": "DrawnUI.Tutorials.FirstApp.FirstAppPageCode.btnClickMe"
+    },
+    {
+      "id": 38,
+      "parent": 30,
+      "typeName": "DrawnUi.Draw.SkiaRichLabel",
+      "tag": null,
+      "rect": [
+        292.0,
+        1302.0,
+        497.0,
+        57.0
+      ],
+      "visible": true
+    },
+    {
+      "id": 39,
+      "parent": 30,
+      "typeName": "DrawnUi.Draw.SkiaRichLabel",
+      "tag": null,
+      "rect": [
+        128.0,
+        1407.0,
+        824.0,
+        114.0
+      ],
+      "visible": true
+    }
+  ]
+}
