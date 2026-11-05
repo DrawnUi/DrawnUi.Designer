@@ -1,4 +1,4 @@
-//! The desktop menu bar, at the far left of the title bar: File, Edit, View, Help. A click opens a
+//! The desktop menu bar, at the far left of the title bar: File and Edit. A click opens a
 //! menu, Alt with a title's underlined letter (or Alt alone) opens one from the keyboard, Left and
 //! Right go to the next menu, Up and Down through it; Escape or a click outside closes it. Each line
 //! runs the same code as its button or its key, shows that key, and reads unavailable when it
@@ -18,19 +18,16 @@ pub(crate) enum Cmd {
     Exit,
     /// Edit: the Layers menu's actions (Undo and Redo first).
     Act(MenuAction),
-    /// View: Properties order opens Set and Type.
-    Order,
-    OrderBy(PropsOrder),
-    LibraryParts,
+    /// Keys only (Ctrl+P, F1): Pick is the Layers header's button, Help the title bar's.
     Pick,
     Help,
     About,
 }
 
 /// The menus: their title (its ftl key, "&" before the underlined letter) and lines; None is a
-/// separator. Run app and Properties order open the submenus 4 and 5.
-const MENUS: [(&str, &[Option<Cmd>]); 4] = [
-    ("menubar-file", &[Some(Cmd::Run), Some(Cmd::Restart), None, Some(Cmd::Settings), None, Some(Cmd::Exit)]),
+/// separator. Run app opens the submenu 4.
+const MENUS: [(&str, &[Option<Cmd>]); 2] = [
+    ("menubar-file", &[Some(Cmd::Run), Some(Cmd::Restart), None, Some(Cmd::Settings), Some(Cmd::About), None, Some(Cmd::Exit)]),
     (
         "menubar-edit",
         &[
@@ -47,18 +44,15 @@ const MENUS: [(&str, &[Option<Cmd>]); 4] = [
             Some(Cmd::Act(MenuAction::Delete)),
         ],
     ),
-    ("menubar-view", &[Some(Cmd::Order), None, Some(Cmd::LibraryParts), None, Some(Cmd::Pick)]),
-    ("menubar-help", &[Some(Cmd::Help), Some(Cmd::About)]),
 ];
 
 pub(crate) const MENU_COUNT: usize = MENUS.len();
 
-/// Menu `menu`'s entries now (4: the recent apps, 5: the orders). Exit only where the designer
+/// Menu `menu`'s entries now (4: the recent apps). Exit only where the designer
 /// has a window of its own.
 fn entries(menu: usize, app: &App) -> Vec<Option<Cmd>> {
     match menu {
         4 => (0..app.recent.len()).map(|i| Some(Cmd::Recent(i))).collect(),
-        5 => vec![Some(Cmd::OrderBy(PropsOrder::Set)), Some(Cmd::OrderBy(PropsOrder::Groups))],
         m => {
             let mut list: Vec<Option<Cmd>> = MENUS[m].1.to_vec();
             if cfg!(target_os = "emscripten") && m == 0 {
@@ -138,10 +132,6 @@ impl Cmd {
             Cmd::Settings => tr("menu-settings"),
             Cmd::Exit => tr("menu-exit"),
             Cmd::Act(a) => action_label(app, a),
-            Cmd::Order => tr("menu-props-order"),
-            Cmd::OrderBy(PropsOrder::Set) => tr("order-set"),
-            Cmd::OrderBy(PropsOrder::Groups) => tr("order-groups"),
-            Cmd::LibraryParts => tr("menu-library-parts"),
             Cmd::Pick => tr("pick"),
             Cmd::Help => tr("help"),
             Cmd::About => tr("menu-about"),
@@ -164,7 +154,6 @@ impl Cmd {
     fn submenu(self) -> Option<usize> {
         match self {
             Cmd::Run => Some(4),
-            Cmd::Order => Some(5),
             _ => None,
         }
     }
@@ -184,8 +173,6 @@ impl Cmd {
     /// On or off, for a check box or radio line.
     fn checked(self, app: &App) -> Option<bool> {
         match self {
-            Cmd::OrderBy(o) => Some(app.props_order == o),
-            Cmd::LibraryParts => Some(app.settings.show_internal),
             Cmd::Pick => Some(app.pick_mode),
             _ => None,
         }
@@ -193,8 +180,7 @@ impl Cmd {
 
     fn role(self) -> &'static str {
         match self {
-            Cmd::OrderBy(_) => Aria::MENU_ITEM_RADIO,
-            Cmd::LibraryParts | Cmd::Pick => Aria::MENU_ITEM_CHECKBOX,
+            Cmd::Pick => Aria::MENU_ITEM_CHECKBOX,
             _ => Aria::MENU_ITEM,
         }
     }
@@ -205,7 +191,7 @@ impl Cmd {
             return;
         }
         match self {
-            Cmd::Run | Cmd::Order => {}
+            Cmd::Run => {}
             Cmd::Recent(i) => {
                 if let Some(project) = app.recent.get(i).map(|r| r.project.clone()) {
                     app.run_project(project, cx);
@@ -218,11 +204,6 @@ impl Cmd {
                 crate::platform::close_window();
             }
             Cmd::Act(a) => app.run_action(a, cx),
-            Cmd::OrderBy(o) => app.set_props_order(o, cx),
-            Cmd::LibraryParts => {
-                let on = !app.settings.show_internal;
-                app.set_show_internal(on, cx);
-            }
             Cmd::Pick => app.toggle_pick(),
             Cmd::Help => app.open_help(cx),
             Cmd::About => {
@@ -334,7 +315,7 @@ fn bar_menu(app: &App, menu: usize, level: usize) -> (Build<SkiaShape>, Vec<Hand
             }
         }
     }
-    let name = if menu < MENU_COUNT { title_text(menu).0 } else { tr(if menu == 4 { "menu-run-app" } else { "menu-props-order" }) };
+    let name = if menu < MENU_COUNT { title_text(menu).0 } else { tr("menu-run-app") };
     let panel = menu_panel(rows, width(menu, app)).accessibility_label(name).keyboard_wrap(true).consume_gestures(|_me, app: &mut App, _cx, g| app.note_pointer(g));
     (panel, handles)
 }

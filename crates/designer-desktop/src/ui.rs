@@ -77,6 +77,8 @@ pub struct Settings {
     pub section: Section,
     /// The selection box's color in the app (`#AARRGGBB`); `None`: the agents' own magenta.
     pub selection_color: Option<String>,
+    /// Theme and language changes apply at once, without the opening circle.
+    pub instant_changes: bool,
 }
 
 fn section_or_default<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Section, D::Error> {
@@ -614,7 +616,7 @@ impl App {
 
     fn apply(&mut self, incoming: Incoming, cx: &mut Cx) {
         match incoming {
-            Incoming::Theme(id) => self.set_theme(view::Theme::by_id(&id), cx),
+            Incoming::Theme(id) => self.set_theme_now(view::Theme::by_id(&id), cx),
             Incoming::FrameOffset(x, y) => self.frame_offset = (x, y),
             Incoming::Place { type_name, x, y } => self.place_at(type_name, x, y),
             Incoming::Connected(on) => {
@@ -1101,6 +1103,31 @@ impl App {
         });
     }
 
+    /// A theme the page sets (DrawFiddle): applied at once, never animated.
+    pub fn set_theme_now(&mut self, theme: view::Theme, cx: &mut Cx) {
+        if self.wipe_to.unwrap_or(self.settings.theme) == theme {
+            return;
+        }
+        self.change_now(cx, move |app| {
+            app.settings.theme = theme;
+            view::set_theme(theme);
+        });
+    }
+
+    /// A change of the whole window (theme, language) without the opening circle: one that is still
+    /// opening ends, the change applies, the window is built again before the next frame.
+    fn change_now(&mut self, cx: &mut Cx, apply: impl FnOnce(&mut App) + 'static) {
+        if let Some(previous) = self.wipe.take() {
+            cx.remove(previous);
+        }
+        self.wipe_to = None;
+        cx.postpone_before_draw::<App>(move |app, cx| {
+            apply(app);
+            app.save_settings();
+            app.rebuild_window(cx);
+        });
+    }
+
     /// Switches the language (None = the system's), remembered; the window opens in it as for a theme,
     /// from the Language button.
     pub fn set_language(&mut self, language: Option<String>, cx: &mut Cx) {
@@ -1117,6 +1144,10 @@ impl App {
     /// The window as it is now stays on top as a picture while `apply` changes the look (theme, language)
     /// and the window is built again under it; the picture then opens from `from` (canvas pixels) and goes.
     fn start_wipe(&mut self, from: Option<drawnui::skia::Point>, cx: &mut Cx, apply: impl FnOnce(&mut App) + 'static) {
+        // Settings, "Animate theme and language changes" off: at once.
+        if self.settings.instant_changes {
+            return self.change_now(cx, apply);
+        }
         // Changed while another change still opens: that one ends now (its picture goes, the window shows
         // what it was opening), so the new picture captures a clean window and keeps no half-open circle.
         if let Some(previous) = self.wipe.take() {
@@ -2847,7 +2878,19 @@ fn make() -> Box<dyn drawnui::App> {
     };
     #[cfg(target_os = "emscripten")]
     let to_hub: ToHub = Box::new(crate::web::send);
-    let settings = Settings::load();
+    #[allow(unused_mut)]
+    let mut settings = Settings::load();
+    // A page that hosts the editor (DrawFiddle) gives its theme in the frame's address, so the first
+    // frame is already in it (`?theme=midnight`), and may turn the change animation off (`?animateTheme=0`).
+    #[cfg(target_os = "emscripten")]
+    {
+        if let Some(theme) = crate::web::param("theme") {
+            settings.theme = view::Theme::by_id(&theme);
+        }
+        if crate::web::param("animateTheme").as_deref() == Some("0") {
+            settings.instant_changes = true;
+        }
+    }
     view::set_theme(settings.theme);
     i18n::set_language(settings.language.as_deref().unwrap_or(i18n::system_language()));
     let state = App {
@@ -5084,7 +5127,8 @@ mod shots {
         assert_eq!(host.ui.state.placing.as_deref(), Some("DrawnUi.Draw.SkiaLabel"), "its inserted answer names the type");
     }
 
-    /// The hosting page (DrawFiddle) sets the look: the designer takes that theme.
+    /// The hosting page (DrawFiddle) sets the look: the designer takes that theme at once, with no
+    /// opening circle (that is only for a theme picked in Settings).
     #[test]
     fn the_page_sets_the_theme() {
         let (to_ui, rx) = std::sync::mpsc::channel();
@@ -5093,11 +5137,29 @@ mod shots {
         let mut host = host(state);
         to_ui.send(Incoming::Theme("light".into())).unwrap();
         host.ui.waker().invalidate(host.ui.state.inbox, Dirty::APPLY);
-        host.settle();
-        for _ in 0..60 {
+        for _ in 0..4 {
             host.frame_after(16.0);
+            assert!(host.ui.state.wipe.is_none(), "no circle");
         }
+        assert_eq!(host.ui.state.settings.theme.id(), "light", "applied within a few frames");
+        view::set_theme(view::Theme::by_id("dark"));
+    }
+
+    /// Settings, "Animate theme and language changes" off: a theme picked applies at once.
+    #[test]
+    fn a_theme_change_can_skip_the_circle() {
+        let mut state = connected();
+        state.settings.instant_changes = true;
+        let mut host = host(state);
+        host.key_down("Comma", ctrl(false));
+        host.settle();
+        let light = at_label(&mut host, "Light");
+        host.pan(light, light, 16.0, 1);
+        host.frame_after(16.0);
+        host.frame_after(16.0);
+        assert!(host.ui.state.wipe.is_none(), "no circle");
         assert_eq!(host.ui.state.settings.theme.id(), "light");
+        view::set_theme(view::Theme::by_id("dark"));
     }
 
     /// The selection box in the app takes the Selection color from Settings.
@@ -5382,10 +5444,11 @@ mod shots {
             language: Some("de".into()),
             allow_devices: true,
             section: Section::About,
+            instant_changes: true,
         };
         let back: Settings = serde_json::from_str(&serde_json::to_string(&saved).unwrap()).unwrap();
         assert_eq!(back.theme, saved.theme);
-        assert!(back.show_internal);
+        assert!(back.show_internal && back.instant_changes);
         assert_eq!((back.screens_width, back.properties_width), (210.0, 400.0));
         assert_eq!(back.toggled_groups, vec!["Behavior".to_string()]);
         assert_eq!(back.section, Section::About);
@@ -5607,21 +5670,22 @@ mod shots {
         same(&host, "the submenu");
         press(&mut host, "ArrowLeft");
         same(&host, "back from the submenu");
-        for (key, menu) in [("ArrowLeft", 3), ("ArrowLeft", 2)] {
+        for (key, menu) in [("ArrowLeft", 1), ("ArrowLeft", 0)] {
             press(&mut host, key);
             assert_eq!(host.ui.state.bar_open, Some(menu));
             same(&host, &format!("menu {menu}"));
         }
-        // View's first line opens Properties order: Right goes in (on its chosen option), Right again
-        // goes on to Help, then round to File.
+        // File's Run app opens its submenu: Right goes in, Right again goes on to Edit, then round to File.
         press(&mut host, "ArrowRight");
-        assert!(host.ui.state.bar_sub.is_some());
-        same(&host, "Properties order");
-        for menu in [3, 0] {
+        if host.ui.state.bar_sub.is_some() {
+            same(&host, "Run app");
             press(&mut host, "ArrowRight");
-            assert_eq!(host.ui.state.bar_open, Some(menu));
-            same(&host, &format!("menu {menu}"));
         }
+        assert_eq!(host.ui.state.bar_open, Some(1));
+        same(&host, "menu 1");
+        press(&mut host, "ArrowRight");
+        assert_eq!(host.ui.state.bar_open, Some(0));
+        same(&host, "menu 0");
         // Esc closes the menu: the focus on its title; Esc again leaves the bar, the focus where
         // Tab put it.
         press(&mut host, "Escape");
@@ -5698,18 +5762,18 @@ mod shots {
         assert_eq!(host.ui.state.bar_title, Some(1));
         press(&mut host, "ArrowLeft");
         press(&mut host, "ArrowLeft");
-        assert_eq!(host.ui.state.bar_title, Some(3));
+        assert_eq!(host.ui.state.bar_title, Some(1));
         press(&mut host, "ArrowRight");
         // Down opens File on its first line.
         press(&mut host, "ArrowDown");
         assert_eq!(at(&host), (None, Some(0), Some(0), None));
-        // Down walks it and comes round: Run app, Restart app, Settings, Exit, Run app; Up goes back round.
-        for want in [1, 2, 3, 0] {
+        // Down walks it and comes round: Run app, Restart app, Settings, About, Exit, Run app; Up goes back round.
+        for want in [1, 2, 3, 4, 0] {
             press(&mut host, "ArrowDown");
             assert_eq!(host.ui.state.bar_line, Some(want));
         }
         press(&mut host, "ArrowUp");
-        assert_eq!(host.ui.state.bar_line, Some(3));
+        assert_eq!(host.ui.state.bar_line, Some(4));
         press(&mut host, "Home");
         // Right on Run app opens its submenu on its first line; Left closes it; Esc too.
         press(&mut host, "ArrowRight");
@@ -5734,23 +5798,11 @@ mod shots {
         press(&mut host, "Escape");
         assert_eq!(at(&host), (None, None, None, None));
         assert_eq!(host.ui.focused(), Some(search), "the keyboard is back where it was");
-        // Alt+V, Enter on Properties order opens it, Down, Enter picks Type; everything closes.
-        host.key_down("KeyV", alt());
-        host.key_up("KeyV", Default::default());
-        frames(&mut host);
-        assert_eq!(at(&host), (None, Some(2), Some(0), None));
-        press(&mut host, "Enter");
-        assert_eq!(host.ui.state.sub_line, Some(0));
-        press(&mut host, "ArrowDown");
-        press(&mut host, "Enter");
-        assert_eq!(host.ui.state.props_order, PropsOrder::Groups);
-        assert_eq!(at(&host), (None, None, None, None));
-        assert_eq!(host.ui.focused(), Some(search));
         // A menu the mouse opened walks with the keys too; Alt leaves the bar.
-        let help = host.rect(host.ui.state.bar_titles[3]);
-        host.pan((help.center_x(), help.center_y()), (help.center_x(), help.center_y()), 16.0, 1);
+        let file = host.rect(host.ui.state.bar_titles[0]);
+        host.pan((file.center_x(), file.center_y()), (file.center_x(), file.center_y()), 16.0, 1);
         frames(&mut host);
-        assert_eq!(host.ui.state.bar_open, Some(3));
+        assert_eq!(host.ui.state.bar_open, Some(0));
         press(&mut host, "ArrowDown");
         assert_eq!(host.ui.state.bar_line, Some(0));
         alt_alone(&mut host);
@@ -5768,11 +5820,11 @@ mod shots {
         host.frame_after(drawnui::ACCESSIBILITY_INTERVAL_MS);
         let nodes = host.ui.accessibility_nodes().to_vec();
         assert!(nodes.iter().any(|n| n.role == Aria::MENU_BAR && n.label == "Menu bar"));
-        assert!(nodes.iter().any(|n| n.role == Aria::MENU_ITEM && n.label == "View" && n.is_pressed == Some(true)), "View reads open");
-        assert!(nodes.iter().any(|n| n.role == Aria::MENU_ITEM_CHECKBOX && n.label == "Show library parts" && n.is_pressed == Some(false)));
+        assert!(nodes.iter().any(|n| n.role == Aria::MENU_ITEM && n.label == "File" && n.is_pressed == Some(true)), "File reads open");
+        assert!(nodes.iter().any(|n| n.role == Aria::MENU_ITEM && n.label == "About"));
     }
 
-    /// Left and Right go round all four menus, on the bar and with a menu open; what the keyboard
+    /// Left and Right go round both menus, on the bar and with a menu open; what the keyboard
     /// is on reads selected (the menus' selected color), the mouse over a title only lightly; a
     /// mouse resting on a title or under a menu that opens moves nothing.
     #[test]
@@ -5792,17 +5844,17 @@ mod shots {
         host.key_up("AltLeft", Default::default());
         host.settle();
         let mut seen = vec![host.ui.state.bar_title];
-        for _ in 0..4 {
+        for _ in 0..2 {
             press(&mut host, "ArrowRight");
             seen.push(host.ui.state.bar_title);
         }
-        assert_eq!(seen, [Some(0), Some(1), Some(2), Some(3), Some(0)], "Right goes round all four");
+        assert_eq!(seen, [Some(0), Some(1), Some(0)], "Right goes round both");
         let mut seen = vec![];
-        for _ in 0..4 {
+        for _ in 0..2 {
             press(&mut host, "ArrowLeft");
             seen.push(host.ui.state.bar_title);
         }
-        assert_eq!(seen, [Some(3), Some(2), Some(1), Some(0)], "Left too");
+        assert_eq!(seen, [Some(1), Some(0)], "Left too");
         // The title the keyboard is on reads selected; Edit under the mouse does not light.
         let fill = |host: &mut Headless<App>, menu: usize| {
             let r = host.rect(host.ui.state.bar_titles[menu]);
@@ -5812,19 +5864,19 @@ mod shots {
         let near = |a: drawnui::skia::Color, b: Color| (a.r() as i32 - b.r() as i32).abs() + (a.g() as i32 - b.g() as i32).abs() + (a.b() as i32 - b.b() as i32).abs() < 12;
         assert!(near(fill(&mut host, 0), selected), "File reads selected: {:?}", fill(&mut host, 0));
         assert!(!near(fill(&mut host, 1), selected), "Edit under the resting mouse is not lit as selected");
-        // With a menu open (opened from the keyboard), Right goes round all four, the mouse resting on Edit or not.
+        // With a menu open (opened from the keyboard), Right goes round both, the mouse resting on Edit or not.
         press(&mut host, "ArrowDown");
         let mut seen = vec![host.ui.state.bar_open];
-        for _ in 0..4 {
+        for _ in 0..2 {
             press(&mut host, "ArrowRight");
-            // A submenu line (Run app, Properties order) opens its submenu first: Right again goes on.
+            // A submenu line (Run app) opens its submenu first: Right again goes on.
             if host.ui.state.bar_sub.is_some() {
                 press(&mut host, "ArrowRight");
             }
             seen.push(host.ui.state.bar_open);
         }
-        assert_eq!(seen, [Some(0), Some(1), Some(2), Some(3), Some(0)], "with a menu open too");
-        for want in [3, 2, 1, 0] {
+        assert_eq!(seen, [Some(0), Some(1), Some(0)], "with a menu open too");
+        for want in [1, 0] {
             press(&mut host, "ArrowLeft");
             assert_eq!(host.ui.state.bar_open, Some(want), "Left with a menu open");
         }
@@ -5833,10 +5885,11 @@ mod shots {
         let line = host.ui.state.bar_line.expect("a lit line");
         assert_eq!(line, 2, "Settings, the first line that can act");
         // The mouse moving onto a title takes over again.
-        let view_title = host.rect(host.ui.state.bar_titles[2]);
-        host.hover(view_title.center_x(), view_title.center_y());
+        host.hover(edit.right + 60.0, edit.center_y());
         host.settle();
-        assert_eq!(host.ui.state.bar_open, Some(2), "a real move over View opens it");
+        host.hover(edit.center_x(), edit.center_y());
+        host.settle();
+        assert_eq!(host.ui.state.bar_open, Some(1), "a real move over Edit opens it");
         assert!(!host.ui.state.bar_keys);
     }
 
@@ -5893,11 +5946,11 @@ mod shots {
         let bar = host.ui.accessibility_nodes().iter().find(|n| n.role == Aria::MENU_BAR).map(|n| n.label.clone());
         assert_eq!(bar.as_deref(), Some("Menu bar"));
         // While a menu is open the mouse over another title opens that one.
-        let view = host.rect(host.ui.state.bar_titles[2]);
-        host.hover(view.center_x(), view.center_y());
+        let file = host.rect(host.ui.state.bar_titles[0]);
+        host.hover(file.center_x(), file.center_y());
         host.settle();
-        assert_eq!(host.ui.state.bar_open, Some(2));
-        assert_eq!(names(&menu_lines(&mut host)), ["Properties order", "Show library parts", "Pick"]);
+        assert_eq!(host.ui.state.bar_open, Some(0));
+        assert_eq!(names(&menu_lines(&mut host)), ["Run app", "Restart app", "Settings", "About", "Exit"]);
         // A press outside closes it, and the title is no longer lit.
         host.tap(640.0, 500.0);
         host.settle();
@@ -5915,13 +5968,13 @@ mod shots {
         host.press_key("ArrowLeft");
         host.press_key("ArrowLeft");
         host.settle();
-        assert_eq!(host.ui.state.bar_open, Some(3), "Left from File goes round to Help");
+        assert_eq!(host.ui.state.bar_open, Some(1), "Left from File goes round to Edit");
         host.press_key("ArrowDown");
         host.settle();
-        assert_eq!(host.ui.state.bar_line, Some(1), "Down lights the next line");
+        assert_eq!(host.ui.state.bar_line, Some(4), "Down lights the next line that can act: Copy, then Duplicate");
         host.press_key("Escape");
         host.settle();
-        assert_eq!((host.ui.state.bar_open, host.ui.state.bar_title), (None, Some(3)), "Esc closes it, the keyboard stays on Help");
+        assert_eq!((host.ui.state.bar_open, host.ui.state.bar_title), (None, Some(1)), "Esc closes it, the keyboard stays on Edit");
         host.press_key("Escape");
         host.settle();
         assert_eq!(host.ui.state.bar_title, None, "Esc again leaves the bar");
@@ -5950,22 +6003,9 @@ mod shots {
         state.recent = vec![designer_protocol::RecentApp { name: "HelloOld".into(), engine: "dotnet-wpf".into(), project: "C:/apps/HelloOld/HelloOld.csproj".into(), agent: None, last_seen: 0, platform: None }];
         let (mut host, sent, _to_ui) = wired(state);
         let sent_any = |f: &dyn Fn(&EditorMsg) -> bool| sent.lock().unwrap().iter().any(f);
-        // View, Properties order, Type: the order switch.
-        open_bar(&mut host, 2);
-        tap_line(&mut host, "Properties order");
-        assert!(host.ui.state.bar_sub.is_some(), "the submenu opens to the right");
-        assert_eq!(menu_lines(&mut host).iter().filter(|l| l.0 == "Set" || l.0 == "Type").count(), 2);
-        tap_line(&mut host, "Type");
-        assert_eq!(host.ui.state.props_order, PropsOrder::Groups);
-        assert_eq!(host.ui.state.bar_open, None, "a pick closes the menus");
-        // View, Show library parts: the Settings switch.
-        let before = host.ui.state.settings.show_internal;
-        open_bar(&mut host, 2);
-        tap_line(&mut host, "Show library parts");
-        assert_eq!(host.ui.state.settings.show_internal, !before);
-        // View, Pick, and Ctrl+P: the Pick button.
-        open_bar(&mut host, 2);
-        tap_line(&mut host, "Pick");
+        // Ctrl+P: the Pick button, on and off.
+        host.key_down("KeyP", ctrl(false));
+        host.settle();
         assert!(host.ui.state.pick_mode && sent_any(&|m| matches!(m, EditorMsg::ToApp { msg: HubToApp::PickMode { on: true }, .. })));
         host.key_down("KeyP", ctrl(false));
         host.settle();
@@ -5988,12 +6028,7 @@ mod shots {
         tap_line(&mut host, "Run app");
         tap_line(&mut host, "HelloOld");
         assert!(sent_any(&|m| matches!(m, EditorMsg::RunApp { project } if project.ends_with("HelloOld.csproj"))));
-        // Help, Help, and F1: the Help page; File, Settings and Ctrl+,: Settings; Help, About: its section.
-        open_bar(&mut host, 3);
-        tap_line(&mut host, "Help");
-        assert!(host.ui.state.on_help);
-        host.press_key("Escape");
-        host.settle();
+        // F1: the Help page; Ctrl+,: Settings; File, About: its section.
         host.key_down("F1", Default::default());
         host.settle();
         assert!(host.ui.state.on_help, "F1");
@@ -6004,7 +6039,7 @@ mod shots {
         assert!(host.ui.state.on_settings, "Ctrl+,");
         host.press_key("Escape");
         host.settle();
-        open_bar(&mut host, 3);
+        open_bar(&mut host, 0);
         tap_line(&mut host, "About");
         assert!(host.ui.state.on_settings && host.ui.state.section == Section::About);
     }

@@ -29,6 +29,18 @@ unsafe extern "C" {
     fn designer_post(text: *const u8, len: usize);
     fn designer_defer();
     fn designer_embedded() -> i32;
+    fn designer_param(name: *const u8, name_len: usize, out: *mut u8, cap: usize) -> i32;
+}
+
+/// A parameter of the frame's address (`editor.html?theme=midnight`), or None.
+pub fn param(name: &str) -> Option<String> {
+    let mut buf = vec![0u8; 256];
+    let len = unsafe { designer_param(name.as_ptr(), name.len(), buf.as_mut_ptr(), buf.len()) };
+    if len < 0 || len as usize >= buf.len() {
+        return None;
+    }
+    buf.truncate(len as usize);
+    String::from_utf8(buf).ok()
 }
 
 /// Whether the page hosts the editor inside itself (DrawFiddle): only Layers and Properties show.

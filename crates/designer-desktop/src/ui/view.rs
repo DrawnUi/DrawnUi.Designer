@@ -802,6 +802,11 @@ fn appearance_section(app: &mut App) -> Build<SkiaLayout> {
             // Three cards a row: the dark themes, then the light ones and high contrast.
             SkiaWrap::new().spacing(12).fill_x().maximum_width_request(3.0 * 144.0 + 2.0 * 12.0).horizontal_options(LayoutOptions::Start).accessibility_role(Aria::RADIO_GROUP).accessibility_label(tr("theme")).children(cards),
             SkiaLayer::new().height_request(1).fill_x().background_color(c(LINE)).margin((0, 16, 0, 0)),
+            option_row(&tr("animate-changes"), &tr("animate-changes-hint"), setting_switch(tr("animate-changes"), |app| !app.settings.instant_changes, |app, on| {
+                app.settings.instant_changes = !on;
+                app.save_settings();
+            })),
+            SkiaLayer::new().height_request(1).fill_x().background_color(c(LINE)),
             option_row(&tr("selection-color"), &tr("selection-color-hint"), selection_swatches()),
         )),
     )
@@ -916,6 +921,21 @@ fn theme_card(theme: Theme) -> Build<SkiaLayout> {
             .input_transparent(true)
             .observe(move |me, app: &App| me.set_is_visible(app.settings.theme == theme)),
     ))
+}
+
+/// A settings row's switch: `get` reads the setting, `set` changes it.
+fn setting_switch(label: String, get: fn(&App) -> bool, set: fn(&mut App, bool)) -> Build<SkiaSwitch> {
+    SkiaSwitch::new()
+        .accessibility_label(label)
+        // The style's width, a lower track: it sits on a settings row, not on a phone.
+        .width_request(46.0)
+        .height_request(20.0)
+        .color_frame_on(Some(c(ACCENT)))
+        .color_frame_off(Some(c(SWITCH_OFF)))
+        .color_thumb_on(Some(c(ON_ACCENT)))
+        .color_thumb_off(Some(c(SWITCH_THUMB_OFF)))
+        .observe(move |me, app: &App| me.set_is_toggled(get(app)))
+        .on_toggled(move |_me, app: &mut App, _cx, on| set(app, on))
 }
 
 fn layers_section() -> Build<SkiaLayout> {
