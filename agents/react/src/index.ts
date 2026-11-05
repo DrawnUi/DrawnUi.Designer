@@ -110,6 +110,8 @@ const state = {
   lastCheck: 0,
   signature: "",
   pick: undefined as undefined | { place?: string; hover?: number; unhook: () => void },
+  /** Place mode: the line (left, top, right, bottom) where the control would go in the boxed stack, row or wrap. */
+  placeLine: undefined as number[] | undefined,
   appClasses: new Map<string, Ctor>(),
 };
 const pins = new WeakMap<Ctl, Map<string, Pin>>();
@@ -220,6 +222,11 @@ async function handle(msg: any): Promise<void> {
       case "placeMode":
         if (typeof msg.typeName === "string") { classOf(msg.typeName); setPick({ place: msg.typeName }); }
         else if (state.pick?.place) setPick(undefined);
+        break;
+      case "placeAt":
+        // a drop from the editor's Controls onto the canvas: as a place-mode click there
+        if (state.pick) setPick(undefined);
+        placeHere(String(msg.typeName), Number(msg.x), Number(msg.y));
         break;
       case "highlight":
         state.boxColor = typeof msg.color === "string" ? msg.color : "#FFFF00FF";
@@ -899,21 +906,84 @@ function itemsAbove(c: Ctl): Ctl | undefined {
   return undefined;
 }
 
-/** The deepest container under the point and the index after the child under the point. */
-function placeTarget(x: number, y: number): { container?: Ctl; index?: number } {
+type Flow = "column" | "row" | "wrap" | "free";
+
+/** How a layout lines up its children (a layer, a grid, a masonry: free, the control goes last). */
+function flowOf(c: Ctl): Flow {
+  const t = String(c.Type ?? "");
+  return t === "Column" ? "column" : t === "Row" ? "row" : t === "Wrap" ? "wrap" : "free";
+}
+
+/** The topmost control under the point, a layout with nothing drawn of its own included (an empty stack); a part the
+ * library made counts as its owner. */
+function topmostAt(x: number, y: number): Ctl | undefined {
   const path = hitPath(x, y, true);
-  for (let i = path.length - 1; i >= 0; i--) {
-    if (notAContainer(path[i])) continue;
-    const below = path[i + 1];
-    const at = below ? appChildren(path[i]).indexOf(below) : -1;
-    return { container: path[i], index: at >= 0 ? at + 1 : undefined };
+  if (!path.length) return undefined;
+  const internal = new Map(walk().map((v) => [v.control, v.internal]));
+  for (let i = path.length - 1; i >= 0; i--) if (!internal.get(path[i])) return path[i];
+  return path[0];
+}
+
+/** The line at the edge of `r` a placed control goes to: across the parent `p` in a column, along `r` in a row or wrap
+ * (left, top, right, bottom); none in a layer or grid. */
+function edge(flow: Flow, p: number[], r: number[], before: boolean): number[] | undefined {
+  if (flow === "column") { const y = before ? r[1] : r[1] + r[3]; return [p[0], y - 1, p[0] + p[2], y + 1]; }
+  if (flow === "row" || flow === "wrap") { const x = before ? r[0] : r[0] + r[2]; return [x - 1, r[1], x + 1, r[1] + r[3]]; }
+  return undefined;
+}
+
+/**
+ * Place mode: the control under the point takes the new one when it holds children, at the index the point is at (a
+ * column by its children's vertical middles, a row by their horizontal ones, a wrap in reading order, a layer or grid
+ * last). Otherwise the new one goes next to it in its parent: before it in the first half along the parent's
+ * direction, else after (in a layer or grid after). Nothing where neither takes it (a template's cell).
+ */
+function placeTarget(x: number, y: number): { container?: Ctl; index?: number; line?: number[] } {
+  const target = topmostAt(x, y);
+  if (!target) return {};
+  const cx = (r: number[]) => r[0] + r[2] / 2, cy = (r: number[]) => r[1] + r[3] / 2;
+  if (!notAContainer(target)) {
+    const flow = flowOf(target), kids = appChildren(target).map(rectOf);
+    const i = flow === "column" ? kids.findIndex((r) => cy(r) > y)
+      : flow === "row" ? kids.findIndex((r) => cx(r) > x)
+      : flow === "wrap" ? kids.findIndex((r) => (y >= r[1] && y < r[1] + r[3] ? cx(r) > x : cy(r) > y))
+      : -1;
+    const p = rectOf(target);
+    const line = i >= 0 ? edge(flow, p, kids[i], true) : kids.length ? edge(flow, p, kids[kids.length - 1], false) : undefined;
+    return { container: target, index: i >= 0 ? i : undefined, line };
   }
-  return {};
+  const parent = target.Parent;
+  const at = parent && !notAContainer(parent) ? appChildren(parent).indexOf(target) : -1;
+  if (at < 0) return {};
+  const flow = flowOf(parent), r = rectOf(target);
+  const before = flow === "column" ? y < cy(r) : flow === "free" ? false : x < cx(r);
+  return { container: parent, index: at + (before ? 0 : 1), line: edge(flow, rectOf(parent), r, before) };
+}
+
+/** A control of `type` put where a place-mode click at the point puts it: inserted (request 0), then the tree. */
+function placeHere(type: string, x: number, y: number): void {
+  const { container, index } = placeTarget(x, y);
+  if (!container) {
+    sendError(0, "no control can go here");
+    sendMsg({ type: "inserted", request: 0, node: null, parent: null, index: null });
+    return;
+  }
+  try {
+    const r = insertControl(container, index, type, [], [], []);
+    // the control itself: its id is in the agent's map once a tree has walked it
+    setHighlight(r.control);
+    sendMsg({ type: "inserted", request: 0, node: r.id, parent: container.AccessibilityId, index: r.index });
+    enqueue(async () => { await settle(); await sendTree(); });
+  } catch (e) {
+    sendError(0, errorText(e));
+    sendMsg({ type: "inserted", request: 0, node: null, parent: container.AccessibilityId, index: index ?? null });
+  }
 }
 
 /** Pick / place mode: pointer input over the canvas goes to the agent, never to the app; the wheel passes; Esc cancels. */
 function setPick(mode: { place?: string } | undefined): void {
   const old = state.pick;
+  state.placeLine = undefined;
   if (old) { state.pick = undefined; old.unhook(); if (old.hover !== undefined) setHighlight(undefined); }
   if (!mode) return;
   const el: HTMLElement | undefined = state.canvas?.Element;
@@ -951,10 +1021,16 @@ function hover(x: number, y: number): void {
   const pick = state.pick;
   if (!pick) return;
   try {
-    // place mode: the layout a click would put the control into; pick mode: the control a click would pick
+    // place mode: the layout a click would put the control into, and the line where; pick mode: the control a click
+    // would pick
+    const place = pick.place ? placeTarget(x, y) : undefined;
     const picked = pick.place ? undefined : pickAt(x, y);
-    const node = pick.place ? placeTarget(x, y).container : picked === undefined ? undefined : find(picked);
+    const node = place ? place.container : picked === undefined ? undefined : find(picked);
+    const line = place?.line;
+    const moved = String(line) !== String(state.placeLine);
+    state.placeLine = line;
     if (node !== pick.hover) { pick.hover = node; setHighlight(node); }
+    else if (moved) state.canvas?.Update?.();
   } catch { /* never into the app */ }
 }
 
@@ -964,19 +1040,9 @@ function click(x: number, y: number): void {
   try {
     if (pick.place) {
       const type = pick.place;
-      const { container, index } = placeTarget(x, y);
       pick.hover = undefined;
       setPick(undefined);
-      if (!container) {
-        sendError(0, "no container under the pointer");
-        sendMsg({ type: "inserted", request: 0, node: null, parent: null, index: null });
-        return;
-      }
-      const r = insertControl(container, index, type, [], [], []);
-      // the control itself: its id is in the agent's map once a tree has walked it
-      setHighlight(r.control);
-      sendMsg({ type: "inserted", request: 0, node: r.id, parent: container.AccessibilityId, index: r.index });
-      enqueue(async () => { await settle(); await sendTree(); });
+      placeHere(type, x, y);
       return;
     }
     const node = pickAt(x, y);
@@ -993,7 +1059,7 @@ function setHighlight(c: Ctl | undefined): void {
   state.canvas?.Update?.(); // frames come on demand: draw the box (or the frame without it) now
 }
 
-let paint: any;
+let paint: any, fill: any;
 function drawHighlight(): void {
   const c = state.highlight?.deref();
   if (!c || c.IsDisposed) return;
@@ -1003,12 +1069,19 @@ function drawHighlight(): void {
   const r = rectOf(c);
   if (r[2] <= 0 || r[3] <= 0) return;
   if (!paint) { paint = new CK.Paint(); paint.setStyle(CK.PaintStyle.Stroke); paint.setStrokeWidth(2); paint.setAntiAlias(false); }
+  if (!fill) { fill = new CK.Paint(); fill.setAntiAlias(false); }
   let color: Float32Array;
   try { color = (Core as any).Super.ParseColor(/^#?[0-9a-f]{6}([0-9a-f]{2})?$/i.test(state.boxColor) ? (state.boxColor.startsWith("#") ? state.boxColor : "#" + state.boxColor) : "#FFFF00FF"); }
   catch { color = (Core as any).Super.ParseColor("#FFFF00FF"); }
   paint.setColor(color);
-  // a 2 px stroke centered 1 px outside the box
-  surface.getCanvas().drawRect(CK.LTRBRect(r[0] - 1, r[1] - 1, r[0] + r[2] + 1, r[1] + r[3] + 1), paint);
+  // a 2 px stroke centered 1 px outside the box, kept inside the canvas: a control that fills it (a snippet's root)
+  // gets its box along the edges
+  const w = surface.width?.() ?? state.canvas.Element?.width ?? 0, h = surface.height?.() ?? state.canvas.Element?.height ?? 0;
+  const box = CK.LTRBRect(Math.max(r[0] - 1, 1), Math.max(r[1] - 1, 1), Math.min(r[0] + r[2] + 1, w - 1), Math.min(r[1] + r[3] + 1, h - 1));
+  surface.getCanvas().drawRect(box, paint);
+  // place mode: where the control goes in the boxed stack, row or wrap
+  const line = state.pick?.place ? state.placeLine : undefined;
+  if (line) { fill.setColor(color); surface.getCanvas().drawRect(CK.LTRBRect(line[0], line[1], line[2], line[3]), fill); }
 }
 
 // ---------------------------------------------------------------- snapshot

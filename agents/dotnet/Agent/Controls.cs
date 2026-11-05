@@ -496,37 +496,67 @@ namespace DrawnUi.Designer.Agent
             _placeType = typeName;
         }
 
-        /// <summary>The deepest container under the point (not a templated one, not the library's own parts) and the
-        /// index after the child under the point, or last.</summary>
-        private static (long? Container, int? Index) PlaceTarget(float x, float y)
+        /// <summary>How a layout lines up its children (a layer, a grid: free, the control goes last).</summary>
+        private enum Flow { Column, Row, Wrap, Free }
+
+        private static Flow FlowOf(object control) => Get(control, "Type")?.ToString() switch
         {
-            var wrapper = PageWrapper;
-            Visit hit = null;
-            var visits = Walk(true);
-            foreach (var v in visits)
+            "Column" => Flow.Column,
+            "Row" => Flow.Row,
+            "Wrap" => Flow.Wrap,
+            _ => Flow.Free,
+        };
+
+        /// <summary>The line at the edge of <paramref name="r"/> a placed control goes to (x, y, width, height; one of
+        /// them 0): across the parent <paramref name="p"/> in a column, along <paramref name="r"/> in a row or wrap; none
+        /// in a layer or grid.</summary>
+        private static float[] Edge(Flow flow, float[] p, float[] r, bool before) => flow switch
+        {
+            Flow.Column => new[] { p[0], before ? r[1] : r[1] + r[3], p[2], 0f },
+            Flow.Row or Flow.Wrap => new[] { before ? r[0] : r[0] + r[2], r[1], 0f, r[3] },
+            _ => null,
+        };
+
+        private static bool Accepts(object control) => control != null && control != PageWrapper && NotAContainer(control) == null;
+
+        /// <summary>
+        /// Place mode: the control under the point (as Pick finds it) takes the new one when it holds children, at the
+        /// index the point is at (a column by its children's vertical middles, a row by their horizontal ones, a wrap in
+        /// reading order, a layer or grid last). Otherwise the new one goes next to it in its parent: before it in the
+        /// first half along the parent's direction, else after (in a layer or grid after). Nothing where neither takes it
+        /// (a template's cell, the page's own wrapper). The line where it goes, in a stack, row or wrap. UI thread.
+        /// </summary>
+        private static (long? Container, int? Index, float[] Line) PlaceTarget(float x, float y)
+        {
+            var target = Pick(x, y) is { } picked ? Find(picked) : null;
+            if (target == null)
+                return (null, null, null);
+            static float Cx(float[] r) => r[0] + r[2] / 2;
+            static float Cy(float[] r) => r[1] + r[3] / 2;
+            float[] RectOf(object c) => Rect(Call(c, "GetAccessibilityPixelRect"));
+            if (Accepts(target))
             {
-                var r = v.ScreenRect;
-                if (v.Visible && r[2] > 0 && r[3] > 0 && x >= r[0] && y >= r[1] && x < r[0] + r[2] && y < r[1] + r[3])
-                    hit = v;
-            }
-            var byId = visits.ToDictionary(v => v.Id);
-            Visit below = null;
-            for (var v = hit; v != null; below = v, v = v.Parent is { } p && byId.TryGetValue(p, out var up) ? up : null)
-            {
-                if (v.Control == wrapper)
+                var flow = FlowOf(target);
+                var kids = AppChildren(target).Select(RectOf).ToList();
+                var i = flow switch
                 {
-                    // the page's own root is not the snippet's code: its single child takes the control, last
-                    var own = AppChildren(wrapper);
-                    return own.Count == 1 && NotAContainer(own[0]) == null ? (IdOf(own[0]), null) : (null, null);
-                }
-                if (v.Internal || NotAContainer(v.Control) != null)
-                    continue;
-                int? index = null;
-                if (below != null && AppChildren(v.Control).IndexOf(below.Control) is var i and >= 0)
-                    index = i + 1;
-                return (v.Id, index);
+                    Flow.Column => kids.FindIndex(r => Cy(r) > y),
+                    Flow.Row => kids.FindIndex(r => Cx(r) > x),
+                    Flow.Wrap => kids.FindIndex(r => y >= r[1] && y < r[1] + r[3] ? Cx(r) > x : Cy(r) > y),
+                    _ => -1,
+                };
+                var p = RectOf(target);
+                var line = i >= 0 ? Edge(flow, p, kids[i], true) : kids.Count > 0 ? Edge(flow, p, kids[^1], false) : null;
+                return (IdOf(target), i >= 0 ? i : null, line);
             }
-            return (null, null);
+            var parent = Get(target, "Parent");
+            var at = parent != null && IsType(parent.GetType(), "DrawnUi.Draw.SkiaControl") && Accepts(parent) ? AppChildren(parent).IndexOf(target) : -1;
+            if (at < 0)
+                return (null, null, null);
+            var pflow = FlowOf(parent);
+            var tr = RectOf(target);
+            var before = pflow switch { Flow.Column => y < Cy(tr), Flow.Row or Flow.Wrap => x < Cx(tr), _ => false };
+            return (IdOf(parent), at + (before ? 0 : 1), Edge(pflow, RectOf(parent), tr, before));
         }
 
         #endregion

@@ -799,6 +799,19 @@ fn a_move_into_an_unwritten_insert_comes_back_after_it() {
     assert!(to_app(&outs).iter().any(|m| matches!(m, HubToApp::Move { node: 110, parent: 140, index: 0, .. })), "{outs:?}");
 }
 
+/// A drop from Controls onto the canvas (PlaceAt) is answered as a place-mode click: the control it
+/// puts in is recorded as inserted live, with its type's defaults, and can be written.
+#[test]
+fn a_drop_on_the_canvas_is_recorded_as_a_placed_control() {
+    let mut s = Session::new();
+    ed(&mut s.core, s.editor, EditorMsg::ToApp { app: s.app, msg: HubToApp::PlaceAt { type_name: LABEL.into(), x: 10.0, y: 10.0 } });
+    s.place(2, 3, node(60, Some(2), LABEL));
+    ap(&mut s.core, s.app, AppMsg::Inserted { request: 0, node: Some(60), parent: Some(2), index: Some(3) });
+    s.tree_now();
+    let spec = s.core.apps[&s.app].live.inserts.get(&60).cloned().expect("recorded");
+    assert_eq!((spec.type_name.as_str(), spec.props.iter().map(|p| (p.name.as_str(), p.value.as_str())).collect::<Vec<_>>()), (LABEL, vec![("Text", "Label")]));
+}
+
 #[test]
 fn a_refused_move_is_not_recorded() {
     let mut s = Session::new();

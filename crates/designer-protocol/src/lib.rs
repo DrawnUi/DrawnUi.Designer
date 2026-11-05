@@ -287,11 +287,20 @@ pub enum HubToApp {
         #[serde(default)]
         children: Vec<ControlSpec>,
     },
-    /// Place mode: like [`HubToApp::PickMode`], the pointer highlights the container a control of
-    /// `type_name` would go into (the deepest one under it), and the click inserts it there, after
-    /// the child under the pointer: [`AppMsg::Inserted`] with request 0. `None`, Esc or a second
-    /// click outside cancels.
+    /// Place mode: like [`HubToApp::PickMode`], but the pointer boxes the layout a control of
+    /// `type_name` would go into, with a line where it goes in a stack, row or wrap, and the click
+    /// puts it there: [`AppMsg::Inserted`] with request 0. The control under the pointer (the
+    /// topmost one, a library part counting as its owner) takes it when it holds children, at the
+    /// index the pointer is at (a stack by the children's vertical middles, a row by their
+    /// horizontal ones, a wrap in reading order; a layer or a grid last). Otherwise it goes next to
+    /// it in its parent: before it in the first half along the parent's direction, else after (in
+    /// a layer or a grid after). Where neither takes it (a template's cell, a page's own wrapper)
+    /// nothing is placed and there is no box. `None`, Esc or a second click outside cancels.
     PlaceMode { type_name: Option<String> },
+    /// A control of `type_name` put at canvas point `x`, `y` (pixels), where a click in place mode
+    /// there puts it (a drop from the editor's Controls onto the app's canvas in a page). Answered
+    /// as that click: [`AppMsg::Inserted`] with request 0.
+    PlaceAt { type_name: String, x: f32, y: f32 },
     /// Take a control out of its parent, live. Answered by a new [`AppMsg::Tree`] (or an
     /// [`AppMsg::Error`]).
     Remove { request: u32, node: NodeId },

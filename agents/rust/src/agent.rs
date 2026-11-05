@@ -106,6 +106,8 @@ pub struct Core {
     tree_due: bool,
     /// Place mode: the type of the control a click inserts (pick mode's pointer, a container's box).
     placing: Option<String>,
+    /// Place mode: the line drawn where the control would go in the boxed stack, row or wrap.
+    place_line: Option<Rect>,
     /// Frames the tree has waited; past `TREE_WAIT` it goes out as it is.
     tree_waited: u32,
     /// The designer's ids of the controls ([`Core::wire_id`]).
@@ -206,7 +208,7 @@ impl Core {
     }
 
     fn new(wire: Wire, waker: Waker) -> Self {
-        Core { wire, waker, revision: 0, highlight: None, highlight_popup: None, box_color: BOX_COLOR, boxed: None, picking: false, tree_due: false, tree_waited: 0, placing: None, ids: Default::default() }
+        Core { wire, waker, revision: 0, highlight: None, highlight_popup: None, box_color: BOX_COLOR, boxed: None, picking: false, tree_due: false, tree_waited: 0, placing: None, place_line: None, ids: Default::default() }
     }
 
     /// The designer's id of control `id`: given once, kept while the control lives.
@@ -272,6 +274,14 @@ impl Core {
                 self.set_picking(ui, false);
                 self.set_picking(ui, type_name.is_some());
                 self.placing = type_name;
+            }
+            HubToApp::PlaceAt { type_name, .. } if !controls::can_create(&type_name) => {
+                self.send(AppMsg::Error { request: Some(0), message: format!("{type_name} cannot be created here") });
+                self.send(AppMsg::Inserted { request: 0, node: None, parent: None, index: None });
+            }
+            HubToApp::PlaceAt { type_name, x, y } => {
+                self.placing = Some(type_name);
+                self.place_at(ui, x, y);
             }
             HubToApp::OpenScreen { route } => {
                 self.send(AppMsg::Error { request: None, message: format!("openScreen {route}: a DrawnUI for Rust app lists no screens") })
@@ -414,6 +424,7 @@ impl Core {
         if self.picking && !on {
             self.set_highlight(ui, None);
             self.placing = None;
+            self.place_line = None;
         }
         self.picking = on;
     }
@@ -426,8 +437,13 @@ impl Core {
         }
         match kind {
             PointerKind::Hover | PointerKind::Move => {
-                let under = if self.placing.is_some() { controls::place_target(ui.tree_mut(), x, y).map(|(c, _)| c) } else { pick_at(ui, x, y) };
-                if under != self.highlight {
+                let (under, line) = match self.placing {
+                    // The layout that takes it, and the line where it goes; no box where nothing does.
+                    Some(_) => controls::place(ui.tree_mut(), x, y).map_or((None, None), |p| (Some(p.container), p.line)),
+                    None => (pick_at(ui, x, y), None),
+                };
+                if under != self.highlight || line != self.place_line {
+                    self.place_line = line;
                     self.set_highlight(ui, under);
                     self.redraw(ui);
                 }
@@ -449,10 +465,10 @@ impl Core {
     /// under it; its box, `inserted` (request 0) and, once laid out, the tree.
     fn place_at(&mut self, ui: &mut dyn AppUi, x: f32, y: f32) {
         let type_name = self.placing.take().unwrap_or_default();
-        let target = controls::place_target(ui.tree_mut(), x, y);
+        let target = controls::place(ui.tree_mut(), x, y).map(|p| (p.container, p.index));
         self.set_picking(ui, false);
         let Some((container, index)) = target else {
-            self.send(AppMsg::Error { request: Some(0), message: "no container under the pointer".into() });
+            self.send(AppMsg::Error { request: Some(0), message: "no control can go here".into() });
             self.send(AppMsg::Inserted { request: 0, node: None, parent: None, index: None });
             return self.redraw(ui);
         };
@@ -488,6 +504,15 @@ impl Core {
         let on_canvas = self.highlight_popup.is_none_or(|n| !frame.host.popup_windows.iter().any(|w| w.id == n));
         if on_canvas {
             draw_box(frame, r, self.box_color);
+            if let Some(line) = self.place_line {
+                let mut paint = skia::Paint::default();
+                paint.set_anti_alias(false).set_color(self.box_color);
+                let canvas = frame.surface.canvas();
+                canvas.save();
+                canvas.reset_matrix();
+                canvas.draw_rect(line, &paint);
+                canvas.restore();
+            }
         }
     }
 
@@ -585,14 +610,17 @@ fn popup_of(t: &drawnui::Tree, id: ControlId) -> Option<(PopupId, ControlId)> {
     t.popup_roots().into_iter().find(|&(_, root)| root == top)
 }
 
-/// A 2 px box just outside `r` (pixels of the frame's surface).
+/// A 2 px box just outside `r` (pixels of the frame's surface), kept inside the surface: a control
+/// that fills it (a snippet's root) gets its box along the edges.
 fn draw_box(frame: &mut Frame, r: Rect, color: skia::Color) {
     let mut paint = skia::Paint::default();
     paint.set_style(skia::PaintStyle::Stroke).set_stroke_width(2.0).set_anti_alias(false).set_color(color);
+    let (w, h) = (frame.surface.width() as f32, frame.surface.height() as f32);
+    let shown = Rect::new((r.left - 1.0).max(1.0), (r.top - 1.0).max(1.0), (r.right + 1.0).min(w - 1.0), (r.bottom + 1.0).min(h - 1.0));
     let canvas = frame.surface.canvas();
     canvas.save();
     canvas.reset_matrix();
-    canvas.draw_rect(Rect::from_xywh(r.left - 1.0, r.top - 1.0, r.width() + 2.0, r.height() + 2.0), &paint);
+    canvas.draw_rect(shown, &paint);
     canvas.restore();
 }
 
@@ -793,6 +821,12 @@ mod tests {
         label: Handle<SkiaLabel>,
         shape: Handle<SkiaShape>,
         list: Handle<SkiaLayout>,
+        a: Handle<SkiaLabel>,
+        stack: Handle<SkiaLayout>,
+        s1: Handle<SkiaLabel>,
+        row: Handle<SkiaLayout>,
+        r1: Handle<SkiaLabel>,
+        layer: Handle<SkiaLayout>,
     }
 
     struct Rig {
@@ -1237,11 +1271,98 @@ mod tests {
         assert_eq!(rig.agent.ui.tree.parent(deep), Some(inner), "nothing moved");
     }
 
+    /// A new snippet: one empty stack and nothing in it. The place hover boxes it, the click puts the
+    /// control into it.
+    #[test]
+    fn place_mode_takes_a_lone_empty_root() {
+        let ui = Ui::new(Page::default(), |_: &mut Page| SkiaLayout::column().fill().padding(16).spacing(8)).font_bytes("Default", FONT);
+        let mut rig = Rig::with_ui(ui);
+        let root = rig.agent.ui.tree.root().unwrap();
+        rig.ask(HubToApp::PlaceMode { type_name: Some("SkiaLabel".into()) });
+        rig.agent.pointer_button(PointerKind::Hover, MouseButton::Left, 200.0, 150.0, rig.time);
+        assert_eq!(rig.agent.highlight, Some(root), "the hover boxes the empty root");
+        // It fills the canvas: the box is drawn just inside the canvas's edges, where it shows.
+        rig.frames(1);
+        let px = |rig: &mut Rig, x: i32, y: i32| {
+            let info = skia::ImageInfo::new((1, 1), skia::ColorType::RGBA8888, skia::AlphaType::Unpremul, None);
+            let mut p = [0u8; 4];
+            assert!(rig.surface.read_pixels(&info, &mut p, 4, (x, y)));
+            p
+        };
+        assert_eq!((px(&mut rig, 0, 150), px(&mut rig, 200, 0), px(&mut rig, 399, 150), px(&mut rig, 200, 299)), ([255, 0, 255, 255], [255, 0, 255, 255], [255, 0, 255, 255], [255, 0, 255, 255]));
+        rig.click((200.0, 150.0));
+        let outs: Vec<_> = rig.answers.try_iter().map(msg).collect();
+        assert!(outs.iter().any(|m| matches!(m, AppMsg::Inserted { request: 0, node: Some(_), parent: Some(p), .. } if *p == rig.agent.wire_id(root))), "{outs:?}");
+        // A drop from the editor's Controls onto the canvas: the same place, with no place mode.
+        let outs: Vec<_> = rig.ask(HubToApp::PlaceAt { type_name: "SkiaButton".into(), x: 390.0, y: 290.0 }).into_iter().map(msg).collect();
+        assert!(matches!(outs.first(), Some(AppMsg::Inserted { request: 0, node: Some(_), parent: Some(p), index: Some(1) }) if *p == rig.agent.wire_id(root)), "{outs:?}");
+        assert!(!rig.agent.picking);
+    }
+
+    /// Where a placed control lands: into the control under the pointer when it holds children, at
+    /// the index the pointer is at; else next to it, before or after by the half the pointer is in.
+    #[test]
+    fn place_mode_puts_the_control_where_the_pointer_is() {
+        let label = |text: &'static str| SkiaLabel::new(text).width_request(60).height_request(20);
+        let ui = Ui::new(Page::default(), move |p: &mut Page| {
+            SkiaLayout::column().padding(10).spacing(10).children((
+                label("A").assign(&mut p.a),
+                SkiaLayout::column().spacing(20).width_request(200).children((label("s1").assign(&mut p.s1), label("s2"))).assign(&mut p.stack),
+                SkiaLayout::row().spacing(10).children((label("r1").assign(&mut p.r1), label("r2"))).assign(&mut p.row),
+                SkiaLayout::new().width_request(200).height_request(40).children((label("in"),)).assign(&mut p.layer),
+                SkiaLayout::column().items(|_: &Page| 1, || (SkiaLayout::column().width_request(80).height_request(20), ()), |_: &(), _: &Page, _, _| {}).assign(&mut p.list),
+            ))
+        })
+        .font_bytes("Default", FONT);
+        let mut rig = Rig::with_ui(ui);
+        let rect = |rig: &Rig, id: ControlId| rig.agent.ui.tree.drawn_rect(id).unwrap();
+        let s = &rig.agent.ui.state;
+        let (root, a, stack, s1, row, r1, layer, cell) = (rig.agent.ui.tree.root().unwrap(), s.a.id(), s.stack.id(), s.s1.id(), s.row.id(), s.r1.id(), s.layer.id(), s.list.id());
+        let place = |rig: &mut Rig, at: (f32, f32)| -> Option<(ControlId, Option<u32>)> {
+            rig.ask(HubToApp::PlaceMode { type_name: Some("SkiaLabel".into()) });
+            rig.click(at);
+            let outs: Vec<_> = rig.answers.try_iter().map(msg).collect();
+            outs.into_iter().find_map(|m| match m {
+                AppMsg::Inserted { request: 0, node: Some(n), parent: Some(p), index } => {
+                    let (n, p) = (rig.agent.control(n), rig.agent.control(p));
+                    rig.agent.ui.tree.cx().remove(n);
+                    rig.frames(2);
+                    Some((p, index))
+                }
+                _ => None,
+            })
+        };
+        // Into the stack, in the gap between its two labels: at 1.
+        let (r, s1r) = (rect(&rig, stack), rect(&rig, s1));
+        assert_eq!(place(&mut rig, (r.left + 150.0, s1r.bottom + 10.0)), Some((stack, Some(1))));
+        // Beside label A in the column: its top half before it, its bottom half after it.
+        let ar = rect(&rig, a);
+        assert_eq!(place(&mut rig, (ar.center_x(), ar.top + 3.0)), Some((root, Some(0))));
+        assert_eq!(place(&mut rig, (ar.center_x(), ar.bottom - 3.0)), Some((root, Some(1))));
+        // Beside r1 in the row: its left half before it, its right half after it.
+        let rr = rect(&rig, r1);
+        assert_eq!(place(&mut rig, (rr.left + 3.0, rr.center_y())), Some((row, Some(0))));
+        assert_eq!(place(&mut rig, (rr.right - 3.0, rr.center_y())), Some((row, Some(1))));
+        // The layer's empty area: into it, last (after its one label).
+        let lr = rect(&rig, layer);
+        assert_eq!(place(&mut rig, (lr.right - 5.0, lr.bottom - 5.0)), Some((layer, Some(1))));
+        // A template's cell: nothing.
+        let cr = rect(&rig, rig.agent.ui.tree.children(cell)[0]);
+        assert_eq!(place(&mut rig, (cr.center_x(), cr.center_y())), None);
+        // The hover over the stack's gap boxes the stack, with a line across it at the index.
+        rig.ask(HubToApp::PlaceMode { type_name: Some("SkiaLabel".into()) });
+        rig.agent.pointer_button(PointerKind::Hover, MouseButton::Left, r.left + 150.0, s1r.bottom + 10.0, rig.time);
+        assert_eq!(rig.agent.highlight, Some(stack));
+        let line = rig.agent.place_line.expect("a line at the index");
+        let s2 = rig.agent.ui.tree.cx().app_children(stack)[1];
+        let s2_top = rect(&rig, s2).top;
+        assert!(line.height() <= 2.0 && line.width() >= r.width() - 1.0 && (line.center_y() - s2_top).abs() <= 1.0, "{line:?}");
+    }
+
     #[test]
     fn place_mode_takes_a_layouts_empty_area_drawn_or_not() {
         let mut rig = Rig::new();
         let root = rig.agent.ui.tree.root().unwrap();
-        let r = rig.agent.ui.tree.drawn_rect(root).unwrap();
         // A nested column with no background (the engine's hit test looks through it).
         let outs: Vec<_> = rig
             .ask(HubToApp::Insert { request: 1, parent: rig.agent.wire_id(root), index: None, type_name: "SkiaLayout".into(), props: vec![("height_request".into(), "80".into()), ("width_request".into(), "200".into())], children: vec![] })
@@ -1261,7 +1382,8 @@ mod tests {
         let outs = place_at(&mut rig, (n.center_x(), n.center_y()));
         assert!(matches!(&outs[..], [AppMsg::Inserted { node: Some(_), parent: Some(p), index: Some(0), .. }] if *p == nested), "{outs:?}");
         // The root column's empty area below its children: into it, last (label, button, nested, new).
-        let outs = place_at(&mut rig, (r.left + 5.0, r.bottom - 5.0));
+        let r = rig.agent.ui.tree.drawn_rect(root).unwrap();
+        let outs = place_at(&mut rig, (r.left + 5.0, r.bottom - 3.0));
         assert!(matches!(&outs[..], [AppMsg::Inserted { node: Some(_), parent: Some(p), index: Some(3), .. }] if *p == rig.agent.wire_id(root)), "{outs:?}");
         // Outside every layout: refused.
         let outs = place_at(&mut rig, (r.right + 5.0, r.bottom + 5.0));

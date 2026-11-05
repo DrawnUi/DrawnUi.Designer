@@ -5,6 +5,7 @@
 //! (`designer::control_types`); this file only adds the panel's group and a new one's defaults.
 
 use designer_protocol::{ControlKind, ControlSpec, SpecProp};
+use drawnui::skia::Rect;
 use drawnui::{designer, ControlId, Tree};
 
 /// The panel's look of a type: group, holds children, the properties a new one gets.
@@ -71,28 +72,99 @@ pub fn can_create(type_name: &str) -> bool {
     creatable(type_name).is_some()
 }
 
-/// Place mode: the deepest container whose drawn rect holds a canvas point (drawn or not: a
-/// layout without a background counts), and the index after its child under the point, or `None`
-/// for last. A Rust app has no page wrapper around it: its root is its own code.
-pub fn place_target(t: &mut Tree, x: f32, y: f32) -> Option<(ControlId, Option<u32>)> {
-    let under = |t: &Tree, id: ControlId| {
-        t.base(id).is_some_and(|b| b.p.is_visible) && t.drawn_rect(id).is_some_and(|r| x >= r.left && x < r.right && y >= r.top && y < r.bottom)
-    };
-    let mut at = t.root().filter(|&r| under(t, r))?;
-    let mut found = None;
-    loop {
-        if !t.is_internal(at) && container(t, at).is_ok() {
-            found = Some(at);
-        }
-        // Down into the child on top (drawn last) under the point.
-        match t.children(at).iter().rev().copied().find(|&c| under(t, c)) {
-            Some(child) => at = child,
-            None => break,
-        }
+/// Where a placed control goes: `container`'s children at `index` (`None`: last), and the line drawn
+/// there in a stack, row or wrap (canvas pixels).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Place {
+    pub container: ControlId,
+    pub index: Option<u32>,
+    pub line: Option<Rect>,
+}
+
+/// How a layout lines up its children, for where a placed control goes among them.
+#[derive(Clone, Copy, PartialEq)]
+enum Flow {
+    Column,
+    Row,
+    Wrap,
+    /// A layer, a grid, a masonry: the control goes last.
+    Free,
+}
+
+fn flow(t: &Tree, id: ControlId) -> Flow {
+    match t.props(id).into_iter().find(|p| p.name == "layout_type").map(|p| p.value).as_deref() {
+        Some("Column") => Flow::Column,
+        Some("Row") => Flow::Row,
+        Some("Wrap") => Flow::Wrap,
+        _ => Flow::Free,
     }
-    let found = found?;
-    let index = t.cx().app_children(found).iter().rposition(|&c| under(t, c)).map(|i| i as u32 + 1);
-    Some((found, index))
+}
+
+/// The topmost control whose drawn rect holds a canvas point, a layout with nothing drawn of its
+/// own included (an empty stack); a part the library made counts as its owner.
+fn topmost(t: &Tree, x: f32, y: f32) -> Option<ControlId> {
+    let under = |id: ControlId| t.base(id).is_some_and(|b| b.p.is_visible) && t.drawn_rect(id).is_some_and(|r| x >= r.left && x < r.right && y >= r.top && y < r.bottom);
+    let mut at = t.root().filter(|&r| under(r))?;
+    // Down into the child on top (drawn last) under the point.
+    while let Some(child) = t.children(at).iter().rev().copied().find(|&c| under(c)) {
+        at = child;
+    }
+    while t.is_internal(at) {
+        at = t.parent(at)?;
+    }
+    Some(at)
+}
+
+/// The line at the edge of `r` a placed control goes to: across the parent `p` in a column, along
+/// `r` in a row or wrap; none in a layer or grid.
+fn edge(flow: Flow, p: Rect, r: Rect, before: bool) -> Option<Rect> {
+    match flow {
+        Flow::Column => {
+            let y = if before { r.top } else { r.bottom };
+            Some(Rect::new(p.left, y - 1.0, p.right, y + 1.0))
+        }
+        Flow::Row | Flow::Wrap => {
+            let x = if before { r.left } else { r.right };
+            Some(Rect::new(x - 1.0, r.top, x + 1.0, r.bottom))
+        }
+        Flow::Free => None,
+    }
+}
+
+/// Place mode: the control under the point (`topmost`) takes the new one when it holds children,
+/// at the index the point is at: a column by its children's vertical middles, a row by their
+/// horizontal ones, a wrap in reading order, a layer or grid last. Otherwise the new one goes next
+/// to it in its parent: before it in the first half along the parent's direction, else after (in a
+/// layer or grid after). `None` where neither takes it (a template's cell).
+pub fn place(t: &mut Tree, x: f32, y: f32) -> Option<Place> {
+    let target = topmost(t, x, y)?;
+    if container(t, target).is_ok() {
+        let flow = flow(t, target);
+        let kids: Vec<Rect> = app_children(t, target).iter().map(|&k| t.drawn_rect(k).unwrap_or_default()).collect();
+        let at = match flow {
+            Flow::Column => kids.iter().position(|r| r.center_y() > y),
+            Flow::Row => kids.iter().position(|r| r.center_x() > x),
+            Flow::Wrap => kids.iter().position(|r| if y >= r.top && y < r.bottom { r.center_x() > x } else { r.center_y() > y }),
+            Flow::Free => None,
+        };
+        let p = t.drawn_rect(target).unwrap_or_default();
+        let line = match at {
+            Some(i) => edge(flow, p, kids[i], true),
+            None => kids.last().and_then(|&r| edge(flow, p, r, false)),
+        };
+        return Some(Place { container: target, index: at.map(|i| i as u32), line });
+    }
+    let parent = app_child(t, target).ok()?;
+    container(t, parent).ok()?;
+    let i = app_children(t, parent).iter().position(|&c| c == target)? as u32;
+    let (r, p) = (t.drawn_rect(target)?, t.drawn_rect(parent).unwrap_or_default());
+    let flow = flow(t, parent);
+    let before = match flow {
+        Flow::Column => y < r.center_y(),
+        Flow::Row | Flow::Wrap => x < r.center_x(),
+        Flow::Free => false,
+    };
+    Some(Place { container: parent, index: Some(i + u32::from(!before)), line: edge(flow, p, r, before) })
 }
 
 /// The Controls panel's list: every type the engine makes, by group, by name within.

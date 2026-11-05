@@ -150,6 +150,8 @@ impl Live {
                 }
             }
             HubToApp::PlaceMode { type_name } => self.placing = type_name.clone(),
+            // A drop from Controls onto the canvas: answered as a place-mode click.
+            HubToApp::PlaceAt { type_name, .. } => self.placing = Some(type_name.clone()),
             HubToApp::Copy { request, node } => {
                 self.copy_requests.insert(*request, *node);
             }

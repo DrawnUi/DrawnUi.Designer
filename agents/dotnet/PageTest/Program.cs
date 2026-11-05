@@ -121,7 +121,7 @@ var refused = Next("error");
 Check(Next("inserted")["node"] == null, $"insert into a label refused: {refused["message"]}");
 await handle("{\"type\":\"placeMode\",\"typeName\":\"DrawnUi.Draw.SkiaShape\"}");
 var robot = new GestureRobot(host);
-robot.Tap(30, 8); // on the label: the column (as tall as its content) holds it
+robot.Tap(30, 22); // on the label's lower half: into the column, after it
 host.AdvanceFrames(3, 16);
 var placed = Next("inserted");
 var placedTree = placed["node"] == null ? new JsonArray() : Next("tree")["nodes"].AsArray();
@@ -144,8 +144,8 @@ var pastedFont = (string)Next("props")["props"].AsArray().First(p => (string)p["
 Check((string)pastedNode["text"] == "Pasted" && pastedFont == "30" && ((string)note["message"]).Contains("NoSuchProperty") && ((string)note["message"]).Contains("FontSize"),
     $"insert with props: text {pastedNode["text"]}, FontSize {pastedFont}; note: {note["message"]}");
 
-// the page's wrapper is not the snippet's code: never an insert target; a click on its empty area goes into
-// the snippet's top container, last; with a leaf on top the click is refused and place mode stays on
+// the page's wrapper is not the snippet's code: never an insert target; a click on its empty area is refused and
+// place mode stays on (also with a leaf on top)
 await handle($"{{\"type\":\"insert\",\"request\":15,\"parent\":{wrapperId},\"typeName\":\"DrawnUi.Draw.SkiaLabel\"}}");
 var wrapperNote = Next("error");
 Check(Next("inserted")["node"] == null && ((string)wrapperNote["message"]).Contains("snippet"), $"insert into the page wrapper refused: {wrapperNote["message"]}");
@@ -155,10 +155,10 @@ host.AdvanceFrames(2, 16);
 await handle("{\"type\":\"placeMode\",\"typeName\":\"DrawnUi.Draw.SkiaShape\"}");
 robot.Tap(100, 140); // below the column: only the wrapper is there
 host.AdvanceFrames(3, 16);
-var intoColumn = Next("inserted");
-Next("tree");
-Check(intoColumn["node"] != null && (long?)intoColumn["parent"] == columnId && column.Views.Count == 2 && column.Views[1] is SkiaShape,
-    $"place mode: a click on the wrapper's empty area went into the snippet's column at {intoColumn["index"]} (last)");
+var wrapperArea = Next("error");
+Check((string)wrapperArea["message"] == "Click inside the snippet's layout" && column.Views.Count == 1,
+    $"place mode: a click on the wrapper's empty area is refused: {wrapperArea["message"]}");
+await handle("{\"type\":\"placeMode\",\"typeName\":null}");
 var leaf = new SkiaLabel { Text = "Leaf snippet" };
 wrapper.RemoveSubView(column);
 wrapper.AddSubView(leaf);
@@ -274,6 +274,79 @@ host.AdvanceFrames(2, 16);
 var dAfter = Next2Tree()["nodes"].AsArray();
 Check(dAfter.Any(n => (long)n["id"] == deepId && (long?)n["parent"] == dCellId) && Names(mBox).SequenceEqual(new[] { "A", "C" }), "inside a cell: nothing changed");
 column.RemoveSubView(deepList);
+host.AdvanceFrames(2, 16);
+while (outbox.TryTake(out _)) { }
+// where a placed control lands (placeAt = a place-mode click there): into the control under the point when it holds
+// children, at the index the point is at; else next to it, before or after by the half the point is in; nothing
+// inside a template's cell
+SkiaLabel L(string text) => new SkiaLabel { Text = text, WidthRequest = 30, HeightRequest = 14 };
+var pA = L("pA");
+var ps1 = L("ps1");
+var pr1 = L("pr1");
+var pStack = new SkiaLayout { Type = LayoutType.Column, Spacing = 10, WidthRequest = 150, Children = new List<SkiaControl> { ps1, L("ps2") } };
+var pRow = new SkiaLayout { Type = LayoutType.Row, Spacing = 4, Children = new List<SkiaControl> { pr1, L("pr2") } };
+var pLayer = new SkiaLayout { WidthRequest = 150, HeightRequest = 24, Children = new List<SkiaControl> { L("pin") } };
+var pList = new SkiaLayout { Type = LayoutType.Column, ItemsSource = new List<string> { "x" }, ItemTemplate = new DataTemplate(() => new SkiaLayout { WidthRequest = 60, HeightRequest = 14 }) };
+var pRoot = new SkiaLayout { Type = LayoutType.Column, Padding = new DrawnUi.Views.Thickness(4), Spacing = 2, Children = new List<SkiaControl> { pA, pStack, pRow, pLayer, pList } };
+wrapper.RemoveSubView(column);
+wrapper.AddSubView(pRoot);
+host.AdvanceFrames(3, 16);
+var pNodes = Next2Tree()["nodes"].AsArray();
+long PId(object c) => (long)pNodes.First(n => (string)n["text"] == (c as SkiaLabel)?.Text || false)["id"];
+float[] PRect(long nodeId) => pNodes.First(n => (long)n["id"] == nodeId)["rect"].AsArray().Select(v => (float)v).ToArray();
+long ParentOf(long nodeId) => (long)pNodes.First(n => (long)n["id"] == nodeId)["parent"];
+var pRootId = ParentOf(PId(pA));
+var pStackId = ParentOf(PId(ps1));
+var pRowId = ParentOf(PId(pr1));
+var pLayerId = ParentOf(PId(pLayer.Views[0]));
+async Task<(long? Parent, int? Index)> PlaceAt(float x, float y)
+{
+    await handle($"{{\"type\":\"placeAt\",\"typeName\":\"DrawnUi.Draw.SkiaLabel\",\"x\":{x.ToString(System.Globalization.CultureInfo.InvariantCulture)},\"y\":{y.ToString(System.Globalization.CultureInfo.InvariantCulture)}}}");
+    var ins = Within("inserted", 3000);
+    if (ins?["node"] == null)
+        return (null, null);
+    Within("tree", 3000);
+    await handle($"{{\"type\":\"remove\",\"request\":40,\"node\":{ins["node"]}}}");
+    Within("tree", 3000);
+    while (outbox.TryTake(out _)) { }
+    return ((long?)ins["parent"], (int?)ins["index"]);
+}
+var sr = PRect(pStackId);
+var s1r = PRect(PId(ps1));
+var at1 = await PlaceAt(sr[0] + sr[2] - 4, s1r[1] + s1r[3] + 10);
+Check(at1 == (pStackId, 1), $"place: into a stack at the index the point is at -> {at1}");
+var ar = PRect(PId(pA));
+var at2 = await PlaceAt(ar[0] + 10, ar[1] + 4);
+var at3 = await PlaceAt(ar[0] + 10, ar[1] + ar[3] - 4);
+Check(at2 == (pRootId, 0) && at3 == (pRootId, 1), $"place: beside a label in a column, top half before, bottom half after -> {at2}, {at3}");
+var r1r = PRect(PId(pr1));
+var at4 = await PlaceAt(r1r[0] + 4, r1r[1] + 10);
+var at5 = await PlaceAt(r1r[0] + r1r[2] - 4, r1r[1] + 10);
+Check(at4 == (pRowId, 0) && at5 == (pRowId, 1), $"place: beside a label in a row, left half before, right half after -> {at4}, {at5}");
+var lr = PRect(pLayerId);
+var at6 = await PlaceAt(lr[0] + lr[2] - 6, lr[1] + lr[3] - 6);
+Check(at6 == (pLayerId, 1), $"place: a layer's empty area, last -> {at6}");
+var pCell = pNodes.First(n => n["templateIndex"] != null);
+var cr = PRect((long)pCell["id"]);
+var at7 = await PlaceAt(cr[0] + 10, cr[1] + 10);
+Check(at7 == (null, null), $"place: nothing inside a template's cell -> {at7}");
+var at8 = await PlaceAt(380, 280);
+Check(at8 == (null, null), $"place: nothing on the page's own wrapper -> {at8}");
+// a control that fills the canvas (the page's wrapper here): its box shows along the canvas's edges
+await handle($"{{\"type\":\"highlight\",\"node\":{wrapperId}}}");
+host.RenderFrame(16);
+var edgeFile = Path.Combine(Path.GetTempPath(), $"pagetest-edge-{Environment.ProcessId}.png");
+host.SavePng(edgeFile);
+using (var edgeBitmap = SkiaSharp.SKBitmap.Decode(edgeFile))
+{
+    File.Delete(edgeFile);
+    var magenta = new SkiaSharp.SKColor(255, 0, 255);
+    Check(edgeBitmap.GetPixel(0, 150) == magenta && edgeBitmap.GetPixel(200, 0) == magenta && edgeBitmap.GetPixel(399, 150) == magenta && edgeBitmap.GetPixel(200, 299) == magenta,
+        $"a box around a control filling the canvas shows inside its edges: {edgeBitmap.GetPixel(0, 150)}");
+}
+await handle("{\"type\":\"highlight\",\"node\":null}");
+wrapper.RemoveSubView(pRoot);
+wrapper.AddSubView(column);
 host.AdvanceFrames(2, 16);
 while (outbox.TryTake(out _)) { }
 // a parent whose Children is its own observed collection: the move goes through that collection

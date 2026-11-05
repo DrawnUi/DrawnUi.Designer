@@ -5,7 +5,7 @@ import CanvasKitInit from "canvaskit-wasm/bin/full/canvaskit.js";
 import { transformSync } from "esbuild";
 import type { ReactElement } from "react";
 import * as Core from "drawnui-react/core";
-import { SkiaButton, SkiaLabel, SkiaLayer, SkiaStack } from "drawnui-react";
+import { SkiaButton, SkiaLabel, SkiaLayer, SkiaRow, SkiaStack } from "drawnui-react";
 // the reconciler's root (not exported by the package; test/run.mjs resolves it): the same files as "drawnui-react"
 import { createDrawnRoot } from "drawnui-react/reconciler";
 import { attachPage, detach, __test } from "../src/index";
@@ -462,6 +462,109 @@ class TestCanvas {
     const tree = after.find((m) => m.type === "tree");
     check("place mode: the click inserts and answers its id", !!ins?.node && ins.parent === layer.AccessibilityId && !after.some((m) => m.type === "error")
       && tree?.nodes.some((n: any) => n.id === ins.node && n.parent === layer.AccessibilityId), JSON.stringify(after).slice(0, 300));
+    detach();
+    root.render(<SkiaStack />);
+    clearInterval(pump);
+  }
+
+  // where a placed control lands: into the control under the pointer when it holds children, at the index the pointer
+  // is at; else next to it, before or after by the half the pointer is in; nothing inside a template's cell
+  {
+    const canvas = new TestCanvas(CK.MakeSurface(400, 300));
+    const pump = setInterval(() => { if (canvas.requested) canvas.Draw(); }, 2);
+    const root = createDrawnRoot(canvas as any);
+    const r: any = {};
+    const ref = (k: string) => (c: any) => { if (c) r[k] = c; };
+    const tpl = () => { const c = new (Core as any).SkiaLayout(); c.WidthRequest = 80; c.HeightRequest = 20; return c; };
+    root.render(
+      <SkiaStack ref={ref("root")} Padding={10} Spacing={10}>
+        <SkiaLabel ref={ref("a")} Text="A" WidthRequest={60} HeightRequest={20} />
+        <SkiaStack ref={ref("stack")} Spacing={20} WidthRequest={200}>
+          <SkiaLabel ref={ref("s1")} Text="s1" WidthRequest={60} HeightRequest={20} />
+          <SkiaLabel Text="s2" WidthRequest={60} HeightRequest={20} />
+        </SkiaStack>
+        <SkiaRow ref={ref("row")} Spacing={10}>
+          <SkiaLabel ref={ref("r1")} Text="r1" WidthRequest={60} HeightRequest={20} />
+          <SkiaLabel Text="r2" WidthRequest={60} HeightRequest={20} />
+        </SkiaRow>
+        <SkiaLayer ref={ref("layer")} WidthRequest={200} HeightRequest={40}>
+          <SkiaLabel Text="in" WidthRequest={60} HeightRequest={20} />
+        </SkiaLayer>
+        <SkiaStack ref={ref("list")} ItemsSource={["x"]} ItemTemplate={tpl} WidthRequest={100} HeightRequest={30} />
+      </SkiaStack>,
+    );
+    await wait(30); canvas.Draw();
+    const got: any[] = [];
+    const receive = attachPage(canvas, (t) => got.push(JSON.parse(t)));
+    for (let t = 0; t < 1000 && !got.some((m) => m.type === "tree"); t += 5) await wait(5);
+    const rect = (c: any) => __test.walk().find((v: any) => v.control === c)!.rect as number[];
+    const place = async (x: number, y: number): Promise<[number, number] | undefined> => {
+      __test.state.pick = { place: "SkiaLabel", unhook: () => {} } as any;
+      const from = got.length;
+      __test.click(x, y);
+      for (let t = 0; t < 1000 && !got.slice(from).some((m) => m.type === "inserted"); t += 5) await wait(5);
+      const ins = got.slice(from).find((m) => m.type === "inserted");
+      if (!ins?.node) return undefined;
+      receive({ type: "remove", request: 90, node: ins.node });
+      for (let t = 0; t < 1000 && !got.slice(from).some((m) => m.type === "tree" && !m.nodes.some((n: any) => n.id === ins.node)); t += 5) await wait(5);
+      return [ins.parent, ins.index];
+    };
+    const id = (k: string) => r[k].AccessibilityId;
+    const same = (a: any, b: any) => JSON.stringify(a) === JSON.stringify(b);
+    const st = rect(r.stack), s1 = rect(r.s1);
+    let at = await place(st[0] + 150, s1[1] + s1[3] + 10);
+    check("place: into a stack, at the index the pointer is at", same(at, [id("stack"), 1]), JSON.stringify(at));
+    const a = rect(r.a);
+    at = await place(a[0] + 30, a[1] + 3);
+    check("place: beside a label in a column, top half = before", same(at, [id("root"), 0]), JSON.stringify(at));
+    at = await place(a[0] + 30, a[1] + a[3] - 3);
+    check("place: beside a label in a column, bottom half = after", same(at, [id("root"), 1]), JSON.stringify(at));
+    const r1 = rect(r.r1);
+    at = await place(r1[0] + 3, r1[1] + 10);
+    check("place: beside a label in a row, left half = before", same(at, [id("row"), 0]), JSON.stringify(at));
+    at = await place(r1[0] + r1[2] - 3, r1[1] + 10);
+    check("place: beside a label in a row, right half = after", same(at, [id("row"), 1]), JSON.stringify(at));
+    const l = rect(r.layer);
+    at = await place(l[0] + l[2] - 5, l[1] + l[3] - 5);
+    check("place: a layer's empty area, last", same(at, [id("layer"), 1]), JSON.stringify(at));
+    const cell = __test.walk().find((v: any) => v.templateIndex != null);
+    at = cell ? await place(cell.rect[0] + 10, cell.rect[1] + 10) : [0, 0];
+    check("place: nothing inside a template's cell", at === undefined, JSON.stringify(at));
+    // the hover over the stack's gap boxes the stack, with a line across it at the index
+    __test.state.pick = { place: "SkiaLabel", unhook: () => {} } as any;
+    __test.hover(st[0] + 150, s1[1] + s1[3] + 10);
+    const line = __test.state.placeLine;
+    check("place: the hover boxes the stack with a line at the index", __test.state.highlight?.deref() === r.stack && !!line && line[3] - line[1] <= 2 && line[2] - line[0] >= st[2] - 1, JSON.stringify(line));
+    __test.state.pick = undefined;
+    // a drop from the editor's Controls onto the canvas: the same place, with no place mode
+    const from = got.length;
+    receive({ type: "placeAt", typeName: "SkiaLabel", x: a[0] + 30, y: a[1] + 3 });
+    for (let t = 0; t < 1000 && !got.slice(from).some((m) => m.type === "inserted"); t += 5) await wait(5);
+    const dropped = got.slice(from).find((m) => m.type === "inserted");
+    check("placeAt: inserted as a place click there", dropped?.request === 0 && !!dropped.node && dropped.parent === id("root") && dropped.index === 0, JSON.stringify(got.slice(from)).slice(0, 200));
+    detach();
+    root.render(<SkiaStack />);
+    clearInterval(pump);
+  }
+
+  // a new snippet: one empty layer filling the canvas; the place hover boxes it, inside the canvas's edges
+  {
+    const canvas = new TestCanvas(CK.MakeSurface(400, 300));
+    const pump = setInterval(() => { if (canvas.requested) canvas.Draw(); }, 2);
+    const root = createDrawnRoot(canvas as any);
+    let layer: any;
+    root.render(<SkiaLayer ref={(c: any) => { if (c) layer = c; }} HorizontalOptions="Fill" VerticalOptions="Fill" />);
+    await wait(30); canvas.Draw();
+    const got: any[] = [];
+    attachPage(canvas, (t) => got.push(JSON.parse(t)));
+    for (let t = 0; t < 1000 && !got.some((m) => m.type === "tree"); t += 5) await wait(5);
+    __test.state.pick = { place: "SkiaLabel", unhook: () => {} } as any;
+    __test.hover(200, 150);
+    await wait(30); canvas.Draw();
+    const px = (x: number, y: number) => Array.from(canvas.surface.makeImageSnapshot().readPixels(x, y, { width: 1, height: 1, colorType: CK.ColorType.RGBA_8888, alphaType: CK.AlphaType.Unpremul, colorSpace: CK.ColorSpace.SRGB }) as Uint8Array).join(",");
+    const edges = [px(0, 150), px(200, 0), px(399, 150), px(200, 299)];
+    check("a lone empty root: the place hover boxes it inside the canvas", __test.state.highlight?.deref() === layer && edges.every((p) => p === "255,0,255,255"), JSON.stringify(edges));
+    __test.state.pick = undefined;
     detach();
     root.render(<SkiaStack />);
     clearInterval(pump);

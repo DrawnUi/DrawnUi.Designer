@@ -922,6 +922,18 @@ namespace DrawnUi.Designer.Agent
                         await Ui(() => SetPlaceMode(placeType));
                         break;
 
+                    case "placeAt":
+                        // a drop from the editor's Controls onto the canvas: as a place-mode click there
+                        var dropType = root.GetProperty("typeName").GetString();
+                        var (dropX, dropY) = (root.GetProperty("x").GetSingle(), root.GetProperty("y").GetSingle());
+                        await Ui(() =>
+                        {
+                            if (_picking)
+                                SetPickMode(false);
+                            PlaceHere(dropType, dropX, dropY);
+                        });
+                        break;
+
                     case "remove":
                         var removeNode = root.GetProperty("node").GetInt64();
                         await Ui(() => RemoveControl(removeNode));
@@ -2429,6 +2441,7 @@ namespace DrawnUi.Designer.Agent
 
             _picking = false;
             _placeType = null;
+            _placeLine = null;
             if (_pickRoot is { } pickRoot && _onGestures != null && AppOnGestures.TryGetValue(pickRoot, out var saved))
             {
                 _onGestures.SetValue(pickRoot, saved.Value);
@@ -2487,12 +2500,18 @@ namespace DrawnUi.Designer.Agent
             _hoverQueued = false;
             if (!_picking || _pickQueued)
                 return;
-            var node = _placeType != null ? PlaceTarget(_pointerX, _pointerY).Container : Pick(_pointerX, _pointerY);
+            // place mode: the layout a click would put the control into, and the line where; pick mode: the control
+            var place = _placeType != null ? PlaceTarget(_pointerX, _pointerY) : default;
+            var node = _placeType != null ? place.Container : Pick(_pointerX, _pointerY);
+            var lineMoved = !(place.Line ?? Array.Empty<float>()).SequenceEqual(_placeLine ?? Array.Empty<float>());
+            _placeLine = place.Line;
             if (node != _pickHover)
             {
                 _pickHover = node;
                 SetHighlight(node);
             }
+            else if (lineMoved)
+                Call(_canvas, "Update");
         }
 
         private static void PickAtPointer()
@@ -2512,21 +2531,28 @@ namespace DrawnUi.Designer.Agent
             _ = Send(new { type = "picked", request = 0, node });
         }
 
-        /// <summary>The click in place mode: the control goes into the container under the pointer. UI thread.</summary>
+        /// <summary>The click in place mode: the control goes where <see cref="PlaceTarget"/> says. UI thread.</summary>
         private static void PlaceAtPointer()
         {
             var type = _placeType;
-            var (container, index) = PlaceTarget(_pointerX, _pointerY);
-            if (container == null && PageWrapper != null)
+            if (PlaceTarget(_pointerX, _pointerY).Container == null && PageWrapper != null)
             {
                 _ = SendError(0, OutsideSnippet); // stays in place mode for the next click
                 return;
             }
             _pickHover = null;
             SetPickMode(false);
+            PlaceHere(type, _pointerX, _pointerY);
+        }
+
+        /// <summary>A control of <paramref name="type"/> put where a place-mode click at the point puts it: inserted
+        /// (request 0), then the tree. UI thread.</summary>
+        private static void PlaceHere(string type, float x, float y)
+        {
+            var (container, index, _) = PlaceTarget(x, y);
             if (container == null)
             {
-                _ = SendError(0, "no container under the pointer");
+                _ = SendError(0, PageWrapper != null ? OutsideSnippet : "no control can go here");
                 _ = Send(new { type = "inserted", request = 0, node = (long?)null, parent = (long?)null, index = (int?)null });
                 return;
             }
@@ -2583,6 +2609,8 @@ namespace DrawnUi.Designer.Agent
         #region Highlight
 
         private static WeakReference<object> _highlightTarget;
+        /// <summary>Place mode: the line (x, y, width, height) where the control would go in the boxed stack, row or wrap.</summary>
+        private static float[] _placeLine;
         private static Delegate _willDraw, _wasDrawn;
         private static WeakReference<object> _hookedCanvas; // the canvas the frame hooks went on
         private static bool _frameStarted;
@@ -2715,8 +2743,15 @@ namespace DrawnUi.Designer.Agent
                     Set(_paint, "Color", Activator.CreateInstance(_skColor, (byte)(c >> 16), (byte)(c >> 8), (byte)c, (byte)(c >> 24)));
                     _paintColor = c;
                 }
-                // stroke centered on a line 1 px outside the box: covers the 2 px just around it
-                _drawRect.Invoke(canvas, new object[] { r[0] - 1, r[1] - 1, r[2] + 2, r[3] + 2, _paint });
+                // stroke centered on a line 1 px outside the box: covers the 2 px just around it; kept inside the canvas,
+                // so a control that fills it (a snippet's root) gets its box along the edges
+                var (left, top) = (Math.Max(r[0] - 1, 1), Math.Max(r[1] - 1, 1));
+                var (w, h) = _canvasWidth > 0 && _canvasHeight > 0 ? ((float)_canvasWidth, (float)_canvasHeight) : (float.MaxValue, float.MaxValue);
+                var (right, bottom) = (Math.Min(r[0] + r[2] + 1, w - 1), Math.Min(r[1] + r[3] + 1, h - 1));
+                _drawRect.Invoke(canvas, new object[] { left, top, right - left, bottom - top, _paint });
+                // place mode: where the control goes in the boxed stack, row or wrap
+                if (_placeType != null && _placeLine is { } line)
+                    _drawRect.Invoke(canvas, new object[] { line[0], line[1], line[2], line[3], _paint });
                 return true;
             }
             catch
