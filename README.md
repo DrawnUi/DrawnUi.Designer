@@ -17,10 +17,7 @@
 
 ### 🦀 Built with [DrawnUI for Rust](https://github.com/DrawnUi/DrawnUi.Rust)
 
-The designer is itself a DrawnUI app. Every panel, the menu bar, the layers tree, the color and gradient editors
-are drawn by [DrawnUI for Rust](https://github.com/DrawnUi/DrawnUi.Rust) on one Skia canvas, with keyboard and
-screen reader support. The same Rust code runs as a native desktop app, inside VS Code and in the browser
-(WebAssembly) inside DrawFiddle.
+The designer is itself a DrawnUI app. Every panel, the menu bar, the layers tree, the color and gradient editors are drawn by [DrawnUI for Rust](https://github.com/DrawnUi/DrawnUi.Rust) on one hardware-accelerated Skia canvas, with keyboard and screen reader support. The same Rust code runs as a desktop app for Windows and MacOS, as a VS Code extension and in browser (WebAssembly) inside [DrawFiddle](https://drawfiddle.com).
 
 ## What it does
 
