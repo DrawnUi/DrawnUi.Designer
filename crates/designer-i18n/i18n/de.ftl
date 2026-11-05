@@ -406,3 +406,28 @@ help-move = Steuerelemente verschieben
 help-move-1 = Ziehe die Zeile eines Steuerelements in Ebenen: Die Zeilen öffnen eine Lücke, wo es landet. Zwischen zwei Zeilen kommt es dorthin, auf ein Layout hinein, als letztes. Am oberen oder unteren Rand läuft die Liste mit; Esc bricht ab.
 help-move-2 = Alt+Pfeil hoch und Alt+Pfeil runter verschieben das ausgewählte Steuerelement um eine Stelle unter seinen Geschwistern.
 help-move-3 = Ein verschobenes Steuerelement ändert nur die App, mit einem Punkt in seiner Ebenen-Zeile: Schreiben verschiebt es auch im Code, Rückgängig setzt es zurück.
+pick-label-keys = Ein Steuerelement in der App auswählen (Strg+P)
+section-code = Code
+code-hint = Wie die Änderungen von hier in den Code der App gelangen.
+write-mode = Änderungen in den Code schreiben
+write-mode-hint = Manuell: Sie schreiben sie selbst, mit Schreiben einer Zeile oder Alle schreiben. Automatisch: Sie werden geschrieben, wenn der Code gebraucht wird, vor Neu starten und Ausführen. Immer: Jede fertige Änderung wird sofort geschrieben.
+write-mode-manual = Manuell
+write-mode-auto = Automatisch
+write-mode-always = Immer
+changes-not-in-code = { $count ->
+    [one] { $count } Änderung nicht im Code
+   *[other] { $count } Änderungen nicht im Code
+}
+write-changes-label = Alle { $count } Änderungen in den Code schreiben
+step-write-changes = Alle Änderungen schreiben
+unwritten-title = { $count ->
+    [one] { $count } Änderung ist noch nicht im Code.
+   *[other] { $count } Änderungen sind noch nicht im Code.
+}
+unwritten-write-restart = Schreiben, dann neu starten
+unwritten-skip-restart = Ohne Schreiben neu starten
+unwritten-write-run = Schreiben, dann ausführen
+unwritten-skip-run = Ohne Schreiben ausführen
+unwritten-write-close = Schreiben, dann schließen
+unwritten-skip-close = Ohne Schreiben schließen
+unwritten-cancel = Abbrechen

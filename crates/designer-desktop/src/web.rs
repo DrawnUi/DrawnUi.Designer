@@ -172,6 +172,12 @@ pub extern "C" fn designer_page(text: *const u8, len: usize) {
         deliver(Incoming::FrameOffset(m["x"].as_f64().unwrap_or(0.0) as f32, m["y"].as_f64().unwrap_or(0.0) as f32));
         return;
     }
+    // The page needs the code (before its Source, Run, Share or Export): the changes not in code are
+    // written, then `code.flushed` answers with the same request.
+    if m["type"] == "code.flush" {
+        deliver(Incoming::Flush(m["request"].clone()));
+        return;
+    }
     // A control dragged out of the editor and dropped on the app's canvas, at that canvas point (pixels).
     if m["type"] == "place" {
         if let (Some(type_name), Some(x), Some(y)) = (m["typeName"].as_str(), m["x"].as_f64(), m["y"].as_f64()) {

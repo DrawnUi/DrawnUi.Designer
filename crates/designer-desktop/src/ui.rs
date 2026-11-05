@@ -21,6 +21,10 @@ pub enum Incoming {
     /// point (pixels): it goes where a place-mode click there puts it.
     #[cfg_attr(not(target_os = "emscripten"), allow(dead_code))]
     Place { type_name: String, x: f32, y: f32 },
+    /// Page mode: the page needs the code (`code.flush`, its request): the changes not in code are
+    /// written (Auto, Always) and the page is answered with `code.flushed`.
+    #[cfg_attr(not(target_os = "emscripten"), allow(dead_code))]
+    Flush(serde_json::Value),
 }
 
 /// Sends one message to the hosting page (page mode).
@@ -36,6 +40,8 @@ mod gradient;
 mod history;
 mod moves;
 mod view;
+mod writes;
+pub use writes::WriteMode;
 
 use history::{AddVerb, Step};
 
@@ -79,6 +85,8 @@ pub struct Settings {
     pub selection_color: Option<String>,
     /// Theme and language changes apply at once, without the opening circle.
     pub instant_changes: bool,
+    /// When the live changes are written to code (Settings, Code).
+    pub write_mode: WriteMode,
 }
 
 fn section_or_default<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Section, D::Error> {
@@ -116,11 +124,12 @@ pub enum Section {
     #[default]
     Appearance,
     Layers,
+    Code,
     Connection,
     About,
 }
 
-pub const SECTIONS: [Section; 4] = [Section::Appearance, Section::Layers, Section::Connection, Section::About];
+pub const SECTIONS: [Section; 5] = [Section::Appearance, Section::Layers, Section::Code, Section::Connection, Section::About];
 
 #[derive(Clone)]
 enum PropRow {
@@ -314,6 +323,9 @@ pub struct App {
     /// Panel widths in points, set by dragging the dividers; 0 = the default.
     screens_w: f32,
     properties_w: f32,
+    /// In a page: the side panels' widths at start, from the frame's address (`controlsWidth`,
+    /// `propertiesWidth`); 0 = the page defaults. A width dragged since wins.
+    pub(crate) page_widths: (f32, f32),
     /// The selected control's properties, set ones first.
     props: Vec<designer_protocol::Prop>,
     /// The property being edited, its value as typed, and what the last edit did.
@@ -345,6 +357,17 @@ pub struct App {
     /// The open choices dropdown, and the menu row under the mouse.
     popup: Option<PopupId>,
     menu_hover: Option<String>,
+    /// The question asked before Restart, Run or closing with changes not in code (Manual): what
+    /// waits for its answer.
+    confirm: Option<writes::AfterFlush>,
+    /// A flush of the changes not in code on its way.
+    flushing: Option<writes::Flush>,
+    /// Writes of a flush: their request, the flush's one step of the history.
+    flush_groups: std::collections::HashMap<u32, u32>,
+    /// Always: changes of new steps waiting to be written (an edit still open, a drag on).
+    always_due: Vec<writes::Unwritten>,
+    /// Wakes the window's inbox (Always writes from there).
+    pub(crate) waker: Option<drawnui::Waker>,
     /// The edited property takes a number: the field gets - / + steppers that move it by `edit_step`.
     edit_step: Option<f64>,
     /// The choices combine (a flags enum): each one toggles on or off.
@@ -619,6 +642,7 @@ impl App {
             Incoming::Theme(id) => self.set_theme_now(view::Theme::by_id(&id), cx),
             Incoming::FrameOffset(x, y) => self.frame_offset = (x, y),
             Incoming::Place { type_name, x, y } => self.place_at(type_name, x, y),
+            Incoming::Flush(request) => self.page_flush(request, cx),
             Incoming::Connected(on) => {
                 self.connected = on;
                 if on && self.settings.allow_devices {
@@ -820,7 +844,10 @@ impl App {
                     self.history_written_at(request, &path);
                     if !self.history_quiet.remove(&request) {
                         let type_name = self.tree.nodes.iter().find(|n| n.id == id).map(|n| n.type_name.clone()).unwrap_or_default();
-                        self.record(Step::WriteAdd { node: id, path, type_name, request });
+                        let step = Step::WriteAdd { node: id, path, type_name, request };
+                        if !self.record_flushed(request, step.clone()) {
+                            self.record(step);
+                        }
                     }
                 }
                 // A moved control is moved in the code too: found by its place from now on.
@@ -833,7 +860,10 @@ impl App {
                     self.history_written_at(request, &path);
                     if !self.history_quiet.remove(&request) {
                         let type_name = self.tree.nodes.iter().find(|n| n.id == id).map(|n| n.type_name.clone()).unwrap_or_default();
-                        self.record(Step::WriteMove { node: id, path, type_name, request });
+                        let step = Step::WriteMove { node: id, path, type_name, request };
+                        if !self.record_flushed(request, step.clone()) {
+                            self.record(step);
+                        }
                     }
                 }
                 // A taken-out control is out of the code too.
@@ -843,12 +873,16 @@ impl App {
                     r.written = Some(request);
                     let type_name = r.node.type_name.clone();
                     if !self.history_quiet.remove(&request) {
-                        self.record(Step::WriteDelete { node: row, type_name, request });
+                        let step = Step::WriteDelete { node: row, type_name, request };
+                        if !self.record_flushed(request, step.clone()) {
+                            self.record(step);
+                        }
                     }
                 }
                 let file = std::path::Path::new(&uri).file_name().map_or(uri.clone(), |f| f.to_string_lossy().into_owned());
                 self.status = i18n::tr_args("status-written", &[("file", file.into()), ("line", (range.start.line + 1).into())]);
                 self.status_error = false;
+                self.flush_answered(request, true, cx);
             }
             Incoming::Hub(HubToEditor::CodeRefused { request, reason, refusal, .. }) => {
                 let reason = refusal.map_or(reason, |r| i18n::tr_pairs(&r.key, &r.args));
@@ -868,6 +902,7 @@ impl App {
                     self.status = i18n::tr_args("status-not-written", &[("reason", reason.clone().into())]);
                 }
                 self.status_error = true;
+                self.flush_answered(request, false, cx);
             }
             // The app built its controls again and the hub put the changes not written back on them.
             Incoming::Hub(HubToEditor::Replayed { app, moved, replaying, lost }) if Some(app) == self.app => self.replayed(moved, replaying, lost),
@@ -1030,12 +1065,24 @@ impl App {
         }
     }
 
+    /// The left column's width (Screens and Controls; in a page Controls alone): as dragged, else in a
+    /// page what the page asked or narrower than on the desktop, so Layers in the middle has the room.
     fn screens_width(&self) -> f32 {
-        if self.screens_w > 0.0 { self.screens_w } else { 160.0 }
+        match (self.screens_w, self.page_widths.0) {
+            (w, _) if w > 0.0 => w,
+            (_, w) if self.embedded && w > 0.0 => w,
+            _ if self.embedded => 150.0,
+            _ => 160.0,
+        }
     }
 
     fn properties_width(&self) -> f32 {
-        if self.properties_w > 0.0 { self.properties_w } else { 340.0 }
+        match (self.properties_w, self.page_widths.1) {
+            (w, _) if w > 0.0 => w,
+            (_, w) if self.embedded && w > 0.0 => w,
+            _ if self.embedded => 270.0,
+            _ => 340.0,
+        }
     }
 
     /// Remembers the side panels' widths (after a divider is let go).
@@ -1312,6 +1359,14 @@ impl App {
 
     /// Puts a Connection row's text on the clipboard.
     /// Lets apps on other devices connect, or stops it (remembered).
+    pub fn set_write_mode(&mut self, mode: WriteMode) {
+        if self.settings.write_mode != mode {
+            self.settings.write_mode = mode;
+            self.always_due.clear();
+            self.save_settings();
+        }
+    }
+
     pub fn set_allow_devices(&mut self, on: bool) {
         if self.settings.allow_devices != on {
             self.settings.allow_devices = on;
@@ -1512,10 +1567,20 @@ impl App {
         }
     }
 
-    /// Builds and starts a recent app with the designer attached.
+    /// Builds and starts a recent app with the designer attached; the changes not in code are written
+    /// first (Auto, Always) or the designer asks (Manual).
     fn run_project(&mut self, project: String, cx: &mut Cx) {
         if self.runs.contains_key(&project) {
             return; // already on its way
+        }
+        if !self.changes_first(writes::AfterFlush::Run(project.clone()), cx) {
+            self.run_now(project, cx);
+        }
+    }
+
+    pub(crate) fn run_now(&mut self, project: String, cx: &mut Cx) {
+        if self.runs.contains_key(&project) {
+            return;
         }
         self.runs.insert(project.clone(), (designer_protocol::RunState::Building, String::new()));
         if let Some(to_hub) = &self.to_hub {
@@ -1524,8 +1589,18 @@ impl App {
         cx.items_reset(self.apps_list);
     }
 
-    /// Stops a connected app and runs it again (rebuilt, with the designer attached).
+    /// Stops a connected app and runs it again (rebuilt, with the designer attached); the changes
+    /// not in code are written first (Auto, Always) or the designer asks (Manual).
     fn restart_pill(&mut self, _cell: usize, cx: &mut Cx) {
+        if self.apps.get(self.pill_slot()).is_none() {
+            return;
+        }
+        if !self.changes_first(writes::AfterFlush::Restart, cx) {
+            self.restart_now(cx);
+        }
+    }
+
+    pub(crate) fn restart_now(&mut self, cx: &mut Cx) {
         let Some(a) = self.apps.get(self.pill_slot()) else { return };
         let (app, project) = (a.id, a.info.project.clone().unwrap_or_default());
         self.runs.insert(project, (designer_protocol::RunState::Building, String::new()));
@@ -2768,6 +2843,12 @@ impl Control for Inbox {
                 app.apply(incoming, cx);
             }
             app.inbox_rx = Some(rx);
+            app.write_if_due(cx);
+            // The window's close button with changes not in code: the question first.
+            #[cfg(not(target_os = "emscripten"))]
+            if crate::platform::take_close_asked() && app.confirm.is_none() && !app.changes_first(writes::AfterFlush::Close, cx) {
+                app.go_on(writes::AfterFlush::Close, cx);
+            }
         });
     }
 }
@@ -2900,6 +2981,8 @@ fn make() -> Box<dyn drawnui::App> {
     let to_hub: ToHub = Box::new(crate::web::send);
     #[allow(unused_mut)]
     let mut settings = Settings::load();
+    #[allow(unused_mut)]
+    let mut page_widths = (0.0, 0.0);
     // A page that hosts the editor (DrawFiddle) gives its theme in the frame's address, so the first
     // frame is already in it (`?theme=midnight`), and may turn the change animation off (`?animateTheme=0`).
     #[cfg(target_os = "emscripten")]
@@ -2910,12 +2993,22 @@ fn make() -> Box<dyn drawnui::App> {
         if crate::web::param("animateTheme").as_deref() == Some("0") {
             settings.instant_changes = true;
         }
+        // `?controlsWidth=<px>&propertiesWidth=<px>`: the side panels at start; Layers takes the rest.
+        page_widths = (
+            crate::web::param("controlsWidth").and_then(|w| w.parse().ok()).unwrap_or(0.0),
+            crate::web::param("propertiesWidth").and_then(|w| w.parse().ok()).unwrap_or(0.0),
+        );
+        // `?writeMode=manual|auto|always`: when the changes made here are written to the page's code.
+        if let Some(mode) = crate::web::param("writeMode").as_deref().and_then(WriteMode::from_name) {
+            settings.write_mode = mode;
+        }
     }
     view::set_theme(settings.theme);
     i18n::set_language(settings.language.as_deref().unwrap_or(i18n::system_language()));
     let state = App {
         screens_w: settings.screens_width,
         properties_w: settings.properties_width,
+        page_widths,
         toggled_groups: settings.toggled_groups.iter().cloned().collect(),
         screens_share: settings.screens_share,
         folded_controls: settings.folded_control_groups.iter().cloned().collect(),
@@ -2952,7 +3045,14 @@ fn make() -> Box<dyn drawnui::App> {
             crate::platform::remember_window_place();
         }
     });
+    let mut ui = ui;
+    ui.state.waker = Some(ui.waker());
     let waker = ui.waker();
+    #[cfg(not(target_os = "emscripten"))]
+    {
+        let waker = waker.clone();
+        crate::platform::on_close_asked(move || waker.invalidate(inbox, Dirty::APPLY));
+    }
     let wake = move || waker.invalidate(inbox, Dirty::APPLY);
     #[cfg(not(target_os = "emscripten"))]
     crate::net::start(*PORT.get().expect("port set before run"), to_ui, from_ui, wake);
@@ -3034,7 +3134,7 @@ mod shots {
         let tree = host.rect(host.ui.state.tree_list);
         let props = host.rect(host.ui.state.props_list);
         assert!(controls.left < 20.0 && controls.top < 90.0, "Controls at the top left, under its header and search: {controls:?}");
-        assert!(tree.left >= 159.0 && tree.top < 40.0, "Layers right of Controls, at the top: {tree:?}");
+        assert!(tree.left >= 149.0 && tree.top < 40.0, "Layers right of Controls (150 wide in a page), at the top: {tree:?}");
         assert!(props.right >= 1279.0, "Properties at the right edge: {props:?}");
         host.ui.set_accessibility_enabled(true);
         host.frame_after(drawnui::ACCESSIBILITY_INTERVAL_MS);
@@ -3042,6 +3142,38 @@ mod shots {
         let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/designer-shots");
         std::fs::create_dir_all(&dir).unwrap();
         host.save_png(dir.join("27-embedded.png").to_str().unwrap());
+    }
+
+    /// In a page the side panels start narrower than on the desktop, so Layers in the middle has the
+    /// room (a 770 px frame: Controls 150, Properties 270); the page may set them; a dragged width wins.
+    #[test]
+    fn in_a_page_layers_gets_the_room() {
+        let page = |widths: (f32, f32), dragged: f32| {
+            let mut state = with_controls(with_props());
+            state.embedded = true;
+            state.page_widths = widths;
+            state.properties_w = dragged;
+            let font = |name: &str| assets(&format!("assets/{name}")).expect("font file");
+            let ui = Ui::new(state, view::build).font_bytes("Default", &font("OpenSans-Regular.ttf")).font_bytes("Semibold", &font("OpenSans-Semibold.ttf")).background(view::window_background());
+            let mut host = Headless::new(keys(ui), 770, 640, 1.0);
+            host.settle();
+            host
+        };
+        let mut host = page((0.0, 0.0), 0.0);
+        let (controls, tree, props) = (host.rect(host.ui.state.controls_list), host.rect(host.ui.state.tree_list), host.rect(host.ui.state.props_list));
+        assert!((controls.width() - 150.0).abs() < 2.0 && (props.width() - 270.0).abs() < 2.0, "{controls:?} {props:?}");
+        assert!(tree.width() >= 300.0, "Layers has the rest: {tree:?}");
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/designer-shots");
+        std::fs::create_dir_all(&dir).unwrap();
+        host.save_png(dir.join("29-embedded-770.png").to_str().unwrap());
+        // The page's own widths, and a width dragged since.
+        let host = page((180.0, 300.0), 0.0);
+        assert!((host.rect(host.ui.state.controls_list).width() - 180.0).abs() < 2.0 && (host.rect(host.ui.state.props_list).width() - 300.0).abs() < 2.0);
+        let host = page((180.0, 300.0), 320.0);
+        assert!((host.rect(host.ui.state.props_list).width() - 320.0).abs() < 2.0, "dragged: the person's width");
+        // The desktop window: as before.
+        let desktop = self::host(with_controls(with_props()));
+        assert!((desktop.rect(desktop.ui.state.props_list).width() - 340.0).abs() < 2.0);
     }
 
     /// The controls an app can create, as its agent lists them: some of every group, one with a
@@ -4610,6 +4742,7 @@ mod shots {
             .font_bytes("Semibold", &font("OpenSans-Semibold.ttf"))
             .background(view::window_background());
         let mut host = Headless::new(keys(ui), 1280, 820, 1.0);
+        host.ui.state.waker = Some(host.ui.waker());
         host.settle();
         host
     }
@@ -5147,6 +5280,231 @@ mod shots {
         assert_eq!(host.ui.state.placing.as_deref(), Some("DrawnUi.Draw.SkiaLabel"), "its inserted answer names the type");
     }
 
+    // ---- Writing changes to code (Settings, Code: Manual, Auto, Always) ----
+
+    /// Two values changed live and not written: FontSize on the label 117, Text on the label 118.
+    fn with_changes(mode: WriteMode) -> App {
+        let mut state = with_props();
+        state.settings.write_mode = mode;
+        state.apps[0].info.project = Some("C:/apps/HelloWpf/HelloWpf.csproj".into());
+        for (node, prop, value) in [(117u64, "FontSize", "30"), (118, "Text", "Changed")] {
+            state.live_original.insert((node, prop.into()), "x".into());
+            state.pending.insert((node, prop.into()), value.into());
+        }
+        state
+    }
+
+    fn set_codes(sent: &std::sync::Mutex<Vec<EditorMsg>>) -> Vec<(u32, u64, String)> {
+        sent.lock().unwrap().iter().filter_map(|m| if let EditorMsg::SetCode { request, node, prop, .. } = m { Some((*request, *node, prop.clone())) } else { None }).collect()
+    }
+
+    fn edited(host: &mut Headless<App>, to_ui: &std::sync::mpsc::Sender<Incoming>, request: u32, node: u64) {
+        let range = designer_protocol::source::EditorRange::default();
+        feed(host, to_ui, HubToEditor::CodeEdited { request, node, uri: "Page.cs".into(), range });
+    }
+
+    fn frames(host: &mut Headless<App>, n: usize) {
+        for _ in 0..n {
+            host.frame_after(16.0);
+        }
+    }
+
+    fn restarts(sent: &std::sync::Mutex<Vec<EditorMsg>>) -> usize {
+        sent.lock().unwrap().iter().filter(|m| matches!(m, EditorMsg::RestartApp { .. })).count()
+    }
+
+    /// The desktop window has Pick in its title bar, named with its key; Layers has it only in a
+    /// page, which has no title bar.
+    #[test]
+    fn pick_is_in_the_title_bar_on_the_desktop_and_in_layers_in_a_page() {
+        let names = |embedded: bool| {
+            let mut state = connected();
+            state.embedded = embedded;
+            let mut host = host(state);
+            host.ui.set_accessibility_enabled(true);
+            host.frame_after(drawnui::ACCESSIBILITY_INTERVAL_MS);
+            let labels: Vec<String> = host.ui.accessibility_nodes().iter().map(|n| n.label.clone()).collect();
+            (labels.iter().any(|l| l == "Pick a control in the app (Ctrl+P)"), labels.iter().any(|l| l == "Pick a control in the app"))
+        };
+        assert_eq!(names(false), (true, false), "desktop: the title bar's, not Layers'");
+        assert_eq!(names(true), (false, true), "in a page: Layers', no title bar");
+        // The title bar's button picks, and reads pressed while it does.
+        let mut host = host(connected());
+        let at = at_label(&mut host, "Pick a control in the app (Ctrl+P)");
+        host.tap(at.0, at.1);
+        host.settle();
+        assert!(host.ui.state.pick_mode);
+    }
+
+    /// The changes not in code are counted where they can be written at once: the title bar on the
+    /// desktop, the Layers header in a page.
+    #[test]
+    fn the_changes_not_in_code_are_counted_with_write_all() {
+        let shown = |embedded: bool, mode: WriteMode| {
+            let mut state = with_changes(mode);
+            state.embedded = embedded;
+            let mut host = host(state);
+            host.ui.set_accessibility_enabled(true);
+            host.frame_after(drawnui::ACCESSIBILITY_INTERVAL_MS);
+            host.ui.accessibility_nodes().iter().any(|n| n.label == "Write all 2 changes to code")
+        };
+        assert!(shown(false, WriteMode::Manual) && shown(true, WriteMode::Manual), "both windows, every mode");
+        let mut state = with_changes(WriteMode::Manual);
+        state.pending.clear();
+        let mut host = host(state);
+        host.ui.set_accessibility_enabled(true);
+        host.frame_after(drawnui::ACCESSIBILITY_INTERVAL_MS);
+        assert!(!host.ui.accessibility_nodes().iter().any(|n| n.label.starts_with("Write all") && n.label.ends_with("changes to code") && n.label.contains("Write all 0")), "none: not shown");
+    }
+
+    /// Write all changes: every change in one go, one step of the history; Ctrl+Z takes all of
+    /// them back together.
+    #[test]
+    fn a_flush_is_one_step_of_the_history() {
+        let (mut host, sent, to_ui) = wired(with_changes(WriteMode::Manual));
+        let at = at_label(&mut host, "Write all 2 changes to code");
+        host.tap(at.0, at.1);
+        host.settle();
+        let writes = set_codes(&sent);
+        assert_eq!(writes.iter().map(|w| (w.1, w.2.as_str())).collect::<Vec<_>>(), [(117, "FontSize"), (118, "Text")]);
+        for (request, node, _) in &writes {
+            edited(&mut host, &to_ui, *request, *node);
+        }
+        let undo = host.ui.state.histories.get(&1).map(|h| h.undo.iter().map(|s| s.label()).collect::<Vec<_>>()).unwrap_or_default();
+        assert_eq!(undo, ["Write all changes"], "one step");
+        sent.lock().unwrap().clear();
+        host.key_down("KeyZ", ctrl(false));
+        host.settle();
+        let undone: Vec<u32> = sent.lock().unwrap().iter().filter_map(|m| if let EditorMsg::UndoCode { request } = m { Some(*request) } else { None }).collect();
+        assert_eq!(undone.len(), 2, "both writes taken back: {undone:?}");
+    }
+
+    /// Restart: Manual asks first; Auto writes the changes, then restarts once they are written.
+    #[test]
+    fn restart_writes_the_changes_first() {
+        // Auto: written at once, the restart once both writes are answered.
+        let (mut host, sent, to_ui) = wired(with_changes(WriteMode::Auto));
+        host.key_down("KeyR", ctrl(false));
+        host.settle();
+        let writes = set_codes(&sent);
+        assert_eq!((writes.len(), restarts(&sent)), (2, 0), "written first, no restart yet");
+        edited(&mut host, &to_ui, writes[0].0, writes[0].1);
+        assert_eq!(restarts(&sent), 0, "one write still on its way");
+        edited(&mut host, &to_ui, writes[1].0, writes[1].1);
+        assert_eq!(restarts(&sent), 1, "then the restart");
+        // Manual: the question, nothing written or restarted until it is answered.
+        let (mut host, sent, to_ui) = wired(with_changes(WriteMode::Manual));
+        host.key_down("KeyR", ctrl(false));
+        host.settle();
+        assert!(host.ui.state.confirm.is_some() && set_codes(&sent).is_empty() && restarts(&sent) == 0);
+        let write = at_label(&mut host, "Write them, then restart");
+        host.tap(write.0, write.1);
+        host.settle();
+        let writes = set_codes(&sent);
+        assert_eq!(writes.len(), 2);
+        for (request, node, _) in &writes {
+            edited(&mut host, &to_ui, *request, *node);
+        }
+        assert_eq!(restarts(&sent), 1);
+        // Manual, "Restart without writing": the changes stay live.
+        let (mut host, sent, _to_ui) = wired(with_changes(WriteMode::Manual));
+        host.key_down("KeyR", ctrl(false));
+        host.settle();
+        let skip = at_label(&mut host, "Restart without writing");
+        host.tap(skip.0, skip.1);
+        host.settle();
+        assert_eq!((set_codes(&sent).len(), restarts(&sent), host.ui.state.pending.len()), (0, 1, 2));
+    }
+
+    /// A page's code.flush: Auto writes and answers once the writes are done; Manual answers at
+    /// once, with what is left.
+    #[test]
+    fn a_page_flush_writes_and_answers() {
+        let run = |mode: WriteMode| {
+            let posted = std::sync::Arc::new(std::sync::Mutex::new(Vec::<serde_json::Value>::new()));
+            let mut state = with_changes(mode);
+            state.embedded = true;
+            let log = posted.clone();
+            state.to_page = Some(Box::new(move |m| log.lock().unwrap().push(m)));
+            let (mut host, sent, to_ui) = wired(state);
+            to_ui.send(Incoming::Flush(serde_json::json!(7))).unwrap();
+            host.ui.waker().invalidate(host.ui.state.inbox, Dirty::APPLY);
+            host.settle();
+            (host, sent, to_ui, posted)
+        };
+        let (mut host, sent, to_ui, posted) = run(WriteMode::Auto);
+        let writes = set_codes(&sent);
+        assert!(writes.len() == 2 && posted.lock().unwrap().is_empty(), "not answered before the writes are");
+        for (request, node, _) in &writes {
+            edited(&mut host, &to_ui, *request, *node);
+        }
+        assert_eq!(posted.lock().unwrap().as_slice(), [serde_json::json!({ "type": "code.flushed", "request": 7, "written": 2, "left": 0 })]);
+        let (_host, sent, _to_ui, posted) = run(WriteMode::Manual);
+        assert!(set_codes(&sent).is_empty());
+        assert_eq!(posted.lock().unwrap().as_slice(), [serde_json::json!({ "type": "code.flushed", "request": 7, "written": 0, "left": 2 })]);
+    }
+
+    /// Always: a finished edit is written at once (Enter), never while it is typed.
+    #[test]
+    fn always_writes_a_finished_edit_not_each_keystroke() {
+        let mut state = with_props();
+        state.settings.write_mode = WriteMode::Always;
+        let (mut host, sent, _to_ui) = wired(state);
+        let top = host.rect(host.ui.state.props_list).top + 4.0 + view::ROW + view::ROW / 2.0;
+        let at = (1280.0 - 340.0 + 300.0, top);
+        host.pan(at, at, 16.0, 1);
+        host.frame_after(16.0);
+        host.frame_after(16.0);
+        host.type_text("5");
+        frames(&mut host, 10);
+        assert!(set_codes(&sent).is_empty(), "typing writes nothing");
+        host.press_key("Enter");
+        frames(&mut host, 10);
+        assert!(sent.lock().unwrap().iter().any(|m| matches!(m, EditorMsg::SetCode { prop, value, .. } if prop == "FontSize" && value == "285")), "{:?}", sent.lock().unwrap());
+    }
+
+    /// Always: a row dragged over Layers is written once it is dropped and moved, never per frame
+    /// of the drag.
+    #[test]
+    fn always_writes_a_move_once_it_is_dropped() {
+        let mut state = label_selected_state();
+        state.settings.write_mode = WriteMode::Always;
+        let (mut host, sent, to_ui) = wired(state);
+        let moves = |sent: &std::sync::Mutex<Vec<EditorMsg>>| sent.lock().unwrap().iter().filter(|m| matches!(m, EditorMsg::MoveCode { .. })).count();
+        let from = row_at(row_of(&host, 117));
+        let below = row_at(row_of(&host, 119));
+        let to = (from.0, below.1 + view::ROW * 1.4);
+        drag_steps(&mut host, from, to, 6, true);
+        frames(&mut host, 10);
+        assert_eq!(moves(&sent), 0, "nothing written while it is carried");
+        let t = host.time_ms();
+        host.ui.pointer(drawnui::PointerKind::Up, to.0, to.1, t);
+        host.frame_after(16.0);
+        let (request, node, parent, index) = last_move(&sent).expect("a Move");
+        app_moves(&mut host, &to_ui, request, node, parent, index);
+        frames(&mut host, 10);
+        assert_eq!(moves(&sent), 1, "written once it moved");
+    }
+
+    /// Auto and Manual never write by themselves.
+    #[test]
+    fn auto_and_manual_leave_a_finished_edit_live() {
+        for mode in [WriteMode::Auto, WriteMode::Manual] {
+            let mut state = with_props();
+            state.settings.write_mode = mode;
+            let (mut host, sent, _to_ui) = wired(state);
+            let top = host.rect(host.ui.state.props_list).top + 4.0 + view::ROW + view::ROW / 2.0;
+            let at = (1280.0 - 340.0 + 300.0, top);
+            host.pan(at, at, 16.0, 1);
+            host.frame_after(16.0);
+            host.frame_after(16.0);
+            host.type_text("5");
+            host.press_key("Enter");
+            frames(&mut host, 10);
+            assert!(set_codes(&sent).is_empty() && !host.ui.state.pending.is_empty(), "{mode:?}");
+        }
+    }
+
     /// The hosting page (DrawFiddle) sets the look: the designer takes that theme at once, with no
     /// opening circle (that is only for a theme picked in Settings).
     #[test]
@@ -5465,6 +5823,7 @@ mod shots {
             allow_devices: true,
             section: Section::About,
             instant_changes: true,
+            write_mode: WriteMode::Always,
         };
         let back: Settings = serde_json::from_str(&serde_json::to_string(&saved).unwrap()).unwrap();
         assert_eq!(back.theme, saved.theme);
@@ -5474,11 +5833,13 @@ mod shots {
         assert_eq!(back.section, Section::About);
         assert_eq!(back.selection_color.as_deref(), Some("#FFA3E635"));
         assert_eq!(back.language.as_deref(), Some("de"));
+        assert_eq!(back.write_mode, WriteMode::Always);
         // The file written before panels and sections were saved still loads, with defaults for the rest.
         let old: Settings = serde_json::from_str(r#"{"theme": "graphite", "props_order": "AZ", "show_internal": false, "section": "Properties"}"#).unwrap();
         assert_eq!(old.section, Section::Appearance, "a section that no longer exists opens Appearance");
         assert_eq!(old.theme, view::Theme::by_id("graphite"));
         assert_eq!(old.screens_width, 0.0);
+        assert_eq!(old.write_mode, WriteMode::Auto, "written to code before the code is needed, by default");
     }
 
     #[test]

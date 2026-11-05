@@ -406,3 +406,28 @@ help-move = Déplacer des contrôles
 help-move-1 = Faites glisser la ligne d’un contrôle dans Calques : les lignes s’écartent là où il arrivera. Entre deux lignes il va là ; sur un layout il va dedans, en dernier. Près du haut ou du bas la liste défile ; Échap annule.
 help-move-2 = Alt+Haut et Alt+Bas déplacent le contrôle sélectionné d’une place parmi ses voisins.
 help-move-3 = Un contrôle déplacé ne change que l’app, avec un point sur sa ligne de Calques : Écrire le déplace aussi dans le code, Annuler le remet en place.
+pick-label-keys = Choisir un contrôle dans l'app (Ctrl+P)
+section-code = Code
+code-hint = Comment les modifications faites ici arrivent dans le code de l'app.
+write-mode = Écrire les modifications dans le code
+write-mode-hint = Manuel : vous les écrivez, avec Écrire d'une ligne ou Tout écrire. Auto : elles sont écrites quand le code est nécessaire, avant Redémarrer et Lancer. Toujours : chaque modification terminée est écrite aussitôt.
+write-mode-manual = Manuel
+write-mode-auto = Auto
+write-mode-always = Toujours
+changes-not-in-code = { $count ->
+    [one] { $count } modification hors du code
+   *[other] { $count } modifications hors du code
+}
+write-changes-label = Écrire les { $count } modifications dans le code
+step-write-changes = Tout écrire
+unwritten-title = { $count ->
+    [one] { $count } modification n'est pas encore dans le code.
+   *[other] { $count } modifications ne sont pas encore dans le code.
+}
+unwritten-write-restart = Les écrire, puis redémarrer
+unwritten-skip-restart = Redémarrer sans écrire
+unwritten-write-run = Les écrire, puis lancer
+unwritten-skip-run = Lancer sans écrire
+unwritten-write-close = Les écrire, puis fermer
+unwritten-skip-close = Fermer sans écrire
+unwritten-cancel = Annuler

@@ -34,6 +34,9 @@ pub(crate) enum Step {
     Move { node: u64, type_name: String, from: (u64, u32), to: (u64, u32) },
     /// A moved control moved in the code too.
     WriteMove { node: u64, path: String, type_name: String, request: u32 },
+    /// The writes of one flush (Write all changes, Restart or Run in Auto, a page's code.flush,
+    /// Always): one step, taken back and done again together.
+    Group { group: u32, steps: Vec<Step> },
 }
 
 /// One app's history: what Ctrl+Z takes back (last at the end) and what Ctrl+Y does again.
@@ -67,6 +70,8 @@ impl Step {
             Step::WriteDelete { type_name, .. } => t("step-write-delete", "type", short_type(type_name)),
             Step::Move { type_name, .. } => t("step-move", "type", short_type(type_name)),
             Step::WriteMove { type_name, .. } => t("step-write", "name", short_type(type_name)),
+            Step::Group { steps, .. } if steps.len() == 1 => steps[0].label(),
+            Step::Group { .. } => i18n::tr("step-write-changes"),
         }
     }
 
@@ -81,6 +86,7 @@ impl Step {
             | Step::WriteDelete { node, .. }
             | Step::Move { node, .. }
             | Step::WriteMove { node, .. } => *node,
+            Step::Group { steps, .. } => steps.first().map_or(0, Step::node),
         }
     }
 
@@ -89,12 +95,13 @@ impl Step {
             Step::Add { node, parent, .. } => vec![node, parent],
             Step::Move { node, from, to, .. } => vec![node, &mut from.0, &mut to.0],
             Step::Values { node, .. } | Step::WriteValues { node, .. } | Step::WriteAdd { node, .. } | Step::Delete { node, .. } | Step::WriteDelete { node, .. } | Step::WriteMove { node, .. } => vec![node],
+            Step::Group { steps, .. } => steps.iter_mut().flat_map(Step::ids_mut).collect(),
         }
     }
 }
 
 impl App {
-    fn history_mut(&mut self) -> Option<&mut History> {
+    pub(crate) fn history_mut(&mut self) -> Option<&mut History> {
         let app = self.app?;
         Some(self.histories.entry(app).or_default())
     }
@@ -111,6 +118,7 @@ impl App {
     }
 
     fn push_step(&mut self, step: Step) {
+        self.note_change(&step);
         if let Some(h) = self.history_mut() {
             h.undo.push(step);
             h.redo.clear();
@@ -129,6 +137,9 @@ impl App {
     /// Writes to code answered: one step, or one more write of the Write all it belongs to.
     pub(crate) fn record_write(&mut self, request: u32, node: u64, path: String, prop: String, value: String) {
         if self.history_quiet.remove(&request) {
+            return;
+        }
+        if self.record_flushed(request, Step::WriteValues { node, path: path.clone(), group: request, writes: vec![(prop.clone(), value.clone(), request)] }) {
             return;
         }
         let group = self.write_groups.remove(&request).unwrap_or(request);
@@ -343,6 +354,11 @@ impl App {
                     self.unwrite(*request, "");
                 }
             }
+            // The last write first.
+            Step::Group { steps, .. } => {
+                let back: Vec<Step> = std::mem::take(steps).into_iter().rev().map(|s| self.step_back(s, cx)).collect();
+                *steps = back.into_iter().rev().collect();
+            }
         }
         step
     }
@@ -396,6 +412,10 @@ impl App {
                     self.history_quiet.insert(r);
                     *request = r;
                 }
+            }
+            Step::Group { steps, .. } => {
+                let again: Vec<Step> = std::mem::take(steps).into_iter().map(|s| self.step_again(s, cx)).collect();
+                *steps = again;
             }
         }
         step

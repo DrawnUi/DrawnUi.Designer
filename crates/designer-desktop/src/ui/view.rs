@@ -428,8 +428,10 @@ fn title_bar(app: &mut App) -> Build<SkiaLayout> {
                 app_pill,
                 bind_pill,
             ),
+            top_pick_button(),
         )),
         SkiaRow::new().spacing(10).horizontal_options(LayoutOptions::End).vertical_options(LayoutOptions::Center).children((
+            changes_button(false),
             // Help last, at the far end, as in most desktop tools.
             icon_button(icons::SETTINGS, &tr("settings"), |app, cx| app.open_settings(cx)).assign(&mut app.settings_button),
             icon_button(icons::CIRCLE_QUESTION_MARK, &tr("help"), |app, cx| app.open_help(cx)).assign(&mut app.help_button),
@@ -614,6 +616,7 @@ impl Section {
         tr(match self {
             Section::Appearance => "section-appearance",
             Section::Layers => "section-layers",
+            Section::Code => "section-code",
             Section::Connection => "section-connection",
             Section::About => "section-about",
         })
@@ -623,6 +626,7 @@ impl Section {
         match self {
             Section::Appearance => icons::PALETTE,
             Section::Layers => icons::LAYERS,
+            Section::Code => icons::CODE,
             Section::Connection => icons::PLUG,
             Section::About => icons::INFO,
         }
@@ -647,6 +651,7 @@ fn settings_page(app: &mut App) -> Build<SkiaLayout> {
             panel_scroll().fill().column(1).assign(&mut app.settings_scroll).content(SkiaLayer::new().fill_x().padding((40, 28, 40, 40)).children((
                 appearance_section(app).observe(show(Section::Appearance)),
                 layers_section().observe(show(Section::Layers)),
+                code_section().observe(show(Section::Code)),
                 connection_section(app).observe(show(Section::Connection)),
                 about_section().observe(show(Section::About)),
             ))),
@@ -956,6 +961,22 @@ fn layers_section() -> Build<SkiaLayout> {
                 .color_thumb_off(Some(c(SWITCH_THUMB_OFF)))
                 .observe(|me, app: &App| me.set_is_toggled(app.settings.show_internal))
                 .on_toggled(|_me, app: &mut App, cx, on| app.set_show_internal(on, cx)),
+        ),
+    )
+}
+
+/// Code: when the changes made here are written to the app's code (Manual, Auto, Always).
+fn code_section() -> Build<SkiaLayout> {
+    section(
+        &tr("section-code"),
+        &tr("code-hint"),
+        option_row(
+            &tr("write-mode"),
+            &tr("write-mode-hint"),
+            segments(
+                &tr("write-mode"),
+                super::WriteMode::ALL.iter().map(|&mode| segment(&mode.title(), move |app| app.settings.write_mode == mode, move |app, _cx| app.set_write_mode(mode))).collect::<Vec<_>>(),
+            ),
         ),
     )
 }
@@ -1530,7 +1551,9 @@ fn layers_panel(app: &mut App) -> Build<SkiaLayout> {
             text(11.0, FAINT).vertical_options(LayoutOptions::Center).observe(|me, app: &App| {
                 me.set_text(if app.rows.is_empty() && !(app.app.is_some() && app.tree.revision > 0) { String::new() } else { tr_args("controls-count", &[("count", app.rows.len().into())]) })
             }),
-            pick_button(),
+            changes_button(true),
+            // The desktop window has Pick in its title bar.
+            pick_button().observe(|me, app: &App| me.set_is_visible(app.embedded)),
         ),
         (
             // Both ways: a deep tree in a narrow panel scrolls sideways too (its width from layers_width).
@@ -2241,6 +2264,91 @@ fn pick_button() -> Build<SkiaShape> {
             icon(icons::CROSSHAIR, 13.0, MUTED).observe(|me, app: &App| me.set_tint_color(c(if app.pick_mode { ACCENT } else { MUTED }))),
             bold(11.0, TEXT).observe(|me, app: &App| me.set_text(tr(if app.pick_mode { "pick-active" } else { "pick" }))),
         )))
+}
+
+/// The title bar's Pick, right of the apps: the pill's look, lit while the next click in the app
+/// picks a control (Ctrl+P).
+fn top_pick_button() -> Build<SkiaShape> {
+    interactive(
+        SkiaShape::new()
+            .corner_radius(12)
+            .stroke_width(1)
+            .padding((10, 4))
+            .vertical_options(LayoutOptions::Center)
+            .accessibility_role(Aria::BUTTON)
+            .accessibility_label(tr("pick-label-keys"))
+            .tooltip(tr("pick-label-keys"))
+            .observe(|me, app: &App| {
+                me.set_stroke_color(c(if app.pick_mode { ACCENT } else { LINE }));
+                me.set_accessibility_is_pressed(Some(app.pick_mode));
+            })
+            .on_tapped(|_me, app: &mut App, cx| if left_click(cx) { app.toggle_pick() }),
+        |app, _| c(if app.pick_mode { SELECTION } else { PANEL }),
+    )
+    .children(SkiaRow::new().spacing(6).children((
+        icon(icons::CROSSHAIR, 13.0, MUTED).observe(|me, app: &App| me.set_tint_color(c(if app.pick_mode { ACCENT } else { MUTED }))),
+        bold(12.0, TEXT).observe(|me, app: &App| me.set_text(tr(if app.pick_mode { "pick-active" } else { "pick" }))),
+    )))
+}
+
+/// How many changes are not in code, with Write all: in the title bar on the desktop, in the Layers
+/// header in a page (`in_layers`). Shown while there are some.
+fn changes_button(in_layers: bool) -> Build<SkiaShape> {
+    interactive(
+        SkiaShape::new()
+            .corner_radius(6)
+            .stroke_width(1)
+            .stroke_color(c(ACCENT))
+            .padding((8, 3))
+            .vertical_options(LayoutOptions::Center)
+            .accessibility_role(Aria::BUTTON)
+            .is_visible(false)
+            .observe(move |me, app: &App| {
+                let count = app.unwritten_count();
+                #[cfg(not(target_os = "emscripten"))]
+                if !in_layers {
+                    // The window's close button asks first while there are some.
+                    crate::platform::hold_close(count > 0);
+                }
+                me.set_is_visible(count > 0 && app.embedded == in_layers);
+                me.set_accessibility_label(tr_args("write-changes-label", &[("count", count.into())]));
+                me.set_tooltip(tr_args("write-changes-label", &[("count", count.into())]));
+            })
+            .on_tapped(|_me, app: &mut App, cx| {
+                if left_click(cx) {
+                    app.write_everything(cx);
+                }
+            }),
+        |_, _| c(PANEL),
+    )
+    .children(SkiaRow::new().spacing(6).children((
+        icon(icons::CODE, 13.0, ACCENT),
+        text(11.0, MUTED).observe(|me, app: &App| me.set_text(tr_args("changes-not-in-code", &[("count", app.unwritten_count().into())]))),
+        bold(11.0, TEXT).text(tr("write-all")),
+    )))
+}
+
+/// The question before Restart, Run or closing with changes not in code: write them first, go on
+/// without them, or stay.
+pub fn unwritten_menu(app: &App) -> Build<SkiaShape> {
+    use super::writes::AfterFlush;
+    let (write, skip) = match app.confirm {
+        Some(AfterFlush::Run(_)) => ("unwritten-write-run", "unwritten-skip-run"),
+        Some(AfterFlush::Close) => ("unwritten-write-close", "unwritten-skip-close"),
+        _ => ("unwritten-write-restart", "unwritten-skip-restart"),
+    };
+    let title = tr_args("unwritten-title", &[("count", app.unwritten_count().into())]);
+    let rows = vec![
+        SkiaShape::new().fill_x().padding((10, 6)).accessibility_role(Aria::PRESENTATION).children(text(12.0, MUTED).text(title.clone())),
+        menu_item(tr(write), |_| false, |app, cx| app.answer_unwritten(true, cx)),
+        menu_item(tr(skip), |_| false, |app, cx| app.answer_unwritten(false, cx)),
+        menu_item(tr("unwritten-cancel"), |_| false, |app, cx| {
+            app.confirm = None;
+            app.close_popup(cx);
+        }),
+    ];
+    let longest = [title.chars().count(), tr(write).chars().count(), tr(skip).chars().count()].into_iter().max().unwrap_or(20);
+    menu_panel(rows, menu_width(longest)).accessibility_label(title)
 }
 
 /// The bottom line: the link to the hub and how many apps are connected.

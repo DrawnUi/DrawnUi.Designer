@@ -243,10 +243,11 @@ allowed, connect to port 54272 on the network. To use other ports, set
 
 | Menu | Items |
 |---|---|
-| File | Run app (the recent apps that are not running), Restart app (Ctrl+R) · Settings (Ctrl+,) · Exit |
+| File | Run app (the recent apps that are not running), Restart app (Ctrl+R) · Settings (Ctrl+,), About · Exit |
 | Edit | Undo, Redo (Ctrl+Z, Ctrl+Y) · Copy (Ctrl+C), Paste (Ctrl+V), Duplicate (Ctrl+D) · Copy style (Ctrl+Shift+C), Paste style (Ctrl+Shift+V) · Delete (Del) |
-| View | Properties order (Set or Type) · Show library parts · Pick (Ctrl+P) |
-| Help | Help (F1), About |
+
+Right of the apps, **Pick** (Ctrl+P): lit while the next click in the app selects a control. At the right end, the
+count of changes not in code with **Write all** (while there are some), Settings, and Help (F1).
 
 Click a title, or press Alt with its underlined letter. Alt alone puts the keyboard on the bar: Left and Right
 move between the titles, Down, Enter or Space open one. In a menu, Up and Down move through the items that can act
@@ -254,7 +255,8 @@ move between the titles, Down, Enter or Space open one. In a menu, Up and Down m
 Enter runs the item, Esc closes one level; Esc on the bar, or Alt again, gives the keyboard back to where it was.
 A click outside closes everything. Each item does what its button
 or key does, shows that key, and is dimmed when it cannot act now. The keys work with the menus closed too,
-while no text field has the keyboard; on macOS they use Command. In a page (DrawFiddle) there is no menu bar.
+while no text field has the keyboard; on macOS they use Command. In a page (DrawFiddle) there is no title bar: Pick
+and the count of changes not in code are in the Layers header.
 
 **Screens.** The pages your app's shell can open. Tap one to open it in the app.
 
@@ -405,6 +407,24 @@ changes not written yet are put back onto the rebuilt controls (values, added co
 ones taken out again), with their dots, Undo and Write. A change whose control or place is no longer in the code
 cannot be kept; the line at the bottom says which.
 
+## When changes are written to code
+
+Settings, Code, **Write changes to code**:
+
+- **Manual**: you write them, with a row's Write or Write all.
+- **Auto** (the default): they stay live until the code is needed. Restart app (Ctrl+R, the app's restart button)
+  and Run app write them all first, then restart or run. In a page, the page asks before it needs the code
+  (`code.flush`, see Hosting the editor in a page).
+- **Always**: each finished change is written at once: Enter or leaving a field, a color picker or gradient closed,
+  a drop, paste, duplicate, move, delete or paste style. Never while you type or drag.
+
+In every mode the title bar shows how many changes are not in code yet, with **Write all**, which writes them all as
+one step of the history (in a page this is in the Layers header). What cannot be written stays live with its dot:
+an app with no code the designer writes into (DrawnUI for Rust), a value the code computes, a write the code refuses.
+With Manual, Restart app and Run app ask first: write the changes, go on without them, or cancel. Closing the
+designer with changes not in code asks the same (Windows; on macOS and Linux the window closes at once). An app
+that closes by itself takes its live changes with it.
+
 ## Undo
 
 **Ctrl+Z** takes back your last action, whatever it was; again, the one before. **Ctrl+Y** (or Ctrl+Shift+Z) does
@@ -416,6 +436,7 @@ SkiaShape"), and the status line says what went back or came again ("Undone: Pas
 | A property edit | from opening the value to Enter or leaving it (a color dragged is one step) | the value before, live | the value again |
 | Paste style | all its properties | every value before | every value again |
 | Write, Write all | the values written (Write all: all of them) | the write leaves the file; the value stays live, with its dot | written again |
+| Write all changes (the count's Write all, Auto before Restart or Run, Always, a page's `code.flush`) | every write of it | all of them leave the file; the changes stay live, with their dots | written again |
 | Placing, Paste, Duplicate | the control added | it leaves the app | added again, the same place and content |
 | Write of an added control | the write | out of the file, still in the app | written again |
 | Delete | the control taken out | back in the app, where it was | taken out again |
@@ -568,6 +589,15 @@ Every path is relative: copy the folder as is and load `<folder>/editor.html` in
 calls `DrawnUiDesigner.start({ canvas, designerHub: "page" })`; without `designerHub` the same build connects
 to a hub over a WebSocket (`url`), as in VS Code.
 
+Start options in the iframe's address, read before the first frame (`editor.html?writeMode=auto&...`):
+
+| Option | What |
+|---|---|
+| `theme` | the look: `dark`, `light` or a designer theme id |
+| `animateTheme=0` | theme and language changes apply at once, without the opening circle |
+| `writeMode` | `manual`, `auto` or `always` (When changes are written to code); without it, Auto |
+| `controlsWidth`, `propertiesWidth` | the side panels' widths at start, in CSS pixels; Layers takes the rest. Without them Controls is 150 and Properties 270. A width the person drags stays theirs. |
+
 Every message both ways is posted with `postMessage` and carries `channel: "drawnui-designer"`. The iframe
 takes messages only from its parent window.
 
@@ -580,6 +610,9 @@ The iframe sends:
 - `{ channel, type: "code.edit", version, edits: [{ start, end, text }] }`: write to the code. The offsets are
   UTF-16 code units of the text at `version` (as a JS string or Monaco counts). Apply all edits as one undo
   step. Write to code and its Undo both send it.
+- `{ channel, type: "code.flushed", request, written, left }`: the answer to `code.flush`, once its writes are done
+  (their `code.edit` messages sent first): how many changes were written and how many are still not in code (they
+  cannot be written, or the mode is Manual).
 - `{ channel, type: "drag.out", typeName, x, y, phase }`: a control dragged from Controls is outside the iframe,
   the button still held (the iframe keeps the pointer). `x`, `y` are in the page's client coordinates
   (`frame.offset` added). `phase` is `"move"` while it is carried, `"drop"` when it is let go outside the iframe,
@@ -595,6 +628,9 @@ The page sends:
   `graphite`, `paper`, `high-contrast`). Send it once at start and again whenever the page's theme changes.
 - `{ channel, type: "code", uri: "fiddle:///snippet.cs", text, version }`: the code. The answer to `code.get`,
   and sent again on every change in the page's editor, with a new version.
+- `{ channel, type: "code.flush", request }`: the page needs the code (before Source, Run, Share or Export). With
+  Auto or Always the editor writes every change not in code yet, as one step of its history, then answers
+  `code.flushed` with the same `request`; with Manual it answers at once and writes nothing.
 - `{ channel, type: "frame.offset", x, y }`: where the iframe sits in the page (CSS pixels, the left and top of its
   client box). Send it once at start and again on every resize or scroll that moves it.
 - `{ channel, type: "place", typeName, x, y }`: a `drag.out` dropped on the app's canvas, at that canvas point in

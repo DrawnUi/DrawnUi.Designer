@@ -23,7 +23,7 @@
 <body>
 <div id="side">
   <div id="preview" aria-label="App canvas">App preview (fake agent): <span id="label">Hi</span><div id="marker"></div></div>
-  <div>Code (version <span id="version">1</span>)</div>
+  <div>Code (version <span id="version">1</span>) <button id="flush" type="button">Write the changes (code.flush)</button> <span id="flushed"></span></div>
   <textarea id="code" spellcheck="false" aria-label="Code">// Café ☕ 🎨 the emoji moves every offset after it
 return new SkiaStack { Children = { new SkiaLabel { Text = "Hi", FontSize = 18, TextColor = Color.Parse("#E6E6E6"), HorizontalOptions = LayoutOptions.Center, Margin = new Thickness(8, 4) } } };
 </textarea>
@@ -146,6 +146,10 @@ const app = (m) => {
 
 area.addEventListener("input", () => { version++; showVersion(); sendCode(); });
 
+// As the Fiddle before Source, Run, Share or Export: the changes not in code are written first.
+let flushes = 0;
+document.getElementById("flush").addEventListener("click", () => toIframe({ type: "code.flush", request: ++flushes }));
+
 // Where the iframe sits in the page, for drag.out's coordinates: once, and again when it moves.
 const sendOffset = () => { const r = frame.getBoundingClientRect(); toIframe({ type: "frame.offset", x: r.left, y: r.top }); };
 sendOffset();
@@ -174,6 +178,7 @@ window.addEventListener("message", (e) => {
   console.log("[page] <- " + JSON.stringify(m));
   if (held) { const h = held; held = null; h.forEach(toIframe); }
   if (m.type === "toApp") app(m.msg);
+  else if (m.type === "code.flushed") document.getElementById("flushed").textContent = `written ${m.written}, left ${m.left}`;
   else if (m.type === "drag.out") dragOut(m);
   else if (m.type === "code.get") sendCode();
   else if (m.type === "code.edit") {

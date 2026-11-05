@@ -406,3 +406,28 @@ help-move = Mover controles
 help-move-1 = Arrastra la fila de un control en Capas: las filas abren un hueco donde caerá. Entre dos filas va ahí; sobre un layout va dentro, al final. Cerca del borde superior o inferior la lista se desplaza; Esc cancela.
 help-move-2 = Alt+Arriba y Alt+Abajo mueven el control seleccionado un lugar entre sus hermanos.
 help-move-3 = Un control movido cambia solo la app, con un punto en su fila de Capas: Escribir lo mueve también en el código, Deshacer lo devuelve.
+pick-label-keys = Elegir un control en la app (Ctrl+P)
+section-code = Código
+code-hint = Cómo llegan al código de la app los cambios que haces aquí.
+write-mode = Escribir los cambios en el código
+write-mode-hint = Manual: los escribes tú, con Escribir de una fila o Escribir todo. Automático: se escriben cuando se necesita el código, antes de Reiniciar y Ejecutar. Siempre: cada cambio terminado se escribe al momento.
+write-mode-manual = Manual
+write-mode-auto = Automático
+write-mode-always = Siempre
+changes-not-in-code = { $count ->
+    [one] { $count } cambio sin escribir en el código
+   *[other] { $count } cambios sin escribir en el código
+}
+write-changes-label = Escribir los { $count } cambios en el código
+step-write-changes = Escribir todos los cambios
+unwritten-title = { $count ->
+    [one] { $count } cambio aún no está en el código.
+   *[other] { $count } cambios aún no están en el código.
+}
+unwritten-write-restart = Escribirlos y reiniciar
+unwritten-skip-restart = Reiniciar sin escribir
+unwritten-write-run = Escribirlos y ejecutar
+unwritten-skip-run = Ejecutar sin escribir
+unwritten-write-close = Escribirlos y cerrar
+unwritten-skip-close = Cerrar sin escribir
+unwritten-cancel = Cancelar

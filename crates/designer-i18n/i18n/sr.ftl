@@ -407,3 +407,30 @@ help-move = Premeštanje kontrola
 help-move-1 = Prevuci red kontrole u Slojevima: redovi otvaraju razmak gde će pasti. Između dva reda ide tamo; na raspored ide unutra, poslednja. Blizu gornje ili donje ivice lista se pomera; Esc otkazuje.
 help-move-2 = Alt+Gore i Alt+Dole pomeraju izabranu kontrolu za jedno mesto među susednim.
 help-move-3 = Premeštena kontrola menja samo aplikaciju, sa tačkom u svom redu u Slojevima: Upiši je premešta i u kodu, Poništi je vraća.
+pick-label-keys = Izaberi kontrolu u aplikaciji (Ctrl+P)
+section-code = Kod
+code-hint = Kako izmene napravljene ovde stižu u kod aplikacije.
+write-mode = Upisuj izmene u kod
+write-mode-hint = Ručno: vi ih upisujete, dugmetom Upiši u redu ili Upiši sve. Automatski: upisuju se kada je kod potreban, pre ponovnog pokretanja i pokretanja. Uvek: svaka završena izmena se upisuje odmah.
+write-mode-manual = Ručno
+write-mode-auto = Automatski
+write-mode-always = Uvek
+changes-not-in-code = { $count ->
+    [one] { $count } izmena nije u kodu
+    [few] { $count } izmene nisu u kodu
+   *[other] { $count } izmena nije u kodu
+}
+write-changes-label = Upiši sve izmene u kod ({ $count })
+step-write-changes = Upiši sve izmene
+unwritten-title = { $count ->
+    [one] { $count } izmena još nije u kodu.
+    [few] { $count } izmene još nisu u kodu.
+   *[other] { $count } izmena još nije u kodu.
+}
+unwritten-write-restart = Upiši ih, pa pokreni ponovo
+unwritten-skip-restart = Pokreni ponovo bez upisa
+unwritten-write-run = Upiši ih, pa pokreni
+unwritten-skip-run = Pokreni bez upisa
+unwritten-write-close = Upiši ih, pa zatvori
+unwritten-skip-close = Zatvori bez upisa
+unwritten-cancel = Otkaži

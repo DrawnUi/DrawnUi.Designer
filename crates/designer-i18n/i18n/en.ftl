@@ -407,3 +407,28 @@ help-move = Move controls
 help-move-1 = Drag a control's row in Layers: the rows open a gap where it will land. Between two rows it goes there; onto a layout it goes inside, last. Near the top or bottom the list moves along; Esc cancels.
 help-move-2 = Alt+Up and Alt+Down move the selected control one place among its siblings.
 help-move-3 = A moved control changes the app only, with a dot on its Layers row: Write moves it in the code too, Undo puts it back.
+pick-label-keys = Pick a control in the app (Ctrl+P)
+section-code = Code
+code-hint = How the changes you make here reach the app's code.
+write-mode = Write changes to code
+write-mode-hint = Manual: you write them, with a row's Write or Write all. Auto: they are written when the code is needed, before Restart and Run. Always: each finished change is written at once.
+write-mode-manual = Manual
+write-mode-auto = Auto
+write-mode-always = Always
+changes-not-in-code = { $count ->
+    [one] { $count } change not in code
+   *[other] { $count } changes not in code
+}
+write-changes-label = Write all { $count } changes to code
+step-write-changes = Write all changes
+unwritten-title = { $count ->
+    [one] { $count } change is not in the code yet.
+   *[other] { $count } changes are not in the code yet.
+}
+unwritten-write-restart = Write them, then restart
+unwritten-skip-restart = Restart without writing
+unwritten-write-run = Write them, then run
+unwritten-skip-run = Run without writing
+unwritten-write-close = Write them, then close
+unwritten-skip-close = Close without writing
+unwritten-cancel = Cancel
