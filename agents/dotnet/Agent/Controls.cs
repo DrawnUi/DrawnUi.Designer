@@ -29,7 +29,11 @@ namespace DrawnUi.Designer.Agent
         private static List<object> Controls()
         {
             _controls ??= FindControlKinds();
-            return _controls.Select(k => (object)new
+            // Specialized library controls are offered only when the app's tree already uses them.
+            var used = _controls.Any(k => !k.Own && Specialized.Contains(k.Type.Name))
+                ? Walk(false).Where(v => !v.Internal).Select(v => v.Control.GetType()).ToHashSet()
+                : new HashSet<Type>();
+            return _controls.Where(k => k.Own || !Specialized.Contains(k.Type.Name) || used.Contains(k.Type)).Select(k => (object)new
             {
                 typeName = k.Type.FullName,
                 group = k.Group,
@@ -171,6 +175,12 @@ namespace DrawnUi.Designer.Agent
                 return "Layout";
             return "Other";
         }
+
+        /// <summary>Specialized library controls: listed in the Controls panel only when the app's tree uses them.</summary>
+        private static readonly HashSet<string> Specialized = new()
+        {
+            "ContentWithBackdrop", "InfiniteLayout", "GridLayout", "AnimatedFramesRenderer",
+        };
 
         /// <summary>The library's public controls that are parts of others (a slider's thumb, a picker's wheel, a
         /// scroll's bar), base classes or app roots: not offered for placing. DrawnUi marks none of them.</summary>

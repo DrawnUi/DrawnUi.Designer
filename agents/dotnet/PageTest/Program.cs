@@ -103,6 +103,8 @@ await handle("{\"type\":\"highlight\",\"node\":null}");
 await handle("{\"type\":\"getControls\"}");
 var kinds = Next("controls")["controls"].AsArray();
 Check(kinds.Count > 10 && kinds.Any(k => (string)k["typeName"] == "DrawnUi.Draw.SkiaLabel" && (string)k["group"] == "Text"), $"getControls: {kinds.Count} controls, SkiaLabel in Text");
+var specialized = new[] { "ContentWithBackdrop", "InfiniteLayout", "GridLayout", "AnimatedFramesRenderer" };
+Check(!kinds.Any(k => specialized.Contains(((string)k["typeName"]).Split('.').Last())), "getControls: no specialized controls the page does not use");
 var layoutNodes = Next2Tree()["nodes"].AsArray().Where(n => ((string)n["typeName"]).EndsWith("SkiaLayout")).ToList();
 var wrapperId = (long)layoutNodes.First(n => n["parent"] == null)["id"];
 var columnId = (long)layoutNodes.First(n => (long?)n["parent"] == wrapperId)["id"];
