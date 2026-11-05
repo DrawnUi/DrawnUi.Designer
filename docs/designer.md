@@ -27,7 +27,7 @@ The window starts the hub, the small local server that apps and editors connect 
 **VS Code.** Install the extension and open it from the Command Palette:
 
 ```powershell
-code --install-extension vscode\drawnui-designer-0.1.0.vsix
+code --install-extension vscode\drawnui-designer-0.2.0.vsix
 ```
 
 Then run **DrawnUI: Open Designer**. The designer opens beside your code and starts the hub if none is running.

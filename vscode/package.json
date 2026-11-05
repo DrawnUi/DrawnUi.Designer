@@ -3,7 +3,7 @@
   "displayName": "DrawnUI Designer",
   "description": "See and edit running DrawnUI apps from VS Code: their screens, live control tree and properties, with changes written back to your C# code.",
   "publisher": "drawnui",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "license": "MIT",
   "icon": "icon.png",
