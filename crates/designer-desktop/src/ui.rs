@@ -1192,6 +1192,24 @@ impl App {
         }
     }
 
+    /// Keeps the picker's color (a valid hex typed included) and closes it: the property edit ends,
+    /// or Settings' Selection color picker closes.
+    pub fn close_picker(&mut self, cx: &mut Cx) {
+        if let Some(color) = self.picker {
+            self.set_picker(color, true, cx);
+        }
+        cx.focus(None::<ControlId>);
+        if self.edit_prop.is_some() {
+            self.end_edit(cx);
+        } else {
+            if let Some(popup) = self.popup.take() {
+                cx.close_popup_window(popup);
+            }
+            (self.picker, self.picker_old, self.picker_typing) = (None, None, false);
+            self.picking_selection = false;
+        }
+    }
+
     /// Opens the color picker for the Selection color under `anchor` (points).
     pub fn open_selection_picker(&mut self, anchor: drawnui::skia::Rect, cx: &mut Cx) {
         if let Some(popup) = self.popup.take() {
@@ -2710,6 +2728,12 @@ fn keys(ui: Ui<App>) -> Ui<App> {
         // Esc while a control waits to be placed: nothing is placed.
         if key.key == "Escape" && app.placing.is_some() {
             app.cancel_place();
+            return true;
+        }
+        // Enter in the color picker (its hex field too) or the gradient editor: the color is kept
+        // and the picker closes.
+        if matches!(key.key, "Enter" | "NumpadEnter") && app.picker.is_some() {
+            app.close_picker(cx);
             return true;
         }
         // Esc on Settings or Help goes back to the designer.
@@ -5897,6 +5921,44 @@ mod shots {
         });
         assert_eq!(back.as_deref(), Some("#FFFFFFFF"), "Esc puts the old color back");
         assert!(host.ui.state.pending.is_empty());
+    }
+
+    /// Enter in the color picker keeps the color and closes it: after a drag on the square, and
+    /// after typing a hex color in its field.
+    #[test]
+    fn enter_in_the_color_picker_keeps_the_color_and_closes_it() {
+        let mut host = host(with_props());
+        host.ui.set_accessibility_enabled(true);
+        let list = host.rect(host.ui.state.props_list);
+        let at = (1280.0 - 340.0 + 200.0, list.top + 4.0 + 5.0 * view::ROW + view::ROW / 2.0);
+        let key = |host: &Headless<App>| host.ui.state.pending.iter().find(|((_, n), _)| n == "TextColor").map(|(_, v)| v.clone());
+        // A drag to red, then Enter.
+        host.pan(at, at, 16.0, 1);
+        host.frame_after(drawnui::ACCESSIBILITY_INTERVAL_MS);
+        let plane = host.ui.accessibility_nodes().iter().find(|n| n.label == "Saturation and brightness").map(|n| n.rect).expect("the square");
+        host.pan((plane.left + 10.0, plane.bottom - 10.0), (plane.right + 30.0, plane.top - 30.0), 120.0, 6);
+        host.frame_after(16.0);
+        host.press_key("Enter");
+        host.frame_after(16.0);
+        assert!(host.ui.state.popup.is_none() && host.ui.state.picker.is_none() && host.ui.state.edit_prop.is_none(), "Enter closes the picker");
+        assert_eq!(key(&host).as_deref(), Some("#FFFF0000"), "the color is kept");
+        // A hex typed in the field, then Enter.
+        host.pan(at, at, 16.0, 1);
+        host.frame_after(drawnui::ACCESSIBILITY_INTERVAL_MS);
+        let hex = host.ui.accessibility_nodes().iter().find(|n| n.label == "Hex color").map(|n| n.rect).expect("the hex field");
+        host.pan((hex.center_x(), hex.center_y()), (hex.center_x(), hex.center_y()), 16.0, 1);
+        host.frame_after(16.0);
+        host.press_key("End");
+        for _ in 0..12 {
+            host.press_key("Backspace");
+        }
+        host.type_text("00FF00");
+        host.frame_after(16.0);
+        host.press_key("Enter");
+        host.frame_after(16.0);
+        assert!(host.ui.state.popup.is_none() && host.ui.state.picker.is_none(), "Enter in the hex field closes the picker");
+        assert_eq!(key(&host).as_deref(), Some("#FF00FF00"), "the typed color is kept");
+        assert!(host.ui.focused().is_none(), "nothing keeps the keyboard");
     }
 
     #[test]

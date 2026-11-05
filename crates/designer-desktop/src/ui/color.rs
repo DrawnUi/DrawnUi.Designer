@@ -280,7 +280,7 @@ fn area(area: Area, width: f32, height: f32, label: String) -> Build<ColorArea> 
 }
 
 /// The hex field: shows the color while it is not being typed in; a valid color typed applies live,
-/// Enter applies it too.
+/// Enter applies it and closes the picker.
 fn hex_field() -> Build<SkiaEditor> {
     SkiaEditor::new()
         .font_size(12)
@@ -315,6 +315,7 @@ fn hex_field() -> Build<SkiaEditor> {
             if let Some(color) = Hsva::parse(text) {
                 app.set_picker(color, true, cx);
             }
+            app.close_picker(cx);
         })
 }
 
