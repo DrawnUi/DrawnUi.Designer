@@ -1076,3 +1076,32 @@ fn a_page_app_attaching_again_keeps_its_live_changes() {
     let (other, _) = core.page_hello(Some(app), AppInfo { name: "Other".into(), ..hello });
     assert!(other.is_some_and(|o| o != app) && !core.apps.contains_key(&app));
 }
+
+/// Three values written in one go (family, size, then the text above them, which changes the file's
+/// length before the others): Undo takes back the family first, then the others, each where it is now.
+#[test]
+fn writes_are_taken_back_in_any_order() {
+    let page = "namespace Demo;\npublic class Page : SkiaLayer\n{\n    public Page()\n    {\n        Children = new List<SkiaControl>\n        {\n            new SkiaLabel { Text = \"Welcome to DrawnUI\", FontFamily = \"FontTextTitle\", FontSize = 26 },\n        };\n    }\n}\n";
+    let store = MemStore::with(&[("/demo/Page.cs", page)]);
+    let mut core = HubCore::new(store.clone());
+    let (app, _) = core.app_hello(info("Demo", 1, Some("/demo/Demo.csproj"))).unwrap();
+    ap(&mut core, app, AppMsg::Tree(tree()));
+    let props = vec![prop("FontSize", "System.Double", "26"), prop("Text", "System.String", "Welcome to DrawnUI"), prop("FontFamily", "System.String", "FontTextTitle")];
+    ap(&mut core, app, AppMsg::Props { node: 2, props });
+    let (editor, _) = core.editor_hello(PROTOCOL_VERSION).unwrap();
+    for (request, prop, value) in [(1, "FontFamily", "FontText"), (2, "FontSize", "30"), (3, "Text", "Hello A")] {
+        let outs = ed(&mut core, editor, EditorMsg::SetCode { request, app, node: 2, prop: prop.into(), value: value.into() });
+        assert!(matches!(to_editor(&outs, editor).as_slice(), [HubToEditor::CodeEdited { .. }]), "{prop}: {outs:?}");
+    }
+    let written = page.replace("\"Welcome to DrawnUI\"", "\"Hello A\"").replace("\"FontTextTitle\"", "\"FontText\"").replace("26", "30");
+    assert_eq!(store.text("/demo/Page.cs"), written);
+    // The family first (written first, below the text that changed length since).
+    let outs = ed(&mut core, editor, EditorMsg::UndoCode { request: 1 });
+    assert!(matches!(to_editor(&outs, editor).as_slice(), [HubToEditor::CodeUndone { request: 1, .. }]), "{outs:?}");
+    assert_eq!(store.text("/demo/Page.cs"), written.replace("\"FontText\"", "\"FontTextTitle\""));
+    for request in [2, 3] {
+        let outs = ed(&mut core, editor, EditorMsg::UndoCode { request });
+        assert!(matches!(to_editor(&outs, editor).as_slice(), [HubToEditor::CodeUndone { .. }]), "{outs:?}");
+    }
+    assert_eq!(store.text("/demo/Page.cs"), page);
+}

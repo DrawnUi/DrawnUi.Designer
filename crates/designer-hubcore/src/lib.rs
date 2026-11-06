@@ -517,6 +517,7 @@ impl HubCore {
                         a.live.wrote(c);
                     }
                     written.change = change;
+                    self.shift_written(&written.path, written.at, written.before.len(), written.after.len());
                     self.keep(editor, request, written);
                     vec![Out::ToEditor(Some(editor), HubToEditor::CodeEdited { request, node, uri, range })]
                 }
@@ -524,6 +525,7 @@ impl HubCore {
             },
             Finished::Undone { editor, request, written, result } => match result {
                 Ok(()) => {
+                    self.shift_written(&written.path, written.at, written.after.len(), written.before.len());
                     if let Some((app, c)) = &written.change
                         && let Some(a) = self.apps.get_mut(app)
                     {
@@ -574,6 +576,15 @@ impl HubCore {
     /// MCP server's) can take it back by `request`.
     pub fn remember(&mut self, editor: u32, request: u32, written: Written) {
         self.written.insert((editor, request), written);
+    }
+
+    /// The file at `path` had `removed` bytes at `at` replaced by `added` ones (a write, or an undo):
+    /// the kept writes after that span move with their text, so each can still be taken back in any
+    /// order (Undo takes the last action first, whatever order the writes went in).
+    fn shift_written(&mut self, path: &str, at: usize, removed: usize, added: usize) {
+        for w in self.written.values_mut().filter(|w| w.path == path && w.at >= at + removed) {
+            w.at = w.at + added - removed;
+        }
     }
 
     /// [`HubCore::remember`] for an editor that may have closed while the work ran.
@@ -712,13 +723,18 @@ pub struct Written {
 impl Written {
     /// The span that differs between two versions of a file.
     fn diff(path: String, old: &[u8], new: &[u8]) -> Written {
-        let at = old.iter().zip(new).take_while(|(a, b)| a == b).count();
-        let tail = old[at..].iter().rev().zip(new[at..].iter().rev()).take_while(|(a, b)| a == b).count();
+        let mut at = old.iter().zip(new).take_while(|(a, b)| a == b).count();
+        let mut tail = old[at..].iter().rev().zip(new[at..].iter().rev()).take_while(|(a, b)| a == b).count();
+        // A span empty on one side ("FontTextTitle" -> "FontText") takes a byte of its neighbours on
+        // each side, so the undo checks real text where it puts the span back.
+        if (old.len() == at + tail || new.len() == at + tail) && at > 0 && tail > 0 {
+            (at, tail) = (at - 1, tail - 1);
+        }
         Written { path, at, before: old[at..old.len() - tail].to_vec(), after: new[at..new.len() - tail].to_vec(), change: None }
     }
 
-    /// Puts the span back as it was, when the file still holds it as written at the same place.
-    // ponytail: same byte offset only; an edit above it in the same file since then refuses the undo.
+    /// Puts the span back as it was, when the file still holds it as written at its place (moved by
+    /// the hub's later writes and undos above it; an edit made by hand above it refuses the undo).
     pub fn undo(&self, store: &dyn CodeStore) -> Result<(), Refusal> {
         let mut bytes = store.read(&self.path).map_err(|e| Refusal::new("hub-read-failed", &[("file", &self.path), ("error", &e)]))?;
         if bytes.get(self.at..self.at + self.after.len()) != Some(self.after.as_slice()) {

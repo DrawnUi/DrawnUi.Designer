@@ -1034,8 +1034,10 @@ impl App {
                 last.has_children = true;
             }
             self.outline.push(Row { node: index, depth: d, has_children: false, last: false, lines: 0 });
-            // A control first seen off screen (the page under a pushed one) starts folded.
-            if self.seen.insert(node.id) && !node.visible {
+            // A control first seen off screen (the page under a pushed one) starts folded; one not
+            // drawn yet (a tree from the middle of a build) is looked at again when it is.
+            let drawn = node.rect[2] > 0.0 && node.rect[3] > 0.0;
+            if drawn && self.seen.insert(node.id) && !node.visible {
                 self.collapsed.insert(node.id);
             }
         }
@@ -5642,6 +5644,70 @@ mod shots {
         }
         assert_eq!(undo_names(&host), ["Change FontFamily", "Change FontSize", "Change Text"]);
         assert!(host.ui.state.pending.is_empty());
+    }
+
+    /// The real path: three values typed into the Properties field, each ended by Enter (size, text,
+    /// family last), a page's flush, then Ctrl+Z takes back the LAST one, the family, first.
+    #[test]
+    fn undo_after_typed_edits_and_a_flush_takes_the_last_edit_first() {
+        let mut state = with_props();
+        state.settings.write_mode = WriteMode::Auto;
+        state.apps[0].info.project = Some("C:/apps/HelloWpf/HelloWpf.csproj".into());
+        let prop = |name: &str, t: &str, v: &str| Prop { name: name.into(), type_name: t.into(), value: v.into(), is_set: true, group: Some("Text".into()), ..Default::default() };
+        state.props = vec![prop("FontFamily", "System.String", "FontTextTitle"), prop("FontSize", "System.Double", "26"), prop("Text", "System.String", "Hi")];
+        state.rebuild_prop_rows();
+        let (mut host, sent, to_ui) = wired(state);
+        let node = host.ui.state.selected_node().map(|n| n.id).unwrap();
+        let type_into = |host: &mut Headless<App>, name: &str, text: &str| {
+            let i = host.ui.state.props.iter().position(|p| p.name == name).unwrap();
+            let r = host.ui.state.prop_rows.iter().position(|row| matches!(row, PropRow::Prop(k) if *k == i)).unwrap();
+            let top = host.rect(host.ui.state.props_list).top + view::PROPS_PAD + r as f32 * view::ROW + view::ROW / 2.0;
+            let at = (1280.0 - 340.0 + 300.0, top);
+            host.pan(at, at, 16.0, 1);
+            frames(host, 2);
+            host.type_text(text);
+            frames(host, 2);
+            host.press_key("Enter");
+            frames(host, 3);
+        };
+        type_into(&mut host, "FontSize", "4");
+        type_into(&mut host, "Text", " A");
+        type_into(&mut host, "FontFamily", "2");
+        assert_eq!(undo_names(&host), ["Change FontSize", "Change Text", "Change FontFamily"]);
+        to_ui.send(Incoming::Flush(serde_json::json!(1))).unwrap();
+        host.ui.waker().invalidate(host.ui.state.inbox, Dirty::APPLY);
+        frames(&mut host, 3);
+        let writes = set_codes(&sent);
+        assert_eq!(writes.len(), 3, "{writes:?}");
+        for (request, n, _) in &writes {
+            edited(&mut host, &to_ui, *request, *n);
+        }
+        assert_eq!(undo_names(&host), ["Change FontSize", "Change Text", "Change FontFamily"]);
+        let family = writes.iter().find(|w| w.2 == "FontFamily").map(|w| w.0).unwrap();
+        sent.lock().unwrap().clear();
+        host.key_down("KeyZ", ctrl(false));
+        frames(&mut host, 3);
+        let undone: Vec<u32> = sent.lock().unwrap().iter().filter_map(|m| if let EditorMsg::UndoCode { request } = m { Some(*request) } else { None }).collect();
+        assert_eq!(undone, [family], "the family first");
+        assert!(sets(&sent).contains(&(node, "FontFamily".to_owned(), "FontTextTitle".to_owned())), "{:?}", sets(&sent));
+    }
+
+    /// DrawFiddle's C# snippet with a local helper: a tree from the middle of the build (its root not
+    /// laid out yet, no children) then the whole one. The root is not folded: it was not off screen,
+    /// only not drawn yet, so Layers shows its three labels.
+    #[test]
+    fn a_control_not_drawn_yet_does_not_start_folded() {
+        let (mut host, _sent, to_ui) = wired(connected());
+        let n = |id, parent, t: &str| Node { id, parent, type_name: format!("DrawnUi.Draw.{t}"), visible: true, rect: [0.0, 0.0, 100.0, 20.0], ..Default::default() };
+        let mut wrapper = n(9001, None, "SkiaLayout");
+        wrapper.page_root = true;
+        let mut root = n(9002, Some(9001), "SkiaLayout");
+        (root.visible, root.rect) = (false, [0.0; 4]);
+        feed(&mut host, &to_ui, HubToEditor::FromApp { app: 1, msg: AppMsg::Tree(Tree { revision: 8, width: 400.0, height: 300.0, nodes: vec![wrapper.clone(), root] }) });
+        let full = vec![wrapper, n(9002, Some(9001), "SkiaLayout"), n(9003, Some(9002), "SkiaLabel"), n(9004, Some(9002), "SkiaLabel"), n(9005, Some(9002), "SkiaLabel")];
+        feed(&mut host, &to_ui, HubToEditor::FromApp { app: 1, msg: AppMsg::Tree(Tree { revision: 9, width: 400.0, height: 300.0, nodes: full }) });
+        let rows: Vec<u64> = host.ui.state.rows.iter().map(|r| host.ui.state.tree.nodes[r.node].id).collect();
+        assert_eq!(rows, [9002, 9003, 9004, 9005]);
     }
 
     /// A page's code.flush: Auto writes and answers once the writes are done; Manual answers at
