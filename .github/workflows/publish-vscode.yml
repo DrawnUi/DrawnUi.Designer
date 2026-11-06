@@ -1,0 +1,59 @@
+# Publishes the DrawnUI Designer extension to the Visual Studio Marketplace (publisher drawnui) from the
+# .vsix attached to a GitHub release, with the Marketplace's Trusted Publishing: GitHub's OIDC token is
+# exchanged for a short-lived Marketplace credential, no token is stored in the repository.
+#
+# Runs when a release with a .vsix asset is published, or by hand for a release tag. A pre-release
+# (the release's pre-release flag, or the input) must be packaged as one: `npm run package -- --pre-release`.
+name: Publish VS Code extension
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag whose .vsix asset is published
+        required: true
+        type: string
+      prerelease:
+        description: Publish as a pre-release (the .vsix must be packaged with --pre-release)
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    # A release without a .vsix has nothing to publish.
+    if: github.event_name == 'workflow_dispatch' || contains(join(github.event.release.assets.*.name, ' '), '.vsix')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download the release's .vsix
+        id: vsix
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name || inputs.tag }}
+        run: |
+          name=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '[.assets[].name | select(endswith(".vsix"))] | first // empty')
+          if [ -z "$name" ]; then
+            echo "::error::Release $TAG has no .vsix asset"
+            exit 1
+          fi
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "$name" --dir vsix
+          echo "path=vsix/$name" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Publish with trusted publishing
+        env:
+          VSIX: ${{ steps.vsix.outputs.path }}
+          PRERELEASE: ${{ github.event.release.prerelease || inputs.prerelease }}
+        run: |
+          flags=""
+          if [ "$PRERELEASE" = "true" ]; then flags="--pre-release"; fi
+          npx --yes @vscode/vsce@4.1.0 publish --oidc --packagePath "$VSIX" $flags

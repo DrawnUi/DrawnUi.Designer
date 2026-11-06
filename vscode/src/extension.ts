@@ -1,19 +1,30 @@
 // DrawnUI Designer for VS Code: "DrawnUI: Open Designer" starts the hub (drawnui-designer --sidecar)
 // and opens the designer UI, the same Rust UI as the desktop window built for the web, in a webview.
-// The webview talks to the hub over a WebSocket on 127.0.0.1; this file only hosts it.
+// The webview talks to the hub over a WebSocket on 127.0.0.1; this file only hosts it, keeps its
+// settings in the desktop window's settings file, and says so when the panel closes with changes
+// not in code.
 
 import * as vscode from "vscode";
 import { spawn, ChildProcess } from "child_process";
 import * as fs from "fs";
+import * as os from "os";
 import * as path from "path";
 
 let log: vscode.LogOutputChannel;
 let sidecar: ChildProcess | undefined;
 let panel: vscode.WebviewPanel | undefined;
+/** Changes not in code yet, as the designer last told. */
+let unwritten = 0;
 
 export function activate(context: vscode.ExtensionContext) {
   log = vscode.window.createOutputChannel("DrawnUI Designer", { log: true });
-  context.subscriptions.push(log, vscode.commands.registerCommand("drawnuiDesigner.open", () => open(context)));
+  context.subscriptions.push(
+    log,
+    vscode.commands.registerCommand("drawnuiDesigner.open", () => open(context)),
+    // The designer's own keys (Pick, Restart, Settings, Help, the menus) while its panel is active: taken
+    // here so that VS Code does not run its own command for them too (see contributes.keybindings).
+    vscode.commands.registerCommand("drawnuiDesigner.designerKey", () => {}),
+  );
   // For test runs: open at startup without anyone running the command.
   if (process.env.DRAWNUI_DESIGNER_AUTOOPEN === "1") {
     open(context);
@@ -22,6 +33,32 @@ export function activate(context: vscode.ExtensionContext) {
 
 export function deactivate() {
   sidecar?.kill();
+}
+
+/** The desktop window's settings file: the panel shares it (theme, write mode, language, panels). */
+function settingsFile(): string {
+  const base = process.env.APPDATA || process.env.HOME || os.homedir();
+  return path.join(base, "DrawnUi.Designer", "settings.json");
+}
+
+function readSettings(): string | null {
+  try {
+    return fs.readFileSync(settingsFile(), "utf8");
+  } catch {
+    return null;
+  }
+}
+
+function writeSettings(text: string) {
+  const file = settingsFile();
+  try {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    const temp = `${file}.${process.pid}.tmp`;
+    fs.writeFileSync(temp, text);
+    fs.renameSync(temp, file);
+  } catch (error) {
+    log.warn(`settings not saved: ${error}`);
+  }
 }
 
 function hubPort(): number {
@@ -77,16 +114,35 @@ function open(context: vscode.ExtensionContext) {
     retainContextWhenHidden: true, // the wasm app keeps its state while the tab is in the background
     localResourceRoots: [media],
   });
-  panel.webview.html = page(panel.webview, media, port);
+  unwritten = 0;
+  panel.webview.html = page(panel.webview, media, port, readSettings());
   panel.webview.onDidReceiveMessage((message) => {
     if (typeof message?.log === "string") {
       log.info("[ui] " + message.log);
+    } else if (typeof message?.settings === "string") {
+      writeSettings(message.settings);
+    } else if (typeof message?.changes === "number") {
+      unwritten = message.changes;
     }
   });
-  panel.onDidDispose(() => (panel = undefined));
+  panel.onDidDispose(() => {
+    panel = undefined;
+    // A panel closes without asking: the changes stay live in the app (the hub keeps them while VS
+    // Code runs), and reopening the designer writes or undoes them.
+    if (unwritten > 0) {
+      const count = unwritten;
+      unwritten = 0;
+      const text = count === 1 ? "1 change is" : `${count} changes are`;
+      vscode.window.showWarningMessage(`DrawnUI Designer closed: ${text} not in code yet. They stay live in the app until it restarts.`, "Reopen").then((choice) => {
+        if (choice === "Reopen") {
+          open(context);
+        }
+      });
+    }
+  });
 }
 
-function page(webview: vscode.Webview, media: vscode.Uri, port: number): string {
+function page(webview: vscode.Webview, media: vscode.Uri, port: number, settings: string | null): string {
   const uri = (file: string) => webview.asWebviewUri(vscode.Uri.joinPath(media, file)).toString();
   const nonce = Array.from({ length: 32 }, () => Math.floor(Math.random() * 36).toString(36)).join("");
   const source = webview.cspSource;
@@ -125,6 +181,9 @@ function page(webview: vscode.Webview, media: vscode.Uri, port: number): string 
       url: "${hub}",
       assetBase: "${webview.asWebviewUri(media)}/",
       log,
+      settings: ${JSON.stringify(settings).replace(/</g, "\\u003c")},
+      saveSettings: (text) => vscode.postMessage({ settings: text }),
+      onChanges: (count) => vscode.postMessage({ changes: count }),
     }).catch((e) => log("[error] start: " + e));
   </script>
 </body>

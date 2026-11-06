@@ -2385,6 +2385,8 @@ fn changes_button() -> Build<SkiaShape> {
             .is_visible(false)
             .observe(|me, app: &App| {
                 let count = app.unwritten_count();
+                #[cfg(target_os = "emscripten")]
+                crate::web::changes(count);
                 me.set_is_visible(count > 0 && !app.embedded);
                 me.set_accessibility_label(tr_args("write-changes-label", &[("count", count.into())]));
                 me.set_tooltip(tr_args("write-changes-label", &[("count", count.into())]));

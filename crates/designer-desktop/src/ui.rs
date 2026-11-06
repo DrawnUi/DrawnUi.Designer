@@ -108,10 +108,17 @@ impl Settings {
     }
 
     fn load() -> Settings {
-        Self::path().and_then(|p| std::fs::read_to_string(p).ok()).and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default()
+        // The web build: what its host keeps (VS Code keeps the desktop window's file).
+        #[cfg(target_os = "emscripten")]
+        let text = crate::web::settings();
+        #[cfg(not(target_os = "emscripten"))]
+        let text = Self::path().and_then(|p| std::fs::read_to_string(p).ok());
+        text.and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default()
     }
 
     fn save(&self) {
+        #[cfg(target_os = "emscripten")]
+        crate::web::save_settings(&serde_json::to_string_pretty(self).expect("serializable"));
         if let Some(path) = Self::path() {
             if let Some(dir) = path.parent() {
                 let _ = std::fs::create_dir_all(dir);

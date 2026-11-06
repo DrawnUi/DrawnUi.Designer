@@ -1,12 +1,25 @@
 // Linked into the web build with --js-library (build.rs): the functions the wasm calls to reach the
-// page. The page passes `designerSend` / `designerLog` / `designerPost` / `designerDefer` in the
-// module options (web/designer.js).
+// page. The page passes `designerSend` / `designerLog` / `designerPost` / `designerDefer`, and a host
+// that keeps the settings (VS Code) `designerSettings` / `designerSaveSettings` / `designerChanges`, in
+// the module options (web/designer.js).
 addToLibrary({
   designer_send: (text, len) => Module.designerSend?.(UTF8ToString(text, len)),
   designer_log: (text, len) => Module.designerLog?.(UTF8ToString(text, len)),
   designer_post: (text, len) => Module.designerPost?.(UTF8ToString(text, len)),
   designer_defer: () => Module.designerDefer?.(),
   designer_embedded: () => (Module.designerEmbedded ? 1 : 0),
+  // The settings the host keeps (JSON) into the wasm's buffer: their length in bytes, or -1 when none.
+  designer_settings__deps: ["$stringToUTF8", "$lengthBytesUTF8"],
+  designer_settings: (out, cap) => {
+    const text = Module.designerSettings;
+    if (typeof text !== "string") return -1;
+    const bytes = lengthBytesUTF8(text);
+    if (bytes < cap) stringToUTF8(text, out, cap);
+    return bytes;
+  },
+  designer_save_settings: (text, len) => Module.designerSaveSettings?.(UTF8ToString(text, len)),
+  // How many changes are not in code yet, each time it changes.
+  designer_changes: (count) => Module.designerChanges?.(count),
   // A parameter of the page's address into the wasm's buffer: its length in bytes, or -1 when absent.
   designer_param__deps: ["$UTF8ToString", "$stringToUTF8", "$lengthBytesUTF8"],
   designer_param: (name, len, out, cap) => {

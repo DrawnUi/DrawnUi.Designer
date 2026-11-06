@@ -30,6 +30,42 @@ unsafe extern "C" {
     fn designer_defer();
     fn designer_embedded() -> i32;
     fn designer_param(name: *const u8, name_len: usize, out: *mut u8, cap: usize) -> i32;
+    fn designer_settings(out: *mut u8, cap: usize) -> i32;
+    fn designer_save_settings(text: *const u8, len: usize);
+    fn designer_changes(count: u32);
+}
+
+/// The settings the host keeps (VS Code: the desktop window's settings file), as JSON; `None` when the
+/// host keeps none (a page).
+pub fn settings() -> Option<String> {
+    let mut cap = 4096;
+    loop {
+        let mut buf = vec![0u8; cap];
+        let len = unsafe { designer_settings(buf.as_mut_ptr(), buf.len()) };
+        if len < 0 {
+            return None;
+        }
+        if (len as usize) < cap {
+            buf.truncate(len as usize);
+            return String::from_utf8(buf).ok();
+        }
+        cap = len as usize + 1;
+    }
+}
+
+/// The settings to keep (a host that keeps none ignores them).
+pub fn save_settings(text: &str) {
+    unsafe { designer_save_settings(text.as_ptr(), text.len()) }
+}
+
+/// How many changes are not in code yet, told to the host when it changes (VS Code warns when the
+/// panel closes with some).
+pub fn changes(count: usize) {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    static LAST: AtomicUsize = AtomicUsize::new(0);
+    if LAST.swap(count, Ordering::Relaxed) != count {
+        unsafe { designer_changes(count as u32) }
+    }
 }
 
 /// A parameter of the frame's address (`editor.html?theme=midnight`), or None.

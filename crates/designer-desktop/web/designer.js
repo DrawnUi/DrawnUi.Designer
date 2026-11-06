@@ -1,8 +1,10 @@
 // Starts the designer UI in a page: the wasm build, drawnui_host.js, and its link to a hub.
 //
-//   DrawnUiDesigner.start({ canvas, url: "ws://127.0.0.1:54270", assetBase, log })
+//   DrawnUiDesigner.start({ canvas, url: "ws://127.0.0.1:54270", assetBase, log, settings, saveSettings, onChanges })
 //     The VS Code webview: a WebSocket to the hub, owned by this script. Frames from the hub go into
-//     the wasm with _designer_receive, then a frame is requested; nothing polls.
+//     the wasm with _designer_receive, then a frame is requested; nothing polls. `settings` (the
+//     settings JSON the host keeps, or null) and `saveSettings(text)` keep them across sessions;
+//     `onChanges(count)` hears how many changes are not in code yet.
 //
 //   DrawnUiDesigner.start({ canvas, designerHub: "page", assetBase, log })
 //     An iframe in DrawFiddle: the hub runs in the wasm, the app and the code are in the parent page.
@@ -12,7 +14,7 @@
 // assetBase: where the app's files are served (fonts: "assets/OpenSans-Regular.ttf" is asked as
 // assetBase + "assets/OpenSans-Regular.ttf"). log(text): the UI's log lines and the link's events.
 window.DrawnUiDesigner = {
-  async start({ canvas, url, designerHub, assetBase, log = () => {} }) {
+  async start({ canvas, url, designerHub, assetBase, log = () => {}, settings, saveSettings, onChanges }) {
     const inPage = designerHub === "page";
     let socket = null;
     let pumping = false;
@@ -38,6 +40,9 @@ window.DrawnUiDesigner = {
           designerLog: log,
           // Inside a page (DrawFiddle): only Layers and Properties, no title bar, Screens or status line.
           designerEmbedded: inPage,
+          designerSettings: settings ?? undefined,
+          designerSaveSettings: saveSettings,
+          designerChanges: onChanges,
           designerPost: (text) => window.parent.postMessage(JSON.parse(text), "*"),
           // The editor's messages run right after the UI's turn, once however many were sent.
           designerDefer: () => {

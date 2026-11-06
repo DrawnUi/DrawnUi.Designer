@@ -124,14 +124,24 @@ screens, controls and screenshots when the designer asks. One console line at st
 
 ## VS Code
 
-**DrawnUI: Open Designer** in the Command Palette opens the designer beside your code. Build the extension (see
-[Build from source](#build-from-source)), then install it:
+**DrawnUI: Open Designer** in the Command Palette opens the designer beside your code, for Windows.
 
-```powershell
-code --install-extension vscode\drawnui-designer-0.3.0.vsix
-```
+- **From Releases:** download `drawnui-designer-0.3.0.vsix` from
+  [Releases](https://github.com/DrawnUi/DrawnUi.Designer/releases), then in VS Code run **Extensions: Install from
+  VSIX...**, or:
 
-Settings: `drawnuiDesigner.port` (default 54270) and `drawnuiDesigner.sidecarPath`.
+  ```powershell
+  code --install-extension drawnui-designer-0.3.0.vsix
+  ```
+
+- **From the Marketplace** (once it is published there): search the Extensions view for **DrawnUI Designer**, or
+  `code --install-extension drawnui.drawnui-designer`.
+
+The panel has the window's menu bar, keys and Settings, and shares the window's settings. While it is the active
+tab, its own keys (Ctrl+P Pick, Ctrl+R Restart, Ctrl+, Settings, F1 Help, Alt+F / Alt+E menus) are its, not VS Code's.
+Closing the panel with changes not in code keeps them live in the app and says so, with **Reopen**.
+Settings: `drawnuiDesigner.port` (default 54270) and `drawnuiDesigner.sidecarPath`. To build the .vsix yourself,
+see [Build from source](#build-from-source).
 
 ## Use it with AI
 

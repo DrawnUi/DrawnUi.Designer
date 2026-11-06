@@ -24,13 +24,20 @@ cargo run -p designer-desktop --release
 The window starts the hub, the small local server that apps and editors connect to. If a hub already runs
 (another window, or VS Code), the window uses that one.
 
-**VS Code.** Install the extension and open it from the Command Palette:
+**VS Code.** Download `drawnui-designer-0.3.0.vsix` from the repository's Releases and install it (**Extensions:
+Install from VSIX...**, or the command below); once it is on the Marketplace, search the Extensions view for
+**DrawnUI Designer** (`drawnui.drawnui-designer`) instead.
 
 ```powershell
-code --install-extension vscode\drawnui-designer-0.3.0.vsix
+code --install-extension drawnui-designer-0.3.0.vsix
 ```
 
-Then run **DrawnUI: Open Designer**. The designer opens beside your code and starts the hub if none is running.
+Then run **DrawnUI: Open Designer**. The designer opens beside your code and starts the hub if none is running. The
+panel has the window's menu bar (no Exit: close its tab), keys and Settings, and keeps its settings in the window's
+settings file. While it is the active tab its keys are its own: Ctrl+P (Pick), Ctrl+R (Restart app), Ctrl+,
+(Settings), F1 (Help), Ctrl+D, Ctrl+Shift+C / Ctrl+Shift+V and Alt+F / Alt+E (the menus) do not reach VS Code; the
+Command Palette is Ctrl+Shift+P there. A tab closes without asking: changes not in code yet stay live in the app (while
+VS Code runs the hub), and VS Code says how many, with **Reopen**.
 
 ## Attach your app
 
