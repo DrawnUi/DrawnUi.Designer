@@ -61,6 +61,10 @@ var id = (long)labelNode["id"];
 await handle($"{{\"type\":\"getProps\",\"node\":{id}}}");
 var props = Next("props")["props"].AsArray();
 Check(props.Any(p => (string)p["name"] == "Text" && (string)p["value"] == "Hello page"), $"getProps: {props.Count} props, Text read");
+// only what can be set: IsClippedToBounds (a bindable property with a setter) is listed, the computed
+// WillClipBounds (a getter only) is not, nor is any read-only one
+Check(props.Any(p => (string)p["name"] == "IsClippedToBounds") && !props.Any(p => (string)p["name"] == "WillClipBounds"),
+    "getProps lists only settable properties: IsClippedToBounds yes, WillClipBounds no");
 
 // two messages without waiting: handled one after the other, in order
 var set = handle($"{{\"type\":\"setProperty\",\"request\":2,\"node\":{id},\"name\":\"Text\",\"value\":\"Changed\"}}");

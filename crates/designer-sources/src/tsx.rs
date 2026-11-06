@@ -812,6 +812,11 @@ pub(crate) fn set_property(files: &[(String, String)], m: &RuntimeMatch, prop: &
     };
     let v = (a + 1..src.nodes.len()).find(|&j| src.nodes[j].parent == Some(a)).ok_or_else(|| Refusal::new("src-no-value", &[]))?;
     match src.nodes[v].role {
+        // `<X IsVisible />` is true already: true leaves it as it is.
+        SourceRole::Literal if handles[v].kind() == "jsx_attribute" && *value == PropValue::Plain(SourceEditValue::Boolean { value: true }) => {
+            let at = handles[v];
+            Ok(CodeEdit { uri: m.uri.clone(), text: text.to_string(), range: Lines::new(text).range(at.start_byte(), at.end_byte()) })
+        }
         SourceRole::Literal if handles[v].kind() == "jsx_attribute" => {
             let spelled = spell_prop(value).ok_or_else(|| Refusal::new("src-value-misfit", &[("key", &attr_key)]))?;
             let t = format!("{prop}={spelled}");

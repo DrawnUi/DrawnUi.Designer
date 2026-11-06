@@ -1637,3 +1637,46 @@ fn a_tsx_value_changes_only_the_edited_use_of_a_component() {
     assert_eq!(set(TSX_TAGS, 5, "FontSize", "System.Double", "9"), Err("src-component-no-prop".into()));
     assert_eq!(set(TSX_TAGS, 7, "FontSize", "System.Double", "9"), Err("src-shared-helper".into()));
 }
+
+/// A bare TSX attribute (`<SkiaLayout IsClippedToBounds>`) is true: false is written out, true leaves
+/// it bare.
+#[test]
+fn a_bare_tsx_attribute_takes_false_and_stays_bare_for_true() {
+    let text = "export default function App() {
+  return <SkiaLayout IsClippedToBounds Padding={8} />;
+}
+";
+    let tree = designer_protocol::Tree { nodes: vec![designer_protocol::Node { id: 1, type_name: "SkiaLayout".into(), ..Default::default() }], ..Default::default() };
+    let files = vec![("App.tsx".to_string(), text.to_string())];
+    let set = |v: &str| set_property(&files, &tree, 1, "IsClippedToBounds", &value_from_runtime("System.Boolean", "True", v).unwrap()).unwrap().text;
+    assert_eq!(set("False"), text.replace("IsClippedToBounds", "IsClippedToBounds={false}"));
+    assert_eq!(set("True"), text);
+}
+
+/// The same in C# and Rust: a true/false written in place, and added where the code does not set it.
+#[test]
+fn true_false_is_written_in_csharp_and_rust() {
+    let n = |t: &str| designer_protocol::Tree { nodes: vec![designer_protocol::Node { id: 1, type_name: t.into(), ..Default::default() }], ..Default::default() };
+    // A C# snippet's controls sit in the Fiddle's own layout.
+    let cs_tree = designer_protocol::Tree {
+        nodes: vec![
+            designer_protocol::Node { id: 1, type_name: "DrawnUi.Draw.SkiaLayout".into(), page_root: true, ..Default::default() },
+            designer_protocol::Node { id: 2, parent: Some(1), type_name: "DrawnUi.Draw.SkiaLayout".into(), ..Default::default() },
+        ],
+        ..Default::default()
+    };
+    let v = |s: &str| value_from_runtime("System.Boolean", "True", s).unwrap();
+    let cs = "return new SkiaLayout { IsClippedToBounds = true, Padding = 8 };
+";
+    let files = vec![("fiddle:///snippet.cs".to_string(), cs.to_string())];
+    assert_eq!(set_property(&files, &cs_tree, 2, "IsClippedToBounds", &v("False")).unwrap().text, cs.replace("= true", "= false"));
+    let unset = vec![("fiddle:///snippet.cs".to_string(), "return new SkiaLayout { Padding = 8 };
+".to_string())];
+    assert!(set_property(&unset, &cs_tree, 2, "IsClippedToBounds", &v("False")).unwrap().text.contains("IsClippedToBounds = false"));
+    let rs = "fn build(_app: &mut App) -> Build<SkiaLayout> {
+    SkiaLayout::new().is_clipped_to_bounds(true).padding(8)
+}
+";
+    let files = vec![("fiddle:///snippet.rs".to_string(), rs.to_string())];
+    assert_eq!(set_property(&files, &n("SkiaLayout"), 1, "is_clipped_to_bounds", &v("False")).unwrap().text, rs.replace("(true)", "(false)"));
+}

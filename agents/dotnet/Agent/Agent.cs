@@ -1597,7 +1597,8 @@ namespace DrawnUi.Designer.Agent
                         defs.Add(new PropDef
                         {
                             Name = name, Property = bp, ReturnType = returnType,
-                            Editable = IsEditable(type, name, returnType) && !EngineManaged(type, f, bp, name),
+                            // A read-only bindable property (MAUI's CreateReadOnly) is the control's to set.
+                            Editable = IsEditable(type, name, returnType) && !EngineManaged(type, f, bp, name) && Get(bp, "IsReadOnly") is not true,
                             Group = GroupOf(name), Choices = ChoicesOf(returnType),
                             Flags = (Nullable.GetUnderlyingType(returnType) ?? returnType) is { IsEnum: true } e && e.IsDefined(typeof(FlagsAttribute), false),
                         });

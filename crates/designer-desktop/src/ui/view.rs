@@ -1996,20 +1996,24 @@ pub(super) fn left_click(cx: &Cx) -> bool {
 
 /// The dropdown of a property's choices, under its value. A tap sets one (a flags enum toggles it
 /// and the dropdown stays open); the current ones carry a check.
-pub fn choices_popup(app: &App) -> Build<SkiaShape> {
+pub fn choices_popup(app: &mut App) -> Build<SkiaShape> {
+    // Each row kept, for typing to move the keyboard to it.
+    app.choice_items = vec![Handle::default(); app.edit_choices.len()];
     let rows: Vec<_> = app
         .edit_choices
         .iter()
         .cloned()
-        .map(|value| {
+        .zip(app.choice_items.iter_mut())
+        .map(|(value, handle)| {
             let selected = value.clone();
             let tapped = value.clone();
             // The empty choice (it clears an optional property) reads "(empty)", not a blank row.
-            if value.is_empty() {
+            let row = if value.is_empty() {
                 menu_item(tr("choice-empty"), move |app| app.choice_on(&selected), move |app, cx| app.pick_choice(tapped.clone(), cx)).accessibility_label(tr("choice-empty-label"))
             } else {
                 menu_item(value, move |app| app.choice_on(&selected), move |app, cx| app.pick_choice(tapped.clone(), cx))
-            }
+            };
+            row.assign(handle)
         })
         .collect();
     let longest = app.edit_choices.iter().map(|c| if c.is_empty() { tr("choice-empty").chars().count() } else { c.chars().count() }).max().unwrap_or(4);

@@ -613,6 +613,19 @@ class TestCanvas {
     clearInterval(pump);
   }
 
+  // only what can be set: a getter without a setter (a computed value) is not listed, an accessor with
+  // one and a plain field are
+  {
+    class Probe extends Core.SkiaLabel {
+      private size2 = 1;
+      get WillClipEverything() { return true; }
+      get Size2() { return this.size2; }
+      set Size2(v: number) { this.size2 = v; }
+    }
+    const names = (__test.readProps(new Probe()) as any[]).map((p) => p.name);
+    check("getter-only not listed; setter accessor and fields listed", !names.includes("WillClipEverything") && names.includes("Size2") && names.includes("IsClippedToBounds"), names.join(","));
+  }
+
   // source map lookup: a TSX file through esbuild's JSX transform; the generated jsx(...) call maps back to its "<"
   const tsx = "import { SkiaLabel } from 'x';\nexport const Page = () => (\n  <SkiaLabel Text=\"a\" />\n);\n";
   const out = transformSync(tsx, { loader: "tsx", jsx: "automatic", sourcemap: "external", sourcefile: "Page.tsx", format: "esm" });

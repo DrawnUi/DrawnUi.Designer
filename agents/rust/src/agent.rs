@@ -1475,6 +1475,8 @@ mod tests {
         let [AppMsg::Props { props, .. }] = &props[..] else { panic!("{props:?}") };
         let visible = props.iter().find(|p| p.name == "is_visible").unwrap();
         assert_eq!((visible.type_name.as_str(), visible.value.as_str(), visible.is_default), ("System.Boolean", "false", Some(false)));
+        // Only what can be set: a gradient (listed by the engine, not settable from text) is left out.
+        assert!(props.iter().any(|p| p.name == "font_size") && !props.iter().any(|p| p.name == "fill_gradient" || p.name == "text_gradient"), "{props:?}");
         // An enum lists its cases, and takes one by name.
         let options = props.iter().find(|p| p.name == "horizontal_options").unwrap();
         assert_eq!(options.choices.as_deref(), Some(&["Start", "Center", "End", "Fill"].map(String::from)[..]));

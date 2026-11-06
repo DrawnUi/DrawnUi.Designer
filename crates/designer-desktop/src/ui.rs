@@ -373,6 +373,10 @@ pub struct App {
     /// The open choices dropdown, and the menu row under the mouse.
     popup: Option<PopupId>,
     menu_hover: Option<String>,
+    /// The rows of the open choices dropdown, in the order of `edit_choices`.
+    choice_items: Vec<Handle<SkiaShape>>,
+    /// What was typed while the choices dropdown is open: the first choice it starts is highlighted.
+    choice_typed: String,
     /// The question asked before Restart, Run or closing with changes not in code (Manual): what
     /// waits for its answer.
     confirm: Option<writes::AfterFlush>,
@@ -569,6 +573,12 @@ impl App {
         let (Some(node), Some(prop)) = (self.selected_node().map(|n| n.id), self.edit_prop.clone()) else { return };
         let item = self.selected_node().and_then(|n| n.template_index);
         let value = self.edit_value.clone();
+        // The value it has now (a choice in any letter case): no change, nothing sent or recorded.
+        let key = (node, prop.clone());
+        let now = self.pending.get(&key).cloned().or_else(|| self.props.iter().find(|p| p.name == prop).map(|p| p.value.clone()));
+        if now.is_some_and(|n| n == value || (!self.edit_choices.is_empty() && n.eq_ignore_ascii_case(value.trim()))) {
+            return;
+        }
         let request = self.request();
         self.send(HubToApp::SetProperty { request, node, name: prop.clone(), value: value.clone() });
         if fetch {
@@ -583,7 +593,45 @@ impl App {
         if let Some(p) = self.props.iter().find(|p| p.name == prop) {
             self.live_original.entry((node, prop.clone())).or_insert_with(|| p.value.clone());
         }
+        // Back to the value from before every live edit: the row is clean again.
+        if self.live_original.get(&key).is_some_and(|o| *o == value || (!self.edit_choices.is_empty() && o.eq_ignore_ascii_case(value.trim()))) {
+            self.live_original.remove(&key);
+            self.pending.remove(&key);
+            return;
+        }
         self.pending.insert((node, prop), value);
+    }
+
+    /// A character typed while the choices dropdown is open: the first choice starting with what was
+    /// typed gets the highlight and the keyboard (Enter picks it), as a list box does; a character
+    /// no choice starts with after the others starts over from it.
+    fn type_choice(&mut self, text: &str, cx: &mut Cx) -> bool {
+        if self.popup.is_none() || self.edit_choices.is_empty() || self.edit_prop.is_none() || self.picker.is_some() || text.trim().is_empty() {
+            return false;
+        }
+        let find = |typed: &str, choices: &[String]| {
+            let t = typed.to_lowercase();
+            choices.iter().position(|c| c.to_lowercase().starts_with(&t))
+        };
+        self.choice_typed.push_str(text);
+        let mut at = find(&self.choice_typed, &self.edit_choices);
+        if at.is_none() {
+            self.choice_typed = text.to_owned();
+            at = find(&self.choice_typed, &self.edit_choices);
+        }
+        if let Some(i) = at {
+            self.menu_hover = Some(self.edit_choices[i].clone());
+            if let Some(item) = self.choice_items.get(i) {
+                cx.set_accessibility_focus(*item);
+            }
+        }
+        true
+    }
+
+    /// The choice what was typed in the dropdown leads to, if any.
+    fn typed_choice(&self) -> Option<String> {
+        let t = self.choice_typed.to_lowercase();
+        (!t.is_empty()).then(|| self.edit_choices.iter().find(|c| c.to_lowercase().starts_with(&t)).cloned()).flatten()
     }
 
     /// Writes property `index` of `props` into the app's code: its live edit when it has one,
@@ -1858,6 +1906,7 @@ impl App {
         if !self.edit_choices.is_empty() {
             if let Some(anchor) = anchor {
                 // Drawn on the CPU: a transparent window on Windows, so the panel's round corners show.
+                self.choice_typed.clear();
                 self.popup = Some(cx.open_popup_window(view::choices_popup(self), anchor, PopupWindowOptions { cpu: true, ..Default::default() }));
             }
         } else {
@@ -2948,7 +2997,23 @@ fn keys(ui: Ui<App>) -> Ui<App> {
     // Closing the window (its close button, Alt+F4, Cmd+Q) with changes not in code: they are
     // written first, or the designer asks (Manual).
     ui.on_app_closing(|app: &mut App, cx| app.closing(cx))
+    // Typing in an open choices dropdown moves to the choice it starts.
+    .on_key_char(|app: &mut App, key, cx| app.type_choice(key.text, cx))
     .on_key_down(|app: &mut App, key, cx| {
+        // An open choices dropdown: Enter picks what was typed (unless the keyboard already picked
+        // the highlighted row); Backspace takes a typed character back.
+        if app.popup.is_some() && !app.edit_choices.is_empty() && app.edit_prop.is_some() && !app.choice_typed.is_empty() {
+            if matches!(key.key, "Enter" | "NumpadEnter") && !key.handled {
+                if let Some(choice) = app.typed_choice() {
+                    app.pick_choice(choice, cx);
+                    return true;
+                }
+            }
+            if key.key == "Backspace" {
+                app.choice_typed.pop();
+                return true;
+            }
+        }
         // The menu bar's: Alt and a title's letter, Left and Right in an open menu.
         if !app.on_settings && !app.on_help && app.bar_key(key, cx) {
             return true;
@@ -5853,6 +5918,47 @@ mod shots {
         host.ui.waker().invalidate(host.ui.state.inbox, Dirty::APPLY);
         frames(&mut host, 3);
         assert!(sent.lock().unwrap().iter().any(|m| matches!(m, EditorMsg::SetCode { node: n, prop, .. } if *n == node + 50_000 && prop == "FontFamily")), "{:?}", sent.lock().unwrap());
+    }
+
+    /// A true/false property as the choices dropdown edits it. Picking the value it has is no change
+    /// (nothing live, no dot, no step, so nothing to write); typing "false" and Enter picks False, not
+    /// the highlighted True; picking True again after False is back to clean.
+    #[test]
+    fn a_choice_picks_what_is_typed_and_the_same_value_is_no_change() {
+        let mut state = with_props();
+        let prop = |name: &str, t: &str, v: &str| Prop { name: name.into(), type_name: t.into(), value: v.into(), is_set: true, group: Some("Layout".into()), ..Default::default() };
+        state.props = vec![prop("IsClippedToBounds", "System.Boolean", "True")];
+        state.rebuild_prop_rows();
+        let (mut host, sent, _to_ui) = wired(state);
+        let node = host.ui.state.selected_node().map(|n| n.id).unwrap();
+        let open = |host: &mut Headless<App>| {
+            let list = host.rect(host.ui.state.props_list);
+            let r = host.ui.state.prop_rows.iter().position(|row| matches!(row, PropRow::Prop(0))).unwrap();
+            let at = (list.left + 200.0, list.top + view::PROPS_PAD + r as f32 * view::ROW + view::ROW / 2.0);
+            host.pan(at, at, 16.0, 1);
+            frames(host, 3);
+            assert!(host.ui.state.popup.is_some(), "the choices are open");
+        };
+        // The same value: nothing.
+        open(&mut host);
+        host.ui.state.pick_choice("True".into(), &mut host.ui.tree.cx());
+        frames(&mut host, 3);
+        assert!(sets(&sent).is_empty() && host.ui.state.pending.is_empty() && undo_names(&host).is_empty(), "{:?}", sets(&sent));
+        // Typed, then Enter: the typed choice.
+        open(&mut host);
+        host.type_text("false");
+        frames(&mut host, 2);
+        host.press_key("Enter");
+        frames(&mut host, 3);
+        assert_eq!(sets(&sent), [(node, "IsClippedToBounds".to_owned(), "False".to_owned())]);
+        assert_eq!(host.ui.state.pending.get(&(node, "IsClippedToBounds".to_owned())).map(String::as_str), Some("False"));
+        // True again: the value from before every edit, so no dot to write.
+        sent.lock().unwrap().clear();
+        open(&mut host);
+        host.ui.state.pick_choice("True".into(), &mut host.ui.tree.cx());
+        frames(&mut host, 3);
+        assert_eq!(sets(&sent), [(node, "IsClippedToBounds".to_owned(), "True".to_owned())]);
+        assert!(host.ui.state.pending.is_empty());
     }
 
     /// A page's code.flush: Auto writes and answers once the writes are done; Manual answers at

@@ -283,15 +283,17 @@ the library builds for itself, such as a button's inner label, are left out, bec
 them. The tree follows the app: opening a screen here, moving to another page in the app itself, or
 a hot reload brings the new screen's tree.
 
-**Properties.** The selected control's properties with their current values, in one of two orders:
+**Properties.** The selected control's properties with their current values, only those your code can set (not a
+computed value with no setter, such as `WillClipBounds`), in one of two orders:
 
 - **Set**: two groups, each A to Z: Set (in your code or edited here) and Unset. The designer always opens on it.
 - **Type**: Layout, Text, Look, Transform, Behavior.
 
 Changed properties are written brighter. Click a value to edit it where it is: a field for text and numbers
-(with - and + for numbers), a menu for choices, a color picker for colors (a saturation and brightness square, hue
-and opacity bars, a hex field; the color changes in the app as you drag). Enter sets the value in the running app; Esc puts it back as it
-was and leaves the field.
+(with - and + for numbers), a menu for choices (True / False too: typing moves to the first choice it starts, so
+"fa" and Enter picks False), a color picker for colors (a saturation and brightness square, hue and opacity bars, a hex
+field; the color changes in the app as you drag). Enter sets the value in the running app; Esc puts it back as it
+was and leaves the field. The value a property already has is no change: nothing is sent, marked or written.
 
 Each row of a changed property has two buttons at its right:
 
