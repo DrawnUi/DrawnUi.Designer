@@ -111,6 +111,7 @@ theme-hint = Цвета всего окна. Новая тема раскрыв�
 theme-dark = Тёмная
 theme-midnight = Полночь
 theme-graphite = Графит
+theme-spaceship = Космический корабль
 theme-light = Светлая
 theme-paper = Бумага
 theme-high-contrast = Высокий контраст

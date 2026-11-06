@@ -111,6 +111,7 @@ theme-hint = Boje celog prozora. Nova tema se otvara odakle klikneš.
 theme-dark = Tamna
 theme-midnight = Ponoć
 theme-graphite = Grafit
+theme-spaceship = Svemirski brod
 theme-light = Svetla
 theme-paper = Papir
 theme-high-contrast = Visok kontrast

@@ -3187,22 +3187,22 @@ mod shots {
         host.save_png(dir.join("27-embedded.png").to_str().unwrap());
     }
 
-    /// The editor in a page in the DrawFiddle theme, at the size of the Fiddle's Visual view, by eye:
-    /// target/designer-shots/35-drawfiddle-theme.png.
+    /// The editor in a page in the Spaceship theme (made for DrawFiddle), at the size of the Fiddle's Visual view, by eye:
+    /// target/designer-shots/35-spaceship-theme.png.
     #[test]
     #[ignore]
-    fn drawfiddle_theme_shot() {
-        view::set_theme(view::Theme::by_id("drawfiddle"));
+    fn spaceship_theme_shot() {
+        view::set_theme(view::Theme::by_id("spaceship"));
         let mut state = with_controls(with_props());
         state.embedded = true;
-        state.settings.theme = view::Theme::by_id("drawfiddle");
+        state.settings.theme = view::Theme::by_id("spaceship");
         let font = |name: &str| assets(&format!("assets/{name}")).expect("font file");
         let ui = Ui::new(state, view::build).font_bytes("Default", &font("OpenSans-Regular.ttf")).font_bytes("Semibold", &font("OpenSans-Semibold.ttf")).background(view::window_background());
         let mut host = Headless::new(keys(ui), 775, 489, 1.0);
         host.settle();
         let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/designer-shots");
         std::fs::create_dir_all(&dir).unwrap();
-        host.save_png(dir.join("35-drawfiddle-theme.png").to_str().unwrap());
+        host.save_png(dir.join("35-spaceship-theme.png").to_str().unwrap());
         view::set_theme(view::Theme::by_id("dark"));
     }
 

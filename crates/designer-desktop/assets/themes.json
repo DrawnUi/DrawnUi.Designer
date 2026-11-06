@@ -116,8 +116,8 @@
       }
     },
     {
-      "id": "drawfiddle",
-      "name": "DrawFiddle",
+      "id": "spaceship",
+      "name": "Spaceship",
       "light": false,
       "colors": {
         "bg": "#0B1420",

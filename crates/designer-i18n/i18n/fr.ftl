@@ -108,6 +108,7 @@ theme-hint = Les couleurs de toute la fenêtre. Le nouveau s’ouvre depuis l’
 theme-dark = Sombre
 theme-midnight = Minuit
 theme-graphite = Graphite
+theme-spaceship = Vaisseau spatial
 theme-light = Clair
 theme-paper = Papier
 theme-high-contrast = Contraste élevé

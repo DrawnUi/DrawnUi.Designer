@@ -109,6 +109,7 @@ theme-hint = The colors of the whole window. The new one opens from where you cl
 theme-dark = Dark
 theme-midnight = Midnight
 theme-graphite = Graphite
+theme-spaceship = Spaceship
 theme-light = Light
 theme-paper = Paper
 theme-high-contrast = High contrast
