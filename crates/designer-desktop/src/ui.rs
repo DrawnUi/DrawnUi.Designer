@@ -4785,13 +4785,6 @@ mod shots {
             }
             host.press_key("Escape");
             host.settle();
-            open_bar(&mut host, 2);
-            let order = line_at(&mut host, "Properties order");
-            host.hover(order.0, order.1);
-            host.settle();
-            save(&mut host, "view");
-            host.tap(640.0, 600.0);
-            host.settle();
             open_bar(&mut host, 0);
             let run = line_at(&mut host, "Run app");
             host.hover(run.0, run.1);

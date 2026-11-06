@@ -139,7 +139,7 @@ fn is_light() -> bool {
 #[derive(Clone, Copy)]
 pub struct Tone(usize);
 
-const ROLES: usize = 31;
+const ROLES: usize = 32;
 
 const BG: Tone = Tone(0); // window, behind the panels
 const PANEL: Tone = Tone(1);
@@ -172,9 +172,12 @@ const TYPE_OWN: Tone = Tone(27); // the app's own classes
 const GUIDE: Tone = Tone(28);
 const GUIDE_BOX: Tone = Tone(29);
 const GUIDE_SIGN: Tone = Tone(30);
+/// The Layers panel's background: a step darker than the side panels in a dark theme, a step
+/// lighter in a light one, so the tree reads as the work area.
+const LAYERS: Tone = Tone(31);
 
 /// The role names the themes file uses, in `Tone` order.
-const ROLE_NAMES: [&str; ROLES] = ["bg", "panel", "header", "line", "hover", "selection", "text", "muted", "faint", "accent", "field", "ok", "warn", "error", "input", "on_accent", "menu_hover", "menu_selected", "menu_selected_hover", "on_selected", "switch_off", "switch_thumb_off", "group_header", "type_layout", "type_text", "type_input", "type_media", "type_own", "guide", "guide_box", "guide_sign"];
+const ROLE_NAMES: [&str; ROLES] = ["bg", "panel", "header", "line", "hover", "selection", "text", "muted", "faint", "accent", "field", "ok", "warn", "error", "input", "on_accent", "menu_hover", "menu_selected", "menu_selected_hover", "on_selected", "switch_off", "switch_thumb_off", "group_header", "type_layout", "type_text", "type_input", "type_media", "type_own", "guide", "guide_box", "guide_sign", "layers"];
 
 /// A role's color in the current theme.
 pub fn c(t: Tone) -> Color {
@@ -283,7 +286,12 @@ fn type_icon(type_name: &str, own_class: bool) -> (&'static str, Tone) {
 
 /// A panel: a header with an uppercase title, then the body filling the rest.
 fn panel(title: &str, extra: impl IntoChildren, body: impl IntoChildren) -> Build<SkiaLayout> {
-    SkiaGrid::new().fill().row_definitions("34, *").background_color(c(PANEL)).children((
+    panel_on(PANEL, title, extra, body)
+}
+
+/// A panel with its own background role (Layers).
+fn panel_on(bg: Tone, title: &str, extra: impl IntoChildren, body: impl IntoChildren) -> Build<SkiaLayout> {
+    SkiaGrid::new().fill().row_definitions("34, *").background_color(c(bg)).children((
         // The title, then what the panel has on the right: in a narrow panel that is cut on its left,
         // never drawn over the title.
         SkiaGrid::new().fill().background_color(c(HEADER)).padding((12, 0)).row(0).column_definitions("Auto, *").column_spacing(8).children((
@@ -1551,7 +1559,8 @@ fn bind_control(cell: &CtlHandles, app: &App, index: usize, cx: &mut Cx) {
 }
 
 fn layers_panel(app: &mut App) -> Build<SkiaLayout> {
-    panel(
+    panel_on(
+        LAYERS,
         &tr("panel-layers"),
         (
             text(11.0, FAINT).vertical_options(LayoutOptions::Center).observe(|me, app: &App| {

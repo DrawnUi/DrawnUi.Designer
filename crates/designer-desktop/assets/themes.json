@@ -36,7 +36,8 @@
         "type_own": "#E8B04B",
         "guide": "#3E4148",
         "guide_box": "#6A6F78",
-        "guide_sign": "#C2C6CE"
+        "guide_sign": "#C2C6CE",
+        "layers": "#19191C"
       }
     },
     {
@@ -74,7 +75,8 @@
         "type_own": "#F0B95A",
         "guide": "#2C3852",
         "guide_box": "#5F6E8C",
-        "guide_sign": "#BAC5D9"
+        "guide_sign": "#BAC5D9",
+        "layers": "#0C1220"
       }
     },
     {
@@ -112,7 +114,8 @@
         "type_own": "#E8A33D",
         "guide": "#404040",
         "guide_box": "#777777",
-        "guide_sign": "#CFCFCF"
+        "guide_sign": "#CFCFCF",
+        "layers": "#1A1A1A"
       }
     },
     {
@@ -150,7 +153,8 @@
         "type_own": "#F0B95A",
         "guide": "#21394A",
         "guide_box": "#3F7F8F",
-        "guide_sign": "#BFEFF7"
+        "guide_sign": "#BFEFF7",
+        "layers": "#08111B"
       }
     },
     {
@@ -188,7 +192,8 @@
         "type_own": "#B07415",
         "guide": "#CDD1D7",
         "guide_box": "#8D949D",
-        "guide_sign": "#454B54"
+        "guide_sign": "#454B54",
+        "layers": "#FFFFFF"
       }
     },
     {
@@ -226,7 +231,8 @@
         "type_own": "#B06A15",
         "guide": "#D8D0C2",
         "guide_box": "#9C9385",
-        "guide_sign": "#4D463E"
+        "guide_sign": "#4D463E",
+        "layers": "#FFFDF8"
       }
     },
     {
@@ -264,7 +270,8 @@
         "type_own": "#FFC94D",
         "guide": "#6A6A6A",
         "guide_box": "#BDBDBD",
-        "guide_sign": "#FFFFFF"
+        "guide_sign": "#FFFFFF",
+        "layers": "#000000"
       }
     }
   ]
