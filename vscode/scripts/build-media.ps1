@@ -6,8 +6,9 @@ param([switch]$NoBuild, [string]$Out)
 $ErrorActionPreference = "Stop"
 
 $crate = Resolve-Path "$PSScriptRoot\..\..\crates\designer-desktop"
-# DrawnUI for Rust from its source checkout when there is one (dev\cargo.ps1), else crates.io.
-$cargo = Resolve-Path "$PSScriptRoot\..\..\dev\cargo.ps1"
+# What this builds ships (the VS Code extension, DrawFiddle's editor): DrawnUI for Rust always from its
+# released crate on crates.io, never from a source checkout (dev\cargo.ps1 is for working on the repo).
+$cargo = "cargo"
 $media = if ($Out) { [IO.Path]::GetFullPath($Out, (Get-Location).Path) } else { Join-Path $PSScriptRoot "..\media" }
 
 Push-Location $crate
