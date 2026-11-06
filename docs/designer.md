@@ -680,9 +680,11 @@ The iframe sends:
 The page sends:
 
 - `{ channel, type: "fromApp", msg }`: the agent's messages; the first is its hello (`{ role: "app", ... }`).
-  A hello from the same app again (same name, engine, pid and platform: its agent attached again after a
+  A hello from the same app again (same name, engine and platform: its agent attached again after a
   rebuild) keeps it, with the changes not in code yet, as a hot reload does; another app's hello replaces it.
-- `{ channel, type: "app.closed" }`: the agent was detached.
+- `{ channel, type: "app.closed" }`: the page let its app go (its code view is shown, say). The editing session
+  stays: the history (with its writes to code), the changes not in code and the selection, for the same app's next
+  hello, whose new controls are found again by their place. A different app's hello ends the session.
 - `{ channel, type: "theme", theme }`: the page's look. `"dark"`, `"light"` or a designer theme id (`midnight`,
   `graphite`, `paper`, `high-contrast`). Send it once at start and again whenever the page's theme changes.
 - `{ channel, type: "code", uri: "fiddle:///snippet.cs", text, version }`: the code (`snippet.tsx` for React,

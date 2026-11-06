@@ -5796,6 +5796,72 @@ mod shots {
         assert_eq!(posted.lock().unwrap().iter().filter(|m| m["type"] == "history").count(), count, "only when it changes");
     }
 
+    /// A page lets its app go while its code is shown and the same app comes back with new ids (TSX,
+    /// Rust): the history stays, Undo takes the family back in the code and on the new control, Redo
+    /// writes it again on the new control.
+    #[test]
+    fn the_history_survives_the_page_app_going_and_coming_back() {
+        let mut state = with_props();
+        state.embedded = true;
+        state.settings.write_mode = WriteMode::Auto;
+        state.apps[0].info.project = Some("C:/apps/HelloWpf/HelloWpf.csproj".into());
+        let posted = std::sync::Arc::new(std::sync::Mutex::new(Vec::<serde_json::Value>::new()));
+        let log = posted.clone();
+        state.to_page = Some(Box::new(move |m| log.lock().unwrap().push(m)));
+        let prop = |name: &str, t: &str, v: &str| Prop { name: name.into(), type_name: t.into(), value: v.into(), is_set: true, group: Some("Text".into()), ..Default::default() };
+        state.props = vec![prop("FontFamily", "System.String", "FontTextTitle"), prop("FontSize", "System.Double", "26"), prop("Text", "System.String", "Hi")];
+        state.rebuild_prop_rows();
+        let (mut host, sent, to_ui) = wired(state);
+        let node = host.ui.state.selected_node().map(|n| n.id).unwrap();
+        for (name, text) in [("FontSize", "4"), ("Text", " A"), ("FontFamily", "2")] {
+            let i = host.ui.state.props.iter().position(|p| p.name == name).unwrap();
+            let r = host.ui.state.prop_rows.iter().position(|row| matches!(row, PropRow::Prop(k) if *k == i)).unwrap();
+            let list = host.rect(host.ui.state.props_list);
+            let at = (list.left + 200.0, list.top + view::PROPS_PAD + r as f32 * view::ROW + view::ROW / 2.0);
+            host.pan(at, at, 16.0, 1);
+            frames(&mut host, 2);
+            host.type_text(text);
+            frames(&mut host, 2);
+            host.press_key("Enter");
+            frames(&mut host, 3);
+        }
+        to_ui.send(Incoming::Flush(serde_json::json!(1))).unwrap();
+        host.ui.waker().invalidate(host.ui.state.inbox, Dirty::APPLY);
+        frames(&mut host, 3);
+        let writes = set_codes(&sent);
+        for (request, n, _) in &writes {
+            edited(&mut host, &to_ui, *request, *n);
+        }
+        // The app comes back (its info anew, the same id) and builds its controls with new ids.
+        let mut apps = host.ui.state.apps.clone();
+        apps[0].info.pid = 7;
+        feed(&mut host, &to_ui, HubToEditor::Apps { apps, recent: vec![] });
+        let mut rebuilt = host.ui.state.tree.clone();
+        for n in &mut rebuilt.nodes {
+            n.id += 50_000;
+            n.parent = n.parent.map(|p| p + 50_000);
+        }
+        rebuilt.revision += 1;
+        feed(&mut host, &to_ui, HubToEditor::FromApp { app: 1, msg: AppMsg::Tree(rebuilt) });
+        let history = posted.lock().unwrap().iter().rev().find(|m| m["type"] == "history").cloned().unwrap();
+        assert_eq!(history, serde_json::json!({ "type": "history", "canUndo": true, "canRedo": false, "undo": "Change FontFamily", "redo": "" }));
+        // Undo: the family's write goes back, and the new control shows the family from before.
+        let family = writes.iter().find(|w| w.2 == "FontFamily").map(|w| w.0).unwrap();
+        sent.lock().unwrap().clear();
+        to_ui.send(Incoming::Undo).unwrap();
+        host.ui.waker().invalidate(host.ui.state.inbox, Dirty::APPLY);
+        frames(&mut host, 3);
+        assert!(sent.lock().unwrap().contains(&EditorMsg::UndoCode { request: family }));
+        feed(&mut host, &to_ui, HubToEditor::CodeUndone { request: family, uri: "Page.cs".into() });
+        assert!(sets(&sent).contains(&(node + 50_000, "FontFamily".to_owned(), "FontTextTitle".to_owned())), "{:?}", sets(&sent));
+        // Redo: written again, on the new control.
+        sent.lock().unwrap().clear();
+        to_ui.send(Incoming::Redo).unwrap();
+        host.ui.waker().invalidate(host.ui.state.inbox, Dirty::APPLY);
+        frames(&mut host, 3);
+        assert!(sent.lock().unwrap().iter().any(|m| matches!(m, EditorMsg::SetCode { node: n, prop, .. } if *n == node + 50_000 && prop == "FontFamily")), "{:?}", sent.lock().unwrap());
+    }
+
     /// A page's code.flush: Auto writes and answers once the writes are done; Manual answers at
     /// once, with what is left.
     #[test]

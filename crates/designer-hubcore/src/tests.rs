@@ -1077,6 +1077,53 @@ fn a_page_app_attaching_again_keeps_its_live_changes() {
     assert!(other.is_some_and(|o| o != app) && !core.apps.contains_key(&app));
 }
 
+/// A page lets its app go while its code is shown (app.closed: the page hub keeps the session) and
+/// the same app attaches again with new ids (a Rust module after the swap: another pid): its writes
+/// can still be taken back, the family first, in the code and live on the new control; a
+/// different app's hello ends the session.
+#[test]
+fn a_page_app_let_go_and_back_keeps_its_writes_and_session() {
+    let posted: Arc<Mutex<Vec<page::ToPage>>> = Arc::default();
+    let sink = posted.clone();
+    let code = Arc::new(page::PageCode::new(move |m| sink.lock().unwrap().push(m)));
+    let mut core = HubCore::new(code.clone());
+    core.page_project = Some(page::PROJECT.into());
+    let (editor, _) = core.editor_hello(PROTOCOL_VERSION).unwrap();
+    let hello = AppInfo { engine: "rust".into(), platform: Some("browser".into()), ..info("FiddleApp", 0, None) };
+    let (app, _) = core.page_hello(None, hello.clone());
+    let app = app.unwrap();
+    code.set_text_for("fiddle:///snippet.rs", RUST_APP.into(), 1);
+    ap(&mut core, app, AppMsg::Tree(rust_tree(1, 1)));
+    ap(&mut core, app, AppMsg::Props { node: 3, props: rust_props("B", "14") });
+    let mut text = RUST_APP.to_string();
+    let mut version = 1;
+    for (request, prop, value) in [(1, "font_size", "20"), (2, "text_color", "#FFFF0000"), (3, "text", "C")] {
+        ed(&mut core, editor, EditorMsg::SetCode { request, app, node: 3, prop: prop.into(), value: value.into() });
+        let Some(page::ToPage::Edit { edits, .. }) = posted.lock().unwrap().pop() else { panic!("{prop}") };
+        text = apply_utf16(&text, &edits[0]);
+        version += 1;
+        code.set_text_for("fiddle:///snippet.rs", text.clone(), version);
+        core.code_arrived();
+    }
+    // The page lets the app go (nothing reaches the hub's apps), then the same app comes back: same
+    // id, its new tree has new ids.
+    let (again, outs) = core.page_hello(Some(app), AppInfo { pid: 7, ..hello.clone() });
+    assert_eq!(again, Some(app));
+    // Editors hear only its new info: the same app, still there.
+    let outs = core.run_inline(outs);
+    assert!(matches!(to_editor(&outs, editor).as_slice(), [HubToEditor::Apps { apps, .. }] if apps.len() == 1 && apps[0].id == app), "{outs:?}");
+    ap(&mut core, app, AppMsg::Tree(rust_tree(2, 21)));
+    // The first write (font_size) taken back: the code without it, the rest kept.
+    let outs = ed(&mut core, editor, EditorMsg::UndoCode { request: 1 });
+    assert!(matches!(to_editor(&outs, editor).as_slice(), [HubToEditor::CodeUndone { request: 1, .. }]), "{outs:?}");
+    let Some(page::ToPage::Edit { edits, .. }) = posted.lock().unwrap().pop() else { panic!() };
+    let undone = apply_utf16(&text, &edits[0]);
+    assert!(undone.contains("SkiaLabel::new(\"C\").text_color(Color::from_rgb(255, 0, 0)),") && !undone.contains("font_size(20)"), "{undone}");
+    // A different app's hello ends the session.
+    let (other, _) = core.page_hello(Some(app), AppInfo { name: "Other".into(), ..hello });
+    assert!(other.is_some_and(|o| o != app) && !core.apps.contains_key(&app));
+}
+
 /// Three values written in one go (family, size, then the text above them, which changes the file's
 /// length before the others): Undo takes back the family first, then the others, each where it is now.
 #[test]

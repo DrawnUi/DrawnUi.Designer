@@ -255,13 +255,10 @@ pub extern "C" fn designer_page(text: *const u8, len: usize) {
                 }
                 (None, _) => vec![],
             },
-            Some("app.closed") => match p.app.take() {
-                Some(app) => {
-                    let outs = p.core.app_closed(app);
-                    p.core.run_inline(outs)
-                }
-                None => vec![],
-            },
+            // The page let its app go for a while (its Source view): the session stays, with its
+            // history, live changes and selection, for the same app attaching again (`page_hello`); a
+            // different app's hello ends it.
+            Some("app.closed") => vec![],
             // The snippet in the page's language: fiddle:///snippet.cs (C#) or .tsx (React).
             // A write the page took (or its own text): the writes held for it go now.
             Some("code") if m["uri"].as_str().is_none_or(page::is_snippet) => {

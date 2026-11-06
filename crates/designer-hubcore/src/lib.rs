@@ -168,14 +168,15 @@ impl HubCore {
         Some((id, vec![Out::ToEditor(None, self.apps_msg())]))
     }
 
-    /// App `id` says hello again as the same app (its agent attached again after a rebuild: same
-    /// name, engine, pid and platform): it stays, its tree and the changes made live and not written
-    /// kept, so its next tree is a rebuild like a hot reload's. Its info is updated (editors hear it
-    /// when it changed). `None` when it is another app.
+    /// App `id` says hello again as the same app (its agent attached again after a rebuild or after
+    /// the page let it go: same name, engine and platform; a page app's pid and module say nothing):
+    /// it stays, its tree and the changes made live and not written kept, so its next tree is a
+    /// rebuild like a hot reload's. Its info is updated (editors hear it when it changed). `None` when
+    /// it is another app.
     pub fn app_hello_again(&mut self, id: AppId, info: &AppInfo) -> Option<Vec<Out>> {
         let app = self.apps.get_mut(&id)?;
         let a = &app.info;
-        if (&a.name, &a.engine, a.pid, &a.platform) != (&info.name, &info.engine, info.pid, &info.platform) || !same_major(&info.protocol) {
+        if (&a.name, &a.engine, &a.platform) != (&info.name, &info.engine, &info.platform) || !same_major(&info.protocol) {
             return None;
         }
         if app.info == *info {
@@ -725,10 +726,15 @@ impl Written {
     fn diff(path: String, old: &[u8], new: &[u8]) -> Written {
         let mut at = old.iter().zip(new).take_while(|(a, b)| a == b).count();
         let mut tail = old[at..].iter().rev().zip(new[at..].iter().rev()).take_while(|(a, b)| a == b).count();
-        // A span empty on one side ("FontTextTitle" -> "FontText") takes a byte of its neighbours on
-        // each side, so the undo checks real text where it puts the span back.
-        if (old.len() == at + tail || new.len() == at + tail) && at > 0 && tail > 0 {
-            (at, tail) = (at - 1, tail - 1);
+        // Text only taken out ("FontTextTitle" -> "FontText") leaves nothing to check where it goes
+        // back: the byte before it joins the span. (Text only put in is checked by itself, and a
+        // write right after it, such as another call appended, does not touch it.)
+        if new.len() == at + tail {
+            if at > 0 {
+                at -= 1;
+            } else if tail > 0 {
+                tail -= 1;
+            }
         }
         Written { path, at, before: old[at..old.len() - tail].to_vec(), after: new[at..new.len() - tail].to_vec(), change: None }
     }
