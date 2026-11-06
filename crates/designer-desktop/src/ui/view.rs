@@ -139,7 +139,7 @@ fn is_light() -> bool {
 #[derive(Clone, Copy)]
 pub struct Tone(usize);
 
-const ROLES: usize = 32;
+const ROLES: usize = 33;
 
 const BG: Tone = Tone(0); // window, behind the panels
 const PANEL: Tone = Tone(1);
@@ -175,9 +175,11 @@ const GUIDE_SIGN: Tone = Tone(30);
 /// The Layers panel's background: a step darker than the side panels in a dark theme, a step
 /// lighter in a light one, so the tree reads as the work area.
 const LAYERS: Tone = Tone(31);
+/// The names in Layers: a little dimmer than the text of the side panels, so the tools read first.
+const LAYERS_TEXT: Tone = Tone(32);
 
 /// The role names the themes file uses, in `Tone` order.
-const ROLE_NAMES: [&str; ROLES] = ["bg", "panel", "header", "line", "hover", "selection", "text", "muted", "faint", "accent", "field", "ok", "warn", "error", "input", "on_accent", "menu_hover", "menu_selected", "menu_selected_hover", "on_selected", "switch_off", "switch_thumb_off", "group_header", "type_layout", "type_text", "type_input", "type_media", "type_own", "guide", "guide_box", "guide_sign", "layers"];
+const ROLE_NAMES: [&str; ROLES] = ["bg", "panel", "header", "line", "hover", "selection", "text", "muted", "faint", "accent", "field", "ok", "warn", "error", "input", "on_accent", "menu_hover", "menu_selected", "menu_selected_hover", "on_selected", "switch_off", "switch_thumb_off", "group_header", "type_layout", "type_text", "type_input", "type_media", "type_own", "guide", "guide_box", "guide_sign", "layers", "layers_text"];
 
 /// A role's color in the current theme.
 pub fn c(t: Tone) -> Color {
@@ -1691,6 +1693,10 @@ fn layers_panel(app: &mut App) -> Build<SkiaLayout> {
                         me.set_is_visible(unwritten);
                     }
                     let selected = app.selected == Some(index);
+                    // The selected row keeps full brightness, the others are a little dimmer.
+                    if let Some(mut me) = cx.get_mut(cell.label) {
+                        me.set_text_color(c(if selected { TEXT } else { LAYERS_TEXT }));
+                    }
                     if let Some(mut me) = cx.get_mut(cell.toggle) {
                         let name = short_type(&node.type_name);
                         me.set_accessibility_role(if row.has_children { Aria::BUTTON } else { Aria::PRESENTATION });
@@ -2551,7 +2557,8 @@ fn row_cell(foldable: bool) -> (Build<SkiaLayout>, RowHandles) {
             }),
         SkiaRow::new().spacing(6).vertical_options(LayoutOptions::Center).assign(&mut h.content).children((
             SkiaSvg::from_string(icons::BOX).width_request(14).height_request(14).vertical_options(LayoutOptions::Center).assign(&mut h.icon),
-            text(13.0, TEXT).assign(&mut h.label),
+            // Layers (the foldable list) names its controls a little dimmer than the side panels' text.
+            text(13.0, if foldable { LAYERS_TEXT } else { TEXT }).assign(&mut h.label),
             // Added here and not in code yet: the dot of a property changed live.
             SkiaShape::new().shape_type(ShapeType::Circle).width_request(6).height_request(6).vertical_options(LayoutOptions::Center).background_color(c(ACCENT)).is_visible(false).assign(&mut h.added),
             text(12.0, FIELD).assign(&mut h.detail),
