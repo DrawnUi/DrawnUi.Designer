@@ -434,22 +434,23 @@ write them first, then the window closes; Manual asks. An app that closes by its
 
 ## Undo
 
-**Ctrl+Z** takes back your last action, whatever it was; again, the one before. **Ctrl+Y** (or Ctrl+Shift+Z) does
-it again. On macOS they use Command. The Edit menu and the top of the Layers menu name the step ("Undo Delete
+**Ctrl+Z** takes back your last changing action, whatever it was, written to code or not; again, the one before.
+**Ctrl+Y** (or Ctrl+Shift+Z) does it again. On macOS they use Command. A write to code is no action of its own: it
+belongs to the action it wrote (a row's Write, Write all, Auto before Restart or Run, Always, a page's `code.flush`),
+so Ctrl+Z takes the action back in the app and, when it was written, in the code too, and Ctrl+Y does it and writes
+it again. The Edit menu and the top of the Layers menu name the step ("Undo Delete
 SkiaShape"), and the status line says what went back or came again ("Undone: Paste style").
 
 | Action | One step | Ctrl+Z | Ctrl+Y |
 |---|---|---|---|
-| A property edit | from opening the value to Enter or leaving it (a color dragged is one step) | the value before, live | the value again |
+| A property edit | from opening the value to Enter or leaving it (a color dragged is one step) | the value before, live and in the file when it was written (a value from before an earlier edit not written stays live, with its dot) | the value again, written again when it was |
 | Paste style | all its properties | every value before | every value again |
-| Write, Write all | the values written (Write all: all of them) | the write leaves the file; the value stays live, with its dot | written again |
-| Write all changes (the count's Write all, Auto before Restart or Run, Always, a page's `code.flush`) | every write of it | all of them leave the file; the changes stay live, with their dots | written again |
-| Placing, Paste, Duplicate | the control added | it leaves the app | added again, the same place and content |
-| Write of an added control | the write | out of the file, still in the app | written again |
-| Delete | the control taken out | back in the app, where it was | taken out again |
-| Write of a deleted control | the write | back in the file, still out of the app | out of the file again |
-| Move (a drag, Alt+Up / Alt+Down) | the control moved | back where it was | moved again |
-| Write of a moved control | the write | back at its old place in the file, still moved in the app | moved in the file again |
+| Placing, Paste, Duplicate | the control added | it leaves the app, and the file when it was written | added again, the same place and content, written again when it was |
+| Delete | the control taken out | back in the app, where it was, and in the file | taken out again, of the file too when it was |
+| Move (a drag, Alt+Up / Alt+Down) | the control moved | back where it was, in the file too | moved again, in the file too when it was |
+
+Three edits written by one Write all are three steps: Ctrl+Z takes back the last one, in the app and in the file,
+and the two others stay as they are.
 
 A row's own Undo button still takes back that row's change; it then leaves the history, so Ctrl+Z never takes it
 back twice. A new action clears what Ctrl+Y could do again. The history is kept per app and goes when the app
@@ -484,9 +485,12 @@ The designer refuses instead of guessing, and says why, when:
   `LayoutOptions.Fill`), color, thickness,
 - the file changed on disk while the edit was being made.
 
-Some code is shared by several controls: a helper method's body, or a template used for every cell of a list.
-A value written there changes every control made from it. A value passed as an argument to the helper changes
-only that one call.
+A value changes only the control you edited, never another one made by the same code. For a control a helper
+returns (`Tag("Two")`), the value goes on that call: the argument it passes for it (`Tag("Three")`), its own
+`.WithFontSize(..)` or `.Adapt(..)` when the call has one, else a new `.Adapt(me => me.FontSize = 32)` after it
+(with a cast when the helper returns a base type); never into the helper. A control inside a helper that is called
+more than once is refused, with why (a template's cells share their code the same way: a value written there
+changes every cell). Inside a helper called once, the value is written where it is.
 
 ### Rust (DrawnUI for Rust)
 
@@ -503,6 +507,7 @@ functions, to the constructor that makes the control. It changes one span of tex
 | `.text_color(Color::WHITE)` | `Color::RED` when the color has a name, else `Color::from_rgb(..)` |
 | `.padding(24)` | `.padding((8, 4))`: the shortest form |
 | `circle(Color::BLUE, 40.0)` where `circle` calls `.background_color(colour)` | the argument at that call, not the helper |
+| `tag("Two")` where `tag` sets `.font_size(18.0)` itself | `tag("Two").font_size(32)`: on that call only; its own `.font_size(..)` when it has one |
 | nothing set yet | `.text_color(..)` at the end of the chain, on its own line when the chain's calls are; for a control a helper returns, on that call (`swatch(..).margin(8)`) |
 
 Added, pasted and duplicated controls are written with the engine's own constructors (`SkiaLabel::new("Label")`)
@@ -511,6 +516,14 @@ children tuple or `vec![..]`, commas and lines kept; taking out the last child t
 designer refuses, and says why, when the children come from a loop, an iterator or a condition, a value is a
 constant or an expression, a `vec![..]` would get a control of another type, or a tuple already holds 12 controls
 (the most DrawnUI for Rust takes). Controls of your own types are followed when they are made with `Build::new(..)`.
+
+### React (TSX)
+
+Values are attributes of the JSX element (`FontSize={20}`, `HorizontalOptions="Center"`). A component's own element
+(what it returns) takes a value as a prop on the use you edited (`<Tag text="Two" FontSize={32} />`) when the
+component passes its props on to it (`{...props}`), and an attribute fed by one of its props (`Text={text}`) is
+written on that use too. Otherwise, when the component is used more than once, the write is refused, with why
+("Tag does not take FontSize"); never into the component's body.
 
 ## For AI agents (MCP)
 

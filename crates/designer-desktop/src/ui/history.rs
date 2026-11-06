@@ -1,7 +1,10 @@
-//! The designer's undo history, per app: Ctrl+Z takes back the last action whatever it was, Ctrl+Y
-//! (Ctrl+Shift+Z) does it again. Each step goes back and forth through the same paths as the rows'
-//! own Undo and Write (SetProperty, UndoCode, Remove, Restore, Insert), so the hub's record of live
-//! changes and its replay after a rebuild stay in step.
+//! The designer's undo history, per app: Ctrl+Z takes back the last changing action whatever it was,
+//! Ctrl+Y (Ctrl+Shift+Z) does it again. A write to code is no action of its own: it joins the action
+//! it wrote (Write, Write all, Auto before Restart or Run, a page's code.flush, Always), so Ctrl+Z
+//! takes the action back in the app and in the code together, and Ctrl+Y does both again. Each step
+//! goes back and forth through the same paths as the rows' own Undo and Write (SetProperty,
+//! UndoCode, Remove, Restore, Insert), so the hub's record of live changes and its replay after a
+//! rebuild stay in step.
 
 use super::*;
 
@@ -34,8 +37,8 @@ pub(crate) enum Step {
     Move { node: u64, type_name: String, from: (u64, u32), to: (u64, u32) },
     /// A moved control moved in the code too.
     WriteMove { node: u64, path: String, type_name: String, request: u32 },
-    /// The writes of one flush (Write all changes, Restart or Run in Auto, a page's code.flush,
-    /// Always): one step, taken back and done again together.
+    /// An action and the writes that put it into the code (the action first), taken back and done
+    /// again together; or, for writes whose action is not in the history, the writes of one flush.
     Group { group: u32, steps: Vec<Step> },
 }
 
@@ -70,7 +73,7 @@ impl Step {
             Step::WriteDelete { type_name, .. } => t("step-write-delete", "type", short_type(type_name)),
             Step::Move { type_name, .. } => t("step-move", "type", short_type(type_name)),
             Step::WriteMove { type_name, .. } => t("step-write", "name", short_type(type_name)),
-            Step::Group { steps, .. } if steps.len() == 1 => steps[0].label(),
+            Step::Group { steps, .. } if steps.len() == 1 || steps.first().is_some_and(|s| !s.is_write()) => steps[0].label(),
             Step::Group { .. } => i18n::tr("step-write-changes"),
         }
     }
@@ -87,6 +90,20 @@ impl Step {
             | Step::Move { node, .. }
             | Step::WriteMove { node, .. } => *node,
             Step::Group { steps, .. } => steps.first().map_or(0, Step::node),
+        }
+    }
+
+    /// A write to code (not an action of its own).
+    pub(crate) fn is_write(&self) -> bool {
+        matches!(self, Step::WriteValues { .. } | Step::WriteAdd { .. } | Step::WriteDelete { .. } | Step::WriteMove { .. })
+    }
+
+    /// Whether `write` puts this action into the code: the same control (and its properties).
+    fn written_by(&self, write: &Step) -> bool {
+        match (self, write) {
+            (Step::Values { node, values, .. }, Step::WriteValues { node: n, writes, .. }) => node == n && writes.iter().all(|w| values.iter().any(|v| v.0 == w.0)),
+            (Step::Add { node, gone: false, .. }, Step::WriteAdd { node: n, .. }) | (Step::Delete { node, .. }, Step::WriteDelete { node: n, .. }) | (Step::Move { node, .. }, Step::WriteMove { node: n, .. }) => node == n,
+            _ => false,
         }
     }
 
@@ -134,9 +151,35 @@ impl App {
         self.push_step(Step::Values { node, values: vec![(prop, before, after)], style: false });
     }
 
-    /// Writes to code answered: one step, or one more write of the Write all it belongs to.
+    /// A write to code joins the newest action it puts into the code: Ctrl+Z then takes them back
+    /// together. False when no such action is in the history (the write is recorded on its own then).
+    pub(crate) fn attach_write(&mut self, write: Step) -> bool {
+        self.flush_edit();
+        let Some(h) = self.history_mut() else { return false };
+        let Some(entry) = h.undo.iter_mut().rev().find(|s| match s {
+            Step::Group { steps, .. } => steps.first().is_some_and(|a| !a.is_write() && a.written_by(&write)),
+            s => s.written_by(&write),
+        }) else {
+            return false;
+        };
+        match entry {
+            Step::Group { steps, .. } => steps.push(write),
+            s => {
+                let action = std::mem::replace(s, Step::Group { group: 0, steps: vec![] });
+                *s = Step::Group { group: 0, steps: vec![action, write] };
+            }
+        }
+        true
+    }
+
+    /// Writes to code answered: joined to the action they wrote, else one step, or one more write of
+    /// the Write all it belongs to.
     pub(crate) fn record_write(&mut self, request: u32, node: u64, path: String, prop: String, value: String) {
         if self.history_quiet.remove(&request) {
+            return;
+        }
+        if self.attach_write(Step::WriteValues { node, path: path.clone(), group: request, writes: vec![(prop.clone(), value.clone(), request)] }) {
+            self.write_groups.remove(&request);
             return;
         }
         if self.record_flushed(request, Step::WriteValues { node, path: path.clone(), group: request, writes: vec![(prop.clone(), value.clone(), request)] }) {
@@ -177,6 +220,9 @@ impl App {
 
     /// The controls of the history have new ids (a rebuild, a control put back or added again).
     pub(crate) fn history_remap(&mut self, old: u64, new: u64) {
+        if self.rewrite_on_tree.remove(&old) {
+            self.rewrite_on_tree.insert(new);
+        }
         for h in self.histories.values_mut() {
             for step in h.undo.iter_mut().chain(h.redo.iter_mut()) {
                 for id in step.ids_mut() {
@@ -195,7 +241,16 @@ impl App {
         self.flush_edit();
         if let Some(h) = self.history_mut() {
             h.undo.reverse();
-            h.undo.retain_mut(|s| keep(s));
+            // An action and its writes are looked at one by one, the last write first.
+            h.undo.retain_mut(|s| match s {
+                Step::Group { steps, .. } => {
+                    steps.reverse();
+                    steps.retain_mut(|x| keep(x));
+                    steps.reverse();
+                    !steps.is_empty()
+                }
+                s => keep(s),
+            });
             h.undo.reverse();
             h.redo.clear();
         }
@@ -305,6 +360,101 @@ impl App {
         self.send_hub(EditorMsg::UndoCode { request });
     }
 
+    /// Takes back the write of `action` with the change: out of the code, and in the app back to
+    /// how it was before the action (an added control goes, a taken-out one comes back, a moved one
+    /// returns). A value the action changed from one not in code stays live, with its dot.
+    fn unwrite_with(&mut self, write: Step, action: &Step) -> Step {
+        match &write {
+            Step::WriteValues { node, path, writes, .. } => {
+                let node = self.current(*node, path);
+                for (prop, _, request) in writes.iter().rev() {
+                    let Some(list) = self.written.get_mut(&(path.clone(), prop.clone())) else { continue };
+                    let Some(at) = list.iter().position(|(r, _)| r == request) else { continue };
+                    let (_, in_code) = list.remove(at);
+                    let live = match action {
+                        Step::Values { values, .. } => values.iter().find(|v| v.0 == *prop).map(|v| v.1.clone()),
+                        _ => None,
+                    };
+                    if let Some(live) = live.filter(|l| *l != in_code) {
+                        self.keep_live.insert(*request, live);
+                    }
+                    self.undo_requests.insert(*request, (node, prop.clone(), in_code));
+                    self.send_hub(EditorMsg::UndoCode { request: *request });
+                }
+            }
+            Step::WriteAdd { node, path, request, .. } => {
+                let id = self.current(*node, path);
+                if self.inserted.get(path.as_str()).is_some_and(|i| i.written == Some(*request)) {
+                    self.undo_inserts.insert(*request, (id, path.clone()));
+                    self.send_hub(EditorMsg::UndoCode { request: *request });
+                }
+            }
+            Step::WriteDelete { node, request, .. } => {
+                self.undo_removes.insert(*request, *node);
+                self.send_hub(EditorMsg::UndoCode { request: *request });
+            }
+            Step::WriteMove { node, path, request, .. } => {
+                let id = self.current(*node, path);
+                if self.moved.get(path.as_str()).is_some_and(|m| m.written == Some(*request)) {
+                    self.undo_moves.insert(*request, (id, path.clone()));
+                    self.send_hub(EditorMsg::UndoCode { request: *request });
+                }
+            }
+            _ => {}
+        }
+        write
+    }
+
+    /// Writes `write` again after its action was done again: values at once; a control added or moved
+    /// again once the app has it there (`rewrite_on_tree`).
+    fn rewrite(&mut self, mut write: Step, cx: &mut Cx) -> Step {
+        match &mut write {
+            Step::WriteValues { node, path, writes, .. } => {
+                let node = self.current(*node, path);
+                for (prop, value, request) in writes.iter_mut() {
+                    if let Some(r) = self.write_value(node, prop, value) {
+                        self.history_quiet.insert(r);
+                        *request = r;
+                    }
+                }
+            }
+            Step::WriteDelete { node, request, .. } => {
+                if let Some(r) = self.write_removal(*node, cx) {
+                    self.history_quiet.insert(r);
+                    *request = r;
+                }
+            }
+            Step::WriteAdd { node, .. } | Step::WriteMove { node, .. } => {
+                self.rewrite_on_tree.insert(*node);
+            }
+            _ => {}
+        }
+        write
+    }
+
+    /// A control added or moved again by Ctrl+Y is in the app's tree now: its write goes again.
+    pub(crate) fn rewrite_now(&mut self, id: u64, cx: &mut Cx) {
+        if !self.rewrite_on_tree.remove(&id) {
+            return;
+        }
+        let r = if self.inserted.contains_key(&format!("#{id}")) { self.write_insert(id, cx) } else { self.write_move(id, cx) };
+        let Some(r) = r else { return };
+        self.history_quiet.insert(r);
+        for h in self.histories.values_mut() {
+            for step in h.undo.iter_mut() {
+                if let Step::Group { steps, .. } = step {
+                    for s in steps {
+                        if let Step::WriteAdd { node, request, .. } | Step::WriteMove { node, request, .. } = s
+                            && *node == id
+                        {
+                            *request = r;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     /// Takes `step` back; it then goes on the redo stack.
     fn step_back(&mut self, mut step: Step, cx: &mut Cx) -> Step {
         match &mut step {
@@ -353,6 +503,16 @@ impl App {
                     self.undo_moves.insert(*request, (id, path.clone()));
                     self.unwrite(*request, "");
                 }
+            }
+            // An action with its writes: out of the code with the change; what the code's undo
+            // does not do in the app already (values), back live too.
+            Step::Group { steps, .. } if steps.first().is_some_and(|s| !s.is_write()) => {
+                let mut all = std::mem::take(steps).into_iter();
+                let action = all.next().expect("an action");
+                let writes: Vec<Step> = all.collect();
+                let back: Vec<Step> = writes.into_iter().rev().map(|w| self.unwrite_with(w, &action)).collect();
+                let action = if matches!(action, Step::Values { .. }) || back.is_empty() { self.step_back(action, cx) } else { action };
+                *steps = std::iter::once(action).chain(back.into_iter().rev()).collect();
             }
             // The last write first.
             Step::Group { steps, .. } => {
@@ -412,6 +572,14 @@ impl App {
                     self.history_quiet.insert(r);
                     *request = r;
                 }
+            }
+            // The action again, then into the code again.
+            Step::Group { steps, .. } if steps.first().is_some_and(|s| !s.is_write()) => {
+                let mut all = std::mem::take(steps).into_iter();
+                let action = self.step_again(all.next().expect("an action"), cx);
+                let writes: Vec<Step> = all.collect();
+                let again: Vec<Step> = writes.into_iter().map(|w| self.rewrite(w, cx)).collect();
+                *steps = std::iter::once(action).chain(again).collect();
             }
             Step::Group { steps, .. } => {
                 let again: Vec<Step> = std::mem::take(steps).into_iter().map(|s| self.step_again(s, cx)).collect();

@@ -851,10 +851,11 @@ mod tests {
         send(&mut editor, &Hello::Editor { protocol: PROTOCOL_VERSION.into() }).await;
         let HubToEditor::Apps { apps, .. } = next_editor_msg(&mut editor).await else { panic!("apps first") };
         let page = dir.join("Pages").join("LayoutsPage.cs");
+        // Heading and Card are helpers used many times: the value goes on the edited call, never into
+        // the helper.
         for (request, (node, prop, value, old, new)) in [
-            (heading, "TextColor", "#FFFF0000", "White", "Red"),
-            (card, "BackgroundColor", "#FF112233", "\"#2B3035\"", "\"#112233\""),
-            (stack, "Padding", "8", "(16, 12)", "(8)"),
+            (heading, "TextColor", "#FFFF0000", "", ".Adapt(me => me.TextColor = Color.Parse(\"#FF0000\"))"),
+            (card, "BackgroundColor", "#FF112233", "", ".Adapt(me => ((SkiaShape)me).BackgroundColor = Color.Parse(\"#112233\"))"),
         ]
         .into_iter()
         .enumerate()
@@ -873,6 +874,11 @@ mod tests {
             assert_eq!(&after[e..], &before[s + old.len()..], "{prop}");
             assert_eq!(&b_text[s..s + old.len()], old, "{prop}");
         }
+        // Inside Card, used many times: refused, the file untouched.
+        let before = std::fs::read(&page).unwrap();
+        let answer = set_code_answer(&mut editor, EditorMsg::SetCode { request: 9, app: apps[0].id, node: stack, prop: "Padding".into(), value: "8".into() }).await;
+        assert!(matches!(&answer, HubToEditor::CodeRefused { refusal: Some(r), .. } if r.key == "src-shared-helper"), "{answer:?}");
+        assert_eq!(std::fs::read(&page).unwrap(), before);
         let _ = std::fs::remove_dir_all(&dir);
     }
 

@@ -1531,3 +1531,109 @@ fn controls_made_by_helpers_carry_the_helpers_names() {
     assert_eq!((names.get(&1).map(String::as_str), names.get(&3).map(String::as_str)), (Some("MainPage"), Some("Card")), "{names:?}");
     assert!(!names.contains_key(&2) && !names.contains_key(&4) && !names.contains_key(&10), "{names:?}");
 }
+
+const TAGS: &str = r##"namespace Demo;
+public class Page : SkiaLayer
+{
+    public Page()
+    {
+        Children = new List<SkiaControl>
+        {
+            Tag("One"),
+            Tag("Two"),
+            Card(),
+            Card(),
+        };
+    }
+    SkiaControl Tag(string t) => new SkiaLabel { Text = t, FontSize = 18 };
+    SkiaLabel Plain(string t) => new SkiaLabel { Text = t };
+    SkiaControl Card() => new SkiaShape { Children = { new SkiaLabel { Text = "title", FontSize = 12 } } };
+}
+"##;
+
+/// Two uses of one helper: a value edited on one goes on that call (`.Adapt(..)`, its own chain's
+/// setter when it has one), never into the helper; inside a helper used twice it is refused.
+#[test]
+fn a_value_changes_only_the_edited_call_of_a_helper() {
+    let n = |id, parent, t: &str| designer_protocol::Node { id, parent, type_name: format!("DrawnUi.Draw.{t}"), ..Default::default() };
+    let tree = designer_protocol::Tree {
+        nodes: vec![
+            designer_protocol::Node { id: 1, type_name: "Demo.Page".into(), ..Default::default() },
+            n(2, Some(1), "SkiaLabel"),
+            n(3, Some(1), "SkiaLabel"),
+            n(4, Some(1), "SkiaShape"),
+            n(5, Some(4), "SkiaLabel"),
+            n(6, Some(1), "SkiaShape"),
+            n(7, Some(6), "SkiaLabel"),
+        ],
+        ..Default::default()
+    };
+    let set = |text: &str, node, prop, t: &str, v: &str| {
+        let value = value_from_runtime(t, v, v).map_err(|r| r.key)?;
+        set_property(&[("page.cs".to_string(), text.to_string())], &tree, node, prop, &value).map(|e| e.text).map_err(|r| r.key)
+    };
+    let once = set(TAGS, 3, "FontSize", "System.Double", "32").unwrap();
+    assert_eq!(once, TAGS.replace("Tag(\"Two\"),", "Tag(\"Two\").Adapt(me => ((SkiaLabel)me).FontSize = 32),"));
+    // Again: the value in that Adapt.
+    assert_eq!(set(&once, 3, "FontSize", "System.Double", "40").unwrap(), once.replace("FontSize = 32)", "FontSize = 40)"));
+    // The text through the parameter: that call's argument, as before.
+    assert_eq!(set(TAGS, 3, "Text", "System.String", "Three").unwrap(), TAGS.replace("Tag(\"Two\")", "Tag(\"Three\")"));
+    // A color on the call, and a `.WithX` the call already has.
+    let colored = set(TAGS, 2, "TextColor", "DrawnUi.Color", "#FFFF0000").unwrap();
+    assert_eq!(colored, TAGS.replace("Tag(\"One\"),", "Tag(\"One\").Adapt(me => ((SkiaLabel)me).TextColor = Color.Parse(\"#FF0000\")),"));
+    let with = TAGS.replace("Tag(\"One\"),", "Tag(\"One\").WithMargin(4),");
+    assert_eq!(set(&with, 2, "Margin", "DrawnUi.Views.Thickness", "8,2").unwrap(), with.replace("WithMargin(4)", "WithMargin(8, 2)"));
+    // Inside `Card`, used twice: refused.
+    assert_eq!(set(TAGS, 5, "FontSize", "System.Double", "9"), Err("src-shared-helper".into()));
+}
+
+const TSX_TAGS: &str = r##"function Tag({ text, ...rest }) {
+  return <SkiaLabel Text={text} FontSize={18} {...rest} />;
+}
+
+function Plain({ text }) {
+  return <SkiaLabel Text={text} FontSize={18} />;
+}
+
+function Card() {
+  return (
+    <SkiaShape>
+      <SkiaLabel Text="title" FontSize={12} />
+    </SkiaShape>
+  );
+}
+
+export default function App() {
+  return (
+    <SkiaStack>
+      <Tag text="One" />
+      <Tag text="Two" />
+      <Plain text="A" />
+      <Plain text="B" />
+      <Card />
+      <Card />
+    </SkiaStack>
+  );
+}
+"##;
+
+/// Two uses of one component: a value edited on one is a prop of that use when the component passes
+/// its props on, never a change of the component's body; refused with why otherwise.
+#[test]
+fn a_tsx_value_changes_only_the_edited_use_of_a_component() {
+    let n = |id, parent, t: &str| designer_protocol::Node { id, parent, type_name: t.into(), ..Default::default() };
+    let tree = designer_protocol::Tree {
+        nodes: vec![n(1, None, "SkiaStack"), n(2, Some(1), "SkiaLabel"), n(3, Some(1), "SkiaLabel"), n(4, Some(1), "SkiaLabel"), n(5, Some(1), "SkiaLabel"), n(6, Some(1), "SkiaShape"), n(7, Some(6), "SkiaLabel"), n(8, Some(1), "SkiaShape"), n(9, Some(8), "SkiaLabel")],
+        ..Default::default()
+    };
+    let set = |text: &str, node, prop, t: &str, v: &str| {
+        let value = value_from_runtime(t, v, v).map_err(|r| r.key)?;
+        set_property(&[("App.tsx".to_string(), text.to_string())], &tree, node, prop, &value).map(|e| e.text).map_err(|r| r.key)
+    };
+    let once = set(TSX_TAGS, 3, "FontSize", "System.Double", "32").unwrap();
+    assert_eq!(once, TSX_TAGS.replace("<Tag text=\"Two\" />", "<Tag text=\"Two\" FontSize={32} />"));
+    assert_eq!(set(&once, 3, "FontSize", "System.Double", "40").unwrap(), once.replace("FontSize={32}", "FontSize={40}"));
+    assert_eq!(set(TSX_TAGS, 3, "Text", "System.String", "Three").unwrap(), TSX_TAGS.replace("text=\"Two\"", "text=\"Three\""));
+    assert_eq!(set(TSX_TAGS, 5, "FontSize", "System.Double", "9"), Err("src-component-no-prop".into()));
+    assert_eq!(set(TSX_TAGS, 7, "FontSize", "System.Double", "9"), Err("src-shared-helper".into()));
+}

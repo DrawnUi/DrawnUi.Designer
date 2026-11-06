@@ -886,47 +886,96 @@ fn append_call(text: &str, base: Node, call: &str) -> (usize, usize, String) {
     (top.end_byte(), top.end_byte(), format!(".{call}"))
 }
 
-/// [`crate::set_property`] for a control made by Rust: the argument of its last `.prop(..)` call
-/// (through a parameter to the argument its caller passes), its constructor's argument for its text
-/// or source, or a new `.prop(value)` at the end of the chain only this use of it has.
+/// [`crate::set_property`] for a control made by Rust. Only the edited control changes, never another
+/// made by the same code: for a control a function returns (`tag("Two")`), the value goes on that
+/// call (its `.prop(..)` there, else a new `.prop(value)` after it), or into the argument of that call
+/// that feeds it; never into the function's body. A control written in place takes the argument of
+/// its last `.prop(..)`, its constructor's argument for its text or source, or a new call at the end of
+/// its chain; inside a function used more than once, only through that function's arguments.
 pub(crate) fn set_property(files: &[(String, String)], m: &RuntimeMatch, prop: &str, value: &PropValue) -> Result<CodeEdit, Refusal> {
     let trees: Vec<Tree> = files.iter().map(|(_, t)| parse_rs(t)).collect();
     let at = locate(files, &trees, m)?;
     let attr_key = format!("{}/{prop}", m.key);
-    // The call that applies last.
-    let mut found = None;
-    for (f, base) in at.chains().into_iter().rev() {
+    let not_literal = || Refusal::new("src-not-literal", &[("key", &attr_key)]);
+    // The functions this use goes through that make other controls with the same code: those called
+    // more than once, outside the calls that return the control.
+    let enclosing = &m.via[..m.via.len() - at.outer.len()];
+    let shared = shared_helper(&at, enclosing);
+    let write_at = |f: usize, arg: Node<'_>| -> Result<CodeEdit, Refusal> {
         let text = at.files[f].text;
-        if let Some((_, _, args)) = chain_calls(base).into_iter().rev().find(|(_, n, _)| &text[n.byte_range()] == prop) {
-            found = Some((f, args));
-            break;
+        let new_text = respell(arg, text, value).ok_or_else(not_literal)?;
+        Ok(finish(&at.files[f].uri, text, arg.start_byte(), arg.end_byte(), new_text.clone(), &new_text))
+    };
+    // 1. The calls that return it, the outermost (applied last) first.
+    for (f, base) in at.outer.iter().rev() {
+        let text = at.files[*f].text;
+        if let Some((_, _, args)) = chain_calls(*base).into_iter().rev().find(|(_, n, _)| &text[n.byte_range()] == prop) {
+            if let Some(h) = &shared {
+                return Err(h.clone());
+            }
+            let arg = single(args).ok_or_else(not_literal)?;
+            let (f, arg) = through_params(&at, *f, arg, m).ok_or_else(not_literal)?;
+            return write_at(f, arg);
         }
     }
+    // 2. Its own chain, or its constructor's text or source.
+    let text = at.files[at.file].text;
     let ty = at.files[at.file].ix.types.get(&at.node.id()).cloned().unwrap_or_default();
-    if found.is_none()
+    let mut own = chain_calls(at.node).into_iter().rev().find(|(_, n, _)| &text[n.byte_range()] == prop).map(|(_, _, a)| a);
+    if own.is_none()
         && ctor_prop(&ty) == Some(prop)
-        && let Some((_, "new", args)) = path_call(at.node, at.files[at.file].text)
+        && let Some((_, "new", args)) = path_call(at.node, text)
         && named(args).len() == 1
     {
-        found = Some((at.file, args));
+        own = Some(args);
     }
-    let Some((f, args)) = found else {
-        let (f, base) = at.own_chain();
-        let text = at.files[f].text;
-        let spelled = spell(value, text).ok_or_else(|| Refusal::new("src-value-misfit", &[("key", &attr_key)]))?;
-        let call = format!("{prop}({spelled})");
-        let (a, b, t) = append_call(text, base, &call);
-        return Ok(finish(&at.files[f].uri, text, a, b, t, &call));
-    };
-    let arg = match named(args).as_slice() {
-        [one] => *one,
-        _ => return Err(Refusal::new("src-not-literal", &[("key", &attr_key)])),
-    };
-    // A parameter of the function the call is in: the argument its caller passes.
-    let (f, arg) = through_params(&at, f, arg, m).ok_or_else(|| Refusal::new("src-not-literal", &[("key", &attr_key)]))?;
+    if let Some(args) = own {
+        let arg = single(args).ok_or_else(not_literal)?;
+        let (f, through) = through_params(&at, at.file, arg, m).ok_or_else(not_literal)?;
+        // A parameter: the argument of this use's call.
+        if through.id() != arg.id() {
+            return write_at(f, through);
+        }
+        // A literal in place, when no other control is made by it.
+        if at.outer.is_empty() {
+            if let Some(h) = shared {
+                return Err(h);
+            }
+            return write_at(f, through);
+        }
+    }
+    // 3. A new call on the chain only this use has (after the call that returns it).
+    if let Some(h) = shared {
+        return Err(h);
+    }
+    let (f, base) = at.own_chain();
     let text = at.files[f].text;
-    let new_text = respell(arg, text, value).ok_or_else(|| Refusal::new("src-not-literal", &[("key", &attr_key)]))?;
-    Ok(finish(&at.files[f].uri, text, arg.start_byte(), arg.end_byte(), new_text.clone(), &new_text))
+    let spelled = spell(value, text).ok_or_else(|| Refusal::new("src-value-misfit", &[("key", &attr_key)]))?;
+    let call = format!("{prop}({spelled})");
+    let (a, b, t) = append_call(text, base, &call);
+    Ok(finish(&at.files[f].uri, text, a, b, t, &call))
+}
+
+/// The one argument of a call.
+fn single(args: Node) -> Option<Node> {
+    match named(args).as_slice() {
+        [one] => Some(*one),
+        _ => None,
+    }
+}
+
+/// The refusal when one of the functions `calls` go through is called more than once: its code
+/// makes a control for each use, so a value written there would change them all.
+fn shared_helper(at: &Located, calls: &[String]) -> Option<Refusal> {
+    for key in calls {
+        let Some((f, call)) = at.files.iter().enumerate().find_map(|(f, file)| file.ix.nodes.get(key).map(|n| (f, *n))) else { continue };
+        let Some((name, _)) = fn_call(call, at.files[f].text) else { continue };
+        let uses = at.files.iter().map(|file| file.ix.nodes.values().filter(|n| fn_call(**n, file.text).is_some_and(|(x, _)| x == name)).count()).sum::<usize>();
+        if uses > 1 {
+            return Some(Refusal::new("src-shared-helper", &[("helper", &name), ("count", &uses.to_string())]));
+        }
+    }
+    None
 }
 
 /// `arg` itself, or, while it is a local, its value, and while it is a parameter of the function it

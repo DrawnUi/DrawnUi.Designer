@@ -801,6 +801,9 @@ pub(crate) fn set_property(files: &[(String, String)], m: &RuntimeMatch, prop: &
     let (src, handles) = walk_tsx(&ts, text, &m.uri);
     let e = src.nodes.iter().position(|n| n.key == m.key).ok_or_else(|| Refusal::new("src-key-missing", &[("key", &m.key)]))?;
     let attr_key = format!("{}/{prop}", m.key);
+    if let Some(r) = in_component(text, &ts, &src, &handles, m, e, prop, value) {
+        return r;
+    }
     let Some(a) = src.nodes.iter().position(|n| n.key == attr_key) else {
         let spelled = spell_prop(value).ok_or_else(|| Refusal::new("src-value-misfit", &[("key", &m.key)]))?;
         let (at, b, t) = add_attribute(text, handles[e], &format!("{prop}={spelled}"));
@@ -838,6 +841,70 @@ pub(crate) fn set_property(files: &[(String, String)], m: &RuntimeMatch, prop: &
             Ok(finish(&m.uri, text, x, y, t.clone(), &t))
         }
         _ => Err(Refusal::new("src-not-literal", &[("key", &attr_key)])),
+    }
+}
+
+/// A value for an element a component renders (`m.via` names the component uses it went through).
+/// Only the edited control changes, never another made by the same code: the component's own element
+/// takes the value as a prop on that use (`<Tag FontSize={32} />`) when it passes its props on to it
+/// (`{...props}`); else, and inside a component, the value is written in place only when no component
+/// on the way is used more than once. `None`: no component, or the attribute reads one of the
+/// component's props (the use's attribute is written, as before).
+#[allow(clippy::too_many_arguments)]
+fn in_component(text: &str, ts: &Tree, src: &SourceTree, handles: &[Node], m: &RuntimeMatch, e: usize, prop: &str, value: &PropValue) -> Option<Result<CodeEdit, Refusal>> {
+    let usage_key = m.via.last()?;
+    let attr_key = format!("{}/{prop}", m.key);
+    // A prop of the component: handled by the use's attribute below.
+    if let Some(a) = src.nodes.iter().position(|n| n.key == attr_key)
+        && (a + 1..src.nodes.len()).any(|j| src.nodes[j].parent == Some(a) && src.nodes[j].role == SourceRole::Reference)
+    {
+        return None;
+    }
+    let uses = |name: &str| src.nodes.iter().filter(|n| n.role == SourceRole::Element && n.name.as_deref() == Some(name)).count();
+    let comp_of = |key: &str| src.nodes.iter().position(|n| n.key == key).and_then(|u| src.nodes[u].name.clone());
+    let comp = comp_of(usage_key)?;
+    let shared = m.via.iter().rev().skip(1).filter_map(|k| comp_of(k)).chain(std::iter::once(comp.clone())).find(|c| uses(c) > 1);
+    // The component's own element: what its function returns.
+    let files = [TsxFile { uri: m.uri.clone(), text, root: ts.root_node(), keys: HashMap::new() }];
+    let own = find_component(&files, &comp).and_then(|(_, f)| component_return(f)).map(|mut r| {
+        while r.kind() == "parenthesized_expression" {
+            r = r.named_child(0).unwrap_or(r);
+        }
+        r
+    });
+    let el = handles[e];
+    if own.is_some_and(|r| r.id() == el.id()) {
+        // `{...props}` on it, and no value of its own after the spread that would win over the prop.
+        let attrs = attributes(el);
+        let spread = attrs.iter().rposition(|a| a.kind() != "jsx_attribute");
+        let own_after = attrs.iter().enumerate().any(|(i, a)| a.kind() == "jsx_attribute" && a.named_child(0).is_some_and(|n| &text[n.byte_range()] == prop) && spread.is_none_or(|s| i > s));
+        if spread.is_some() && !own_after {
+            let u = src.nodes.iter().position(|n| &n.key == usage_key)?;
+            return Some(set_on_usage(text, src, handles, &m.uri, u, prop, value));
+        }
+        if shared.is_some() || uses(&comp) > 1 {
+            return Some(Err(Refusal::new("src-component-no-prop", &[("component", &comp), ("prop", &prop)])));
+        }
+        return None;
+    }
+    shared.map(|c| Err(Refusal::new("src-shared-helper", &[("helper", &c), ("count", &uses(&c).to_string())])))
+}
+
+/// `prop` on the use `u` of a component: its literal respelled, or a new attribute.
+fn set_on_usage(text: &str, src: &SourceTree, handles: &[Node], uri: &str, u: usize, prop: &str, value: &PropValue) -> Result<CodeEdit, Refusal> {
+    let key = format!("{}/{prop}", src.nodes[u].key);
+    match src.nodes.iter().position(|n| n.key == key) {
+        None => {
+            let spelled = spell_prop(value).ok_or_else(|| Refusal::new("src-value-misfit", &[("key", &key)]))?;
+            let (at, b, t) = add_attribute(text, handles[u], &format!("{prop}={spelled}"));
+            let el = t.trim_start().to_string();
+            Ok(finish(uri, text, at, b, t, &el))
+        }
+        Some(a) => {
+            let v = (a + 1..src.nodes.len()).find(|&j| src.nodes[j].parent == Some(a) && src.nodes[j].role == SourceRole::Literal).ok_or_else(|| Refusal::new("src-not-literal", &[("key", &key)]))?;
+            let (x, y, t) = respell(handles[v], text, value).ok_or_else(|| Refusal::new("src-value-misfit", &[("key", &key)]))?;
+            Ok(finish(uri, text, x, y, t.clone(), &t))
+        }
     }
 }
 

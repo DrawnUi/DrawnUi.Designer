@@ -254,8 +254,10 @@ fn writes_through_helper_parameters_and_at_the_use_site() {
     changed(KIDS, &t(3, "background_color", "drawnui.skia.Color", "#FF0000FF"), "255, 0, 0", "0, 0, 255");
     changed(KIDS, &t(5, "width_request", "System.Single", "30"), "24.0", "30.0");
     changed(KIDS, &t(4, "background_color", "drawnui.skia.Color", "#FFFFFFFF"), "BLUE", "WHITE");
-    // A literal in the helper's body: every use shares it.
-    changed(KIDS, &t(2, "font_size", "System.Single", "20"), "18", "20");
+    // A literal in the helper's body stays: the value goes on this call only.
+    changed(KIDS, &t(2, "font_size", "System.Single", "20"), "", ".font_size(20)");
+    assert!(t(2, "font_size", "System.Single", "20").contains("text(\"Shapes\").font_size(20),"));
+    changed(KIDS, &t(3, "shape_type", "ShapeType", "Rectangle"), "", ".shape_type(ShapeType::Rectangle)");
     // Not set by the helper: on this use only.
     changed(KIDS, &t(3, "tag", "System.String", "red"), "", ".tag(\"red\")");
     let after = t(3, "tag", "System.String", "red");
@@ -339,4 +341,37 @@ fn refuses_what_the_code_makes_at_run_time() {
     let mut nodes = vec![(1, None, "SkiaLayout")];
     nodes.extend((2..14).map(|i| (i, Some(1), "SkiaLabel")));
     assert_eq!(insert(&twelve, &rt(&nodes), 1, 0, &spec("SkiaLabel", &[])), Err("src-insert-tuple-full".into()));
+}
+
+/// Two uses of one helper: a value edited on one changes that call only, never the helper's body;
+/// a control inside a helper used twice is refused, inside one used once written in place.
+#[test]
+fn a_value_changes_only_the_edited_use_of_a_helper() {
+    let code = "fn tag(t: &str) -> Build<SkiaLabel> {
+    SkiaLabel::new(t).font_size(18.0)
+}
+
+fn card() -> Build<SkiaShape> {
+    SkiaShape::new().children(SkiaLabel::new(\"title\").font_size(12))
+}
+
+fn build(_app: &mut App) -> Build<SkiaLayout> {
+    SkiaStack::new().children((tag(\"One\"), tag(\"Two\"), card(), card()))
+}
+";
+    let tree = rt(&[(1, None, "SkiaLayout"), (2, Some(1), "SkiaLabel"), (3, Some(1), "SkiaLabel"), (4, Some(1), "SkiaShape"), (5, Some(4), "SkiaLabel"), (6, Some(1), "SkiaShape"), (7, Some(6), "SkiaLabel")]);
+    let once = set(code, &tree, 3, "font_size", "System.Single", "32").unwrap();
+    changed(code, &once, "", ".font_size(32)");
+    assert!(once.contains("tag(\"One\"), tag(\"Two\").font_size(32),") && once.contains("SkiaLabel::new(t).font_size(18.0)"), "{once}");
+    // Again on that use: its own call's argument.
+    changed(&once, &set(&once, &tree, 3, "font_size", "System.Single", "40").unwrap(), "32", "40");
+    // The text through the parameter: that call's argument.
+    changed(code, &set(code, &tree, 3, "text", "System.String", "Three").unwrap(), "\"Two\"", "\"Three\"");
+    // Inside `card`, used twice: refused, with why.
+    assert_eq!(set(code, &tree, 5, "font_size", "System.Single", "9"), Err("src-shared-helper".into()));
+    assert_eq!(set(code, &tree, 5, "margin", "Thickness", "4"), Err("src-shared-helper".into()));
+    // Used once: in place.
+    let single = code.replace(", card(), card()))", ", card()))");
+    let tree1 = rt(&[(1, None, "SkiaLayout"), (2, Some(1), "SkiaLabel"), (3, Some(1), "SkiaLabel"), (4, Some(1), "SkiaShape"), (5, Some(4), "SkiaLabel")]);
+    changed(&single, &set(&single, &tree1, 5, "font_size", "System.Single", "9").unwrap(), "12", "9");
 }

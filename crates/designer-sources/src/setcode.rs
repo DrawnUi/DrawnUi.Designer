@@ -148,8 +148,8 @@ pub fn set_property(files: &[(String, String)], tree: &RuntimeTree, node: NodeId
 
     // A helper parameter: the argument at the innermost call that feeds this attribute.
     let mut target = None;
+    let links = if m.via.is_empty() { vec![] } else { resolve_helpers(&src, text) };
     if !m.via.is_empty() {
-        let links = resolve_helpers(&src, text);
         for call in m.via.iter().rev() {
             let Some(link) = links.iter().find(|l| &l.call == call) else { continue };
             let flows: Vec<_> = link.params.iter().filter(|f| f.attribute.as_deref() == Some(attr_key.as_str())).collect();
@@ -163,6 +163,37 @@ pub fn set_property(files: &[(String, String)], tree: &RuntimeTree, node: NodeId
                 _ => return Err(Refusal::new("src-several-args", &[("prop", &prop), ("call", &call)])),
             }
         }
+    }
+    // Only the edited control changes, never another made by the same code. The calls that return it
+    // (innermost first): the value goes on the outermost, never into the helper. A helper it is made
+    // inside of, called more than once, would change every use: refused.
+    let direct: Vec<&String> = m.via.iter().rev().take_while(|c| links.iter().any(|l| &l.call == *c && l.returns == m.key)).collect();
+    let enclosing = &m.via[..m.via.len() - direct.len()];
+    let shared = enclosing.iter().find_map(|c| {
+        let link = links.iter().find(|l| &l.call == c)?;
+        let uses = links.iter().filter(|l| l.returns == link.returns).count();
+        let name = index(c).and_then(|i| src.nodes[i].name.clone()).unwrap_or_default();
+        (uses > 1).then(|| Refusal::new("src-shared-helper", &[("helper", &name), ("count", &uses.to_string())]))
+    });
+    if target.is_none()
+        && let Some(call) = direct.last()
+    {
+        if let Some(r) = shared {
+            return Err(r);
+        }
+        let i = index(call).ok_or_else(|| Refusal::new("src-key-missing", &[("key", call)]))?;
+        let el = index(&m.key).expect("matched key");
+        let cast = helper_cast(text, handles[el], src.nodes[el].name.as_deref());
+        let (a, b, new_text) = on_call(text, expr_of(handles[i]), prop, value, cast.as_deref())?;
+        let mut new = text.to_string();
+        new.replace_range(a..b, &new_text);
+        let range = Lines::new(&new).range(a, a + new_text.len());
+        return Ok(CodeEdit { uri: m.uri, text: new, range });
+    }
+    if target.is_none()
+        && let Some(r) = shared
+    {
+        return Err(r);
     }
     let target = target.or_else(|| index(&attr_key).map(|_| attr_key.clone()));
     let e = match (value, target) {
@@ -205,6 +236,93 @@ pub fn set_property(files: &[(String, String)], tree: &RuntimeTree, node: NodeId
     let lines = Lines::new(&new);
     let range = lines.range(a, a + new_text.len());
     Ok(CodeEdit { uri: m.uri, text: new, range })
+}
+
+/// A value for a control a helper returns, written on the call that made it (`Tag("Two")`): the
+/// argument of the call's `.With{prop}(..)`, or the value of `me.{prop} = ..` in its `.Adapt(..)`, the
+/// last one; else a new `.Adapt(me => me.{prop} = value)` after the call's chain. `cast` names the
+/// control's type when the helper returns a base type (`((SkiaLabel)me).FontSize`).
+fn on_call(text: &str, call: Node, prop: &str, value: &PropValue, cast: Option<&str>) -> Result<(usize, usize, String), Refusal> {
+    // The call itself under the chain the list item may already have.
+    let call = chain_base(call);
+    let top = chain_top(call);
+    let mut found = None;
+    let mut n = call;
+    while n != top {
+        let Some(p) = n.parent() else { break };
+        if p.kind() == "invocation_expression"
+            && let Some(name) = p.child_by_field_name("function").and_then(|f| f.child_by_field_name("name"))
+        {
+            let name = &text[name.byte_range()];
+            if name == format!("With{prop}") {
+                found = Some((p, None));
+            } else if name == "Adapt"
+                && let Some(right) = adapt_value(text, p, prop)
+            {
+                found = Some((p, Some(right)));
+            }
+        }
+        n = p;
+    }
+    let shown = |e: Node| text[e.byte_range()].to_string();
+    match (found, value) {
+        (Some((_, Some(right))), PropValue::Plain(v)) => Ok((right.start_byte(), right.end_byte(), respell(right, text, v).map_err(|_| Refusal::new("src-not-literal", &[("key", &shown(right))]))?)),
+        (Some((_, Some(right))), _) => rewrite(text, right, prop, value),
+        (Some((with, None)), PropValue::Plain(v)) => match call_args(with).as_slice() {
+            [one] => {
+                let lit = expr_of(*one);
+                Ok((lit.start_byte(), lit.end_byte(), respell(lit, text, v).map_err(|_| Refusal::new("src-not-literal", &[("key", &shown(lit))]))?))
+            }
+            _ => Err(Refusal::new("src-with-misfit", &[("prop", &prop)])),
+        },
+        (Some((with, None)), _) => rewrite_args(text, with, prop, value),
+        (None, _) => {
+            let spelled = match value {
+                PropValue::Plain(v) => spell(v).map_err(|_| Refusal::new("src-value-misfit", &[("key", &prop)]))?,
+                PropValue::Color(c) => color_parse_call(*c),
+                PropValue::Thickness(t) => format!("new Thickness({})", thickness_args(*t)),
+            };
+            let me = match cast {
+                Some(t) => format!("(({t})me)"),
+                None => "me".to_owned(),
+            };
+            Ok((top.end_byte(), top.end_byte(), format!(".Adapt(me => {me}.{prop} = {spelled})")))
+        }
+    }
+}
+
+/// `x.{prop} = value` inside an `.Adapt(..)` call's lambda: the value.
+fn adapt_value<'t>(text: &str, adapt: Node<'t>, prop: &str) -> Option<Node<'t>> {
+    let mut stack = vec![adapt.child_by_field_name("arguments")?];
+    let mut found = None;
+    while let Some(n) = stack.pop() {
+        if n.kind() == "assignment_expression"
+            && let Some(left) = n.child_by_field_name("left")
+            && left.kind() == "member_access_expression"
+            && left.child_by_field_name("name").is_some_and(|x| &text[x.byte_range()] == prop)
+        {
+            found = n.child_by_field_name("right");
+        }
+        let mut c = n.walk();
+        stack.extend(n.named_children(&mut c));
+    }
+    found
+}
+
+/// The type to cast `me` to in a new `.Adapt(..)`: the control's own (`type_name`) when the helper
+/// that returns `element` declares a different return type (`SkiaControl Tag(..) => new SkiaLabel ..`).
+fn helper_cast(text: &str, element: Node, type_name: Option<&str>) -> Option<String> {
+    let short = |t: &str| t.split('<').next().unwrap_or(t).rsplit('.').next().unwrap_or(t).trim().to_owned();
+    let own = short(type_name?);
+    let mut p = element.parent();
+    while let Some(x) = p {
+        if matches!(x.kind(), "method_declaration" | "local_function_statement") {
+            let ret = x.child_by_field_name("returns").or_else(|| x.child_by_field_name("type"))?;
+            return (short(&text[ret.byte_range()]) != own).then_some(own);
+        }
+        p = x.parent();
+    }
+    None
 }
 
 /// The string literal a text control's constructor takes, when `prop` is `Text` and the element

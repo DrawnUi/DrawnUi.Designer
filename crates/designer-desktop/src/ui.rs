@@ -522,6 +522,8 @@ pub struct App {
     write_groups: std::collections::HashMap<u32, u32>,
     /// Code writes taken back by Ctrl+Z: the change stays live.
     keep_live: std::collections::HashMap<u32, String>,
+    /// Controls added or moved again by Ctrl+Y whose write goes again once the app's tree has them.
+    rewrite_on_tree: std::collections::HashSet<u64>,
     /// Adds done again by Redo: request, the control's id before.
     redo_adds: std::collections::HashMap<u32, u64>,
     /// Pastes and Duplicates on the way: request, which one.
@@ -729,6 +731,7 @@ impl App {
                             self.inserted.insert(format!("#{id}"), Inserted { written: None, defaults: arriving.defaults });
                         }
                         self.reveal_and_select(id, cx);
+                        self.rewrite_now(id, cx);
                         let name = self.selected_node().map(|n| short_type(&n.type_name).to_owned()).unwrap_or_default();
                         self.status = i18n::tr_args(if arriving.added { "status-inserted" } else { "status-restored" }, &[("type", name.into())]);
                         self.status_error = false;
@@ -738,6 +741,7 @@ impl App {
                         let status = std::mem::take(&mut self.status);
                         self.reveal_and_select(id, cx);
                         self.status = status;
+                        self.rewrite_now(id, cx);
                     }
                 }
                 AppMsg::Controls { controls } => {
@@ -860,7 +864,7 @@ impl App {
                     if !self.history_quiet.remove(&request) {
                         let type_name = self.tree.nodes.iter().find(|n| n.id == id).map(|n| n.type_name.clone()).unwrap_or_default();
                         let step = Step::WriteAdd { node: id, path, type_name, request };
-                        if !self.record_flushed(request, step.clone()) {
+                        if !self.attach_write(step.clone()) && !self.record_flushed(request, step.clone()) {
                             self.record(step);
                         }
                     }
@@ -876,7 +880,7 @@ impl App {
                     if !self.history_quiet.remove(&request) {
                         let type_name = self.tree.nodes.iter().find(|n| n.id == id).map(|n| n.type_name.clone()).unwrap_or_default();
                         let step = Step::WriteMove { node: id, path, type_name, request };
-                        if !self.record_flushed(request, step.clone()) {
+                        if !self.attach_write(step.clone()) && !self.record_flushed(request, step.clone()) {
                             self.record(step);
                         }
                     }
@@ -889,7 +893,7 @@ impl App {
                     let type_name = r.node.type_name.clone();
                     if !self.history_quiet.remove(&request) {
                         let step = Step::WriteDelete { node: row, type_name, request };
-                        if !self.record_flushed(request, step.clone()) {
+                        if !self.attach_write(step.clone()) && !self.record_flushed(request, step.clone()) {
                             self.record(step);
                         }
                     }
@@ -950,11 +954,12 @@ impl App {
                 if let Some((node, key)) = self.undo_moves.remove(&request)
                     && let Some(m) = self.moved.remove(&key)
                 {
-                    if keep {
-                        self.moved.insert(format!("#{node}"), moves::MovedRow { written: None, ..m });
-                    } else {
-                        let index = self.drop_index(node, m.from.0, m.from.1);
-                        self.move_node(node, m.from.0, index, false);
+                    // Marked moved, not written, from its first place: the move back home clears it.
+                    let from = m.from;
+                    self.moved.insert(format!("#{node}"), moves::MovedRow { written: None, ..m });
+                    if !keep {
+                        let index = self.drop_index(node, from.0, from.1);
+                        self.move_node(node, from.0, index, false);
                     }
                 }
                 if let Some(row) = self.undo_removes.remove(&request) {
@@ -3961,7 +3966,7 @@ mod shots {
         let prop = |name: &str, t: &str, v: &str| designer_protocol::Prop { name: name.into(), type_name: t.into(), value: v.into(), ..Default::default() };
         feed(&mut host, &to_ui, HubToEditor::FromApp { app: 1, msg: AppMsg::Props { node: 119, props: vec![prop("FontSize", "System.Double", "12"), prop("TextColor", "DrawnUi.Color", "#FF000000")] } });
         key(&mut host, "KeyV", true);
-        assert_eq!(undo_names(&host), ["Change FontSize", "Paste SkiaShape", "Write SkiaShape", "Delete SkiaLabel", "Paste style"]);
+        assert_eq!(undo_names(&host), ["Change FontSize", "Paste SkiaShape", "Delete SkiaLabel", "Paste style"], "the copy's write joined its paste");
         assert!(host.ui.state.action_enabled(MenuAction::Undo) && !host.ui.state.action_enabled(MenuAction::Redo));
         assert_eq!(view::action_label(&host.ui.state, MenuAction::Undo), "Undo Paste style", "the menus name the step");
 
@@ -3989,11 +3994,7 @@ mod shots {
         key(&mut host, "KeyZ", false);
         assert!(sent.lock().unwrap().contains(&EditorMsg::UndoCode { request: insert_write }));
         feed(&mut host, &to_ui, HubToEditor::CodeUndone { request: insert_write, uri: "Page.cs".into() });
-        assert!(!sent.lock().unwrap().iter().any(|m| matches!(m, EditorMsg::ToApp { msg: HubToApp::Remove { .. }, .. })), "only the write goes back");
-        assert_eq!(host.ui.state.row_change(9001), Some((false, false)), "added, not written");
-        sent.lock().unwrap().clear();
-        key(&mut host, "KeyZ", false);
-        assert!(sent.lock().unwrap().iter().any(|m| matches!(m, EditorMsg::ToApp { msg: HubToApp::Remove { node: 9001, .. }, .. })), "the copy out");
+        assert!(sent.lock().unwrap().iter().any(|m| matches!(m, EditorMsg::ToApp { msg: HubToApp::Remove { node: 9001, .. }, .. })), "the copy out of the code and the app, one step");
         sent.lock().unwrap().clear();
         key(&mut host, "KeyZ", false);
         assert_eq!(sets(&sent), [(117, "FontSize".to_owned(), "28".to_owned())]);
@@ -4012,11 +4013,10 @@ mod shots {
         let mut tree = host.ui.state.tree.clone();
         let at = tree.nodes.iter().position(|n| n.id == 117).unwrap();
         tree.nodes.insert(at + 1, Node { id: 9201, parent: Some(116), type_name: "DrawnUi.Draw.SkiaShape".into(), visible: true, ..Default::default() });
+        sent.lock().unwrap().clear();
         feed(&mut host, &to_ui, HubToEditor::FromApp { app: 1, msg: AppMsg::Inserted { request: again, node: Some(9201), parent: Some(116), index: Some(1) } });
         feed(&mut host, &to_ui, HubToEditor::FromApp { app: 1, msg: AppMsg::Tree(tree) });
-        sent.lock().unwrap().clear();
-        key(&mut host, "KeyY", false);
-        let rewrite = sent.lock().unwrap().iter().find_map(|m| if let EditorMsg::InsertCode { request, node: 9201, .. } = m { Some(*request) } else { None }).expect("written again, the new id");
+        let rewrite = sent.lock().unwrap().iter().find_map(|m| if let EditorMsg::InsertCode { request, node: 9201, .. } = m { Some(*request) } else { None }).expect("written again once the app has it, the new id");
         feed(&mut host, &to_ui, HubToEditor::CodeEdited { request: rewrite, node: 9201, uri: "Page.cs".into(), range });
         sent.lock().unwrap().clear();
         key(&mut host, "KeyY", false);
@@ -4026,7 +4026,7 @@ mod shots {
         let mut again = sets(&sent);
         again.sort();
         assert_eq!(again, [(119, "FontSize".to_owned(), "30".to_owned()), (119, "TextColor".to_owned(), "#FFFFFFFF".to_owned())]);
-        assert_eq!(undo_names(&host), ["Change FontSize", "Paste SkiaShape", "Write SkiaShape", "Delete SkiaLabel", "Paste style"]);
+        assert_eq!(undo_names(&host), ["Change FontSize", "Paste SkiaShape", "Delete SkiaLabel", "Paste style"]);
         assert!(!host.ui.state.action_enabled(MenuAction::Redo));
 
         // The copy's own row Undo (it is written: the write and the copy go): its two steps leave the
@@ -4042,10 +4042,10 @@ mod shots {
         assert!(sent.lock().unwrap().iter().any(|m| matches!(m, EditorMsg::Restore { node: 9300, .. })), "then the delete, not the copy again");
     }
 
-    /// Ctrl+Z on a written value takes back the write only: the value stays live with its dot; the
-    /// next Ctrl+Z takes the edit back. A row's own Undo takes its edit out of the history.
+    /// A written value is one step with its edit: Ctrl+Z takes it back in the app and in the code,
+    /// Ctrl+Y sets it and writes it again. A row's own Undo takes its edit out of the history.
     #[test]
-    fn undo_of_a_write_keeps_the_value_live() {
+    fn undo_takes_back_an_edit_with_its_write() {
         let (mut host, sent, to_ui) = label_selected();
         let range = designer_protocol::source::EditorRange::default();
         let list = host.rect(host.ui.state.props_list);
@@ -4066,25 +4066,20 @@ mod shots {
         host.frame_after(16.0);
         let request = sent.lock().unwrap().iter().find_map(|m| if let EditorMsg::SetCode { request, prop, .. } = m { (prop == "FontSize").then_some(*request) } else { None }).expect("SetCode");
         feed(&mut host, &to_ui, HubToEditor::CodeEdited { request, node: 117, uri: "Page.cs".into(), range });
-        assert_eq!(undo_names(&host), ["Change FontSize", "Write FontSize"]);
+        assert_eq!(undo_names(&host), ["Change FontSize"], "the write is no step of its own");
         sent.lock().unwrap().clear();
         host.key_down("KeyZ", ctrl(false));
         host.settle();
         assert!(sent.lock().unwrap().contains(&EditorMsg::UndoCode { request }));
         feed(&mut host, &to_ui, HubToEditor::CodeUndone { request, uri: "Page.cs".into() });
-        assert_eq!(sets(&sent), [(117, "FontSize".to_owned(), "29".to_owned())], "sent again: it stays live through the rebuild");
-        assert_eq!(host.ui.state.pending.get(&(117, "FontSize".to_owned())).map(String::as_str), Some("29"), "its dot is back");
-        sent.lock().unwrap().clear();
-        host.key_down("KeyZ", ctrl(false));
-        host.settle();
-        assert_eq!(sets(&sent), [(117, "FontSize".to_owned(), "28".to_owned())]);
-        assert!(host.ui.state.pending.is_empty());
-        // Redo: the edit, then the write.
-        host.key_down("KeyY", ctrl(false));
-        host.settle();
+        assert!(sets(&sent).iter().all(|s| *s == (117, "FontSize".to_owned(), "28".to_owned())) && !sets(&sent).is_empty(), "back in the app: {:?}", sets(&sent));
+        assert!(host.ui.state.pending.is_empty(), "no dot: the code has 28 again");
+        assert!(undo_names(&host).is_empty());
+        // Redo: the edit and its write.
         sent.lock().unwrap().clear();
         host.key_down("KeyY", ctrl(false));
         host.settle();
+        assert_eq!(sets(&sent), [(117, "FontSize".to_owned(), "29".to_owned())]);
         assert!(sent.lock().unwrap().iter().any(|m| matches!(m, EditorMsg::SetCode { prop, value, .. } if prop == "FontSize" && value == "29")));
         // A new edit, then the row's Undo: that edit leaves the history, Redo is gone.
         host.pan(at, at, 16.0, 1);
@@ -4213,24 +4208,25 @@ mod shots {
         let range = designer_protocol::source::EditorRange::default();
         feed(&mut host, &to_ui, HubToEditor::CodeEdited { request: code, node: 117, uri: "Page.cs".into(), range });
         assert_eq!(host.ui.state.row_change(117), Some((false, true)), "written");
-        // Ctrl+Z takes the write back (the move stays live), Ctrl+Z again moves it back.
+        assert_eq!(host.ui.state.histories.get(&1).map(|h| h.undo.iter().map(|s| s.label()).collect::<Vec<_>>()), Some(vec!["Move SkiaLabel".to_owned()]), "the write joined the move");
+        // One Ctrl+Z takes the move back, in the code and in the app.
         sent.lock().unwrap().clear();
         host.key_down("KeyZ", ctrl(false));
         host.settle();
         assert!(sent.lock().unwrap().contains(&EditorMsg::UndoCode { request: code }));
         feed(&mut host, &to_ui, HubToEditor::CodeUndone { request: code, uri: "Page.cs".into() });
-        assert_eq!(host.ui.state.row_change(117), Some((false, false)));
-        host.key_down("KeyZ", ctrl(false));
-        host.settle();
         let (request, node, parent, index) = last_move(&sent).expect("moved back");
         assert_eq!((node, parent, index), (117, 116, 0));
         app_moves(&mut host, &to_ui, request, 117, 116, 0);
         assert_eq!(host.ui.state.row_change(117), None, "back home: no mark");
-        assert_eq!(host.ui.state.status, "SkiaLabel moved in the app, not in code yet");
-        // Ctrl+Y moves it again.
+        // Ctrl+Y moves it again, then into the code again once the app has it there.
+        sent.lock().unwrap().clear();
         host.key_down("KeyY", ctrl(false));
         host.settle();
-        assert_eq!(last_move(&sent).map(|m| (m.1, m.2, m.3)), Some((117, 116, 2)));
+        let (request, node, parent, index) = last_move(&sent).expect("moved again");
+        assert_eq!((node, parent, index), (117, 116, 2));
+        app_moves(&mut host, &to_ui, request, 117, 116, 2);
+        assert!(sent.lock().unwrap().iter().any(|m| matches!(m, EditorMsg::MoveCode { node: 117, parent: 116, index: 2, .. })), "written again: {:?}", sent.lock().unwrap());
     }
 
     /// After the app reloads (a hot swap: its controls built again, new ids), nothing is moved with
@@ -5588,6 +5584,64 @@ mod shots {
         assert!(host.ui.state.selected_node().is_none());
         feed(&mut host, &to_ui, HubToEditor::FromApp { app: 1, msg: AppMsg::Tree(again) });
         assert_eq!(host.ui.state.selected_node().map(|n| n.id), Some(id + 100_000));
+    }
+
+    /// Three edits written by one flush: each is one step with its write. Ctrl+Z takes back the
+    /// last (Text) in the app and in the code, the two others stay; the next Ctrl+Z takes FontSize;
+    /// Ctrl+Y sets and writes them again.
+    #[test]
+    fn undo_after_a_flush_takes_back_the_last_action_and_its_write() {
+        let mut state = with_props();
+        state.settings.write_mode = WriteMode::Auto;
+        state.apps[0].info.project = Some("C:/apps/HelloWpf/HelloWpf.csproj".into());
+        let edits = [("FontFamily", "OpenSans", "Mono"), ("FontSize", "18", "24"), ("Text", "Hi", "Hello")];
+        for (p, before, after) in edits {
+            state.live_original.insert((117, p.into()), before.into());
+            state.pending.insert((117, p.into()), after.into());
+        }
+        let (mut host, sent, to_ui) = wired(state);
+        for (p, before, after) in edits {
+            host.ui.state.record(Step::Values { node: 117, values: vec![(p.into(), before.into(), after.into())], style: false });
+        }
+        to_ui.send(Incoming::Flush(serde_json::json!(1))).unwrap();
+        host.ui.waker().invalidate(host.ui.state.inbox, Dirty::APPLY);
+        frames(&mut host, 3);
+        let writes = set_codes(&sent);
+        assert_eq!(writes.iter().map(|w| w.2.as_str()).collect::<Vec<_>>(), ["FontFamily", "FontSize", "Text"]);
+        for (request, node, _) in &writes {
+            edited(&mut host, &to_ui, *request, *node);
+        }
+        assert_eq!(undo_names(&host), ["Change FontFamily", "Change FontSize", "Change Text"], "no write steps of their own");
+        let request_of = |prop: &str| writes.iter().find(|w| w.2 == prop).map(|w| w.0).unwrap();
+        let undos = |sent: &std::sync::Mutex<Vec<EditorMsg>>| sent.lock().unwrap().iter().filter_map(|m| if let EditorMsg::UndoCode { request } = m { Some(*request) } else { None }).collect::<Vec<_>>();
+        // Ctrl+Z: Text, in the code and in the app.
+        sent.lock().unwrap().clear();
+        host.key_down("KeyZ", ctrl(false));
+        frames(&mut host, 3);
+        assert_eq!(undos(&sent), [request_of("Text")]);
+        feed(&mut host, &to_ui, HubToEditor::CodeUndone { request: request_of("Text"), uri: "Page.cs".into() });
+        assert!(sets(&sent).iter().all(|s| *s == (117, "Text".to_owned(), "Hi".to_owned())) && !sets(&sent).is_empty(), "{:?}", sets(&sent));
+        assert!(host.ui.state.pending.is_empty(), "family and size stay written, text is back as the code has it");
+        assert_eq!(undo_names(&host), ["Change FontFamily", "Change FontSize"]);
+        // Ctrl+Z again: FontSize.
+        sent.lock().unwrap().clear();
+        host.key_down("KeyZ", ctrl(false));
+        frames(&mut host, 3);
+        assert_eq!(undos(&sent), [request_of("FontSize")]);
+        feed(&mut host, &to_ui, HubToEditor::CodeUndone { request: request_of("FontSize"), uri: "Page.cs".into() });
+        assert!(sets(&sent).contains(&(117, "FontSize".to_owned(), "18".to_owned())));
+        // Ctrl+Y: FontSize set and written again, then Text.
+        for (prop, value) in [("FontSize", "24"), ("Text", "Hello")] {
+            sent.lock().unwrap().clear();
+            host.key_down("KeyY", ctrl(false));
+            frames(&mut host, 3);
+            assert_eq!(sets(&sent), [(117, prop.to_owned(), value.to_owned())]);
+            let rewrites = set_codes(&sent);
+            assert!(rewrites.len() == 1 && rewrites[0].2 == prop, "{rewrites:?}");
+            edited(&mut host, &to_ui, rewrites[0].0, 117);
+        }
+        assert_eq!(undo_names(&host), ["Change FontFamily", "Change FontSize", "Change Text"]);
+        assert!(host.ui.state.pending.is_empty());
     }
 
     /// A page's code.flush: Auto writes and answers once the writes are done; Manual answers at
