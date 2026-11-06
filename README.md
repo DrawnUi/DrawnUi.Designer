@@ -126,12 +126,12 @@ screens, controls and screenshots when the designer asks. One console line at st
 
 **DrawnUI: Open Designer** in the Command Palette opens the designer beside your code, for Windows.
 
-- **From Releases:** download `drawnui-designer-0.4.0.vsix` from
+- **From Releases:** download `drawnui-designer-0.4.1.vsix` from
   [Releases](https://github.com/DrawnUi/DrawnUi.Designer/releases), then in VS Code run **Extensions: Install from
   VSIX...**, or:
 
   ```powershell
-  code --install-extension drawnui-designer-0.4.0.vsix
+  code --install-extension drawnui-designer-0.4.1.vsix
   ```
 
 - **From the Marketplace** (once it is published there): search the Extensions view for **DrawnUI Designer**, or

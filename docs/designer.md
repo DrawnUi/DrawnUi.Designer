@@ -24,12 +24,12 @@ cargo run -p designer-desktop --release
 The window starts the hub, the small local server that apps and editors connect to. If a hub already runs
 (another window, or VS Code), the window uses that one.
 
-**VS Code.** Download `drawnui-designer-0.4.0.vsix` from the repository's Releases and install it (**Extensions:
+**VS Code.** Download `drawnui-designer-0.4.1.vsix` from the repository's Releases and install it (**Extensions:
 Install from VSIX...**, or the command below); once it is on the Marketplace, search the Extensions view for
 **DrawnUI Designer** (`drawnui.drawnui-designer`) instead.
 
 ```powershell
-code --install-extension drawnui-designer-0.4.0.vsix
+code --install-extension drawnui-designer-0.4.1.vsix
 ```
 
 Then run **DrawnUI: Open Designer**. The designer opens beside your code and starts the hub if none is running. The
