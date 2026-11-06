@@ -655,6 +655,9 @@ The iframe sends:
 - `{ channel, type: "code.edit", version, edits: [{ start, end, text }] }`: write to the code. The offsets are
   UTF-16 code units of the text at `version` (as a JS string or Monaco counts). Apply all edits as one undo
   step. Write to code and its Undo both send it.
+- `{ channel, type: "history", canUndo, canRedo, undo, redo }`: what the page's Undo and Redo would do now, sent
+  once when the editor is up (nothing to undo: `false`, `false`, `""`, `""`) and again whenever it changes. `undo`
+  and `redo` name the step as the Edit menu does ("Change FontFamily", "Delete SkiaShape"), for a tooltip.
 - `{ channel, type: "code.flushed", request, written, left }`: the answer to `code.flush`, once its writes are done
   (their `code.edit` messages sent first): how many changes were written and how many are still not in code (they
   cannot be written, or the mode is Manual). It comes within 2.5 s: a write the page has not taken by then counts in
@@ -681,6 +684,9 @@ The page sends:
 - `{ channel, type: "code.flush", request }`: the page needs the code (before Source, Run, Share or Export). With
   Auto or Always the editor writes every change not in code yet, as one step of its history, then answers
   `code.flushed` with the same `request`; with Manual it answers at once and writes nothing.
+- `{ channel, type: "undo" }`, `{ channel, type: "redo" }`: the page's Undo and Redo while the designer is shown:
+  exactly Ctrl+Z / Ctrl+Y in the editor, the last changing action back in the app and in the code (see Undo). The
+  page's own code undo (its editor's) stays for its source view.
 - `{ channel, type: "frame.offset", x, y }`: where the iframe sits in the page (CSS pixels, the left and top of its
   client box). Send it once at start and again whenever the iframe moves: on every resize or scroll, and when the
   page's layout first gives the iframe its place (it may still be 0 by 0 at the iframe's first message).

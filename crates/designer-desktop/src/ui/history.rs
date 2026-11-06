@@ -218,6 +218,26 @@ impl App {
         self.history().and_then(|h| h.redo.last()).map(Step::label)
     }
 
+    /// Page mode: tells the page what its Undo and Redo buttons would do now, when that changed
+    /// (`{type: "history", canUndo, canRedo, undo, redo}`, the step names as the Edit menu has them).
+    pub(crate) fn post_history(&self) {
+        if self.to_page.is_none() {
+            return;
+        }
+        let (undo, redo) = (self.undo_label(), self.redo_label());
+        let msg = serde_json::json!({
+            "type": "history",
+            "canUndo": undo.is_some(),
+            "canRedo": redo.is_some(),
+            "undo": undo.unwrap_or_default(),
+            "redo": redo.unwrap_or_default(),
+        });
+        if self.history_posted.borrow().as_ref() != Some(&msg) {
+            *self.history_posted.borrow_mut() = Some(msg.clone());
+            self.post_page(msg);
+        }
+    }
+
     /// The controls of the history have new ids (a rebuild, a control put back or added again).
     pub(crate) fn history_remap(&mut self, old: u64, new: u64) {
         if self.rewrite_on_tree.remove(&old) {

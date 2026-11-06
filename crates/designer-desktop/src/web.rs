@@ -178,6 +178,12 @@ pub extern "C" fn designer_page(text: *const u8, len: usize) {
         deliver(Incoming::Flush(m["request"].clone()));
         return;
     }
+    // The page's Undo / Redo (its buttons in the Visual view): the designer's history, as Ctrl+Z /
+    // Ctrl+Y. The page hears the history back as `history` messages.
+    if m["type"] == "undo" || m["type"] == "redo" {
+        deliver(if m["type"] == "undo" { Incoming::Undo } else { Incoming::Redo });
+        return;
+    }
     // A control dragged out of the editor and dropped on the app's canvas, at that canvas point (pixels).
     if m["type"] == "place" {
         if let (Some(type_name), Some(x), Some(y)) = (m["typeName"].as_str(), m["x"].as_f64(), m["y"].as_f64()) {

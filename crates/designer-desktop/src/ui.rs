@@ -25,6 +25,11 @@ pub enum Incoming {
     /// written (Auto, Always) and the page is answered with `code.flushed`.
     #[cfg_attr(not(target_os = "emscripten"), allow(dead_code))]
     Flush(serde_json::Value),
+    /// Page mode: the page's Undo / Redo (its buttons in the Visual view): what Ctrl+Z / Ctrl+Y do.
+    #[cfg_attr(not(target_os = "emscripten"), allow(dead_code))]
+    Undo,
+    #[cfg_attr(not(target_os = "emscripten"), allow(dead_code))]
+    Redo,
 }
 
 /// Sends one message to the hosting page (page mode).
@@ -522,6 +527,8 @@ pub struct App {
     write_groups: std::collections::HashMap<u32, u32>,
     /// Code writes taken back by Ctrl+Z: the change stays live.
     keep_live: std::collections::HashMap<u32, String>,
+    /// Page mode: the last `history` message posted, so the page hears each change of it once.
+    history_posted: std::cell::RefCell<Option<serde_json::Value>>,
     /// Controls added or moved again by Ctrl+Y whose write goes again once the app's tree has them.
     rewrite_on_tree: std::collections::HashSet<u64>,
     /// Adds done again by Redo: request, the control's id before.
@@ -649,6 +656,8 @@ impl App {
             Incoming::FrameOffset(x, y) => self.frame_offset = (x, y),
             Incoming::Place { type_name, x, y } => self.place_at(type_name, x, y),
             Incoming::Flush(request) => self.page_flush(request, cx),
+            Incoming::Undo => self.undo_step(cx),
+            Incoming::Redo => self.redo_step(cx),
             Incoming::Connected(on) => {
                 self.connected = on;
                 if on && self.settings.allow_devices {
@@ -5319,7 +5328,8 @@ mod shots {
             state.embedded = embedded;
             state.frame_offset = (100.0, 50.0);
             let log = posted.clone();
-            state.to_page = Some(Box::new(move |m| log.lock().unwrap().push(m)));
+            // The page's own messages only, not the history it hears too.
+            state.to_page = Some(Box::new(move |m| if m["type"] != "history" { log.lock().unwrap().push(m) }));
             let (mut host, sent, _to_ui) = wired(state);
             let from = at_label(&mut host, "SkiaLabel, Text");
             (host, sent, posted, from)
@@ -5710,6 +5720,56 @@ mod shots {
         assert_eq!(rows, [9002, 9003, 9004, 9005]);
     }
 
+    /// In a page, its Undo / Redo buttons run the designer's history: three typed edits (size, text,
+    /// family), `undo` takes the family back first, then the text; `redo` does the text again. The
+    /// page hears what its buttons would do after each change (`history`).
+    #[test]
+    fn the_pages_undo_and_redo_run_the_history() {
+        let mut state = with_props();
+        state.embedded = true;
+        let posted = std::sync::Arc::new(std::sync::Mutex::new(Vec::<serde_json::Value>::new()));
+        let log = posted.clone();
+        state.to_page = Some(Box::new(move |m| log.lock().unwrap().push(m)));
+        let prop = |name: &str, t: &str, v: &str| Prop { name: name.into(), type_name: t.into(), value: v.into(), is_set: true, group: Some("Text".into()), ..Default::default() };
+        state.props = vec![prop("FontFamily", "System.String", "FontTextTitle"), prop("FontSize", "System.Double", "26"), prop("Text", "System.String", "Hi")];
+        state.rebuild_prop_rows();
+        let (mut host, sent, to_ui) = wired(state);
+        // Once the editor is up: nothing to undo yet.
+        let first = posted.lock().unwrap().iter().find(|m| m["type"] == "history").cloned();
+        assert_eq!(first, Some(serde_json::json!({ "type": "history", "canUndo": false, "canRedo": false, "undo": "", "redo": "" })));
+        let node = host.ui.state.selected_node().map(|n| n.id).unwrap();
+        for (name, text) in [("FontSize", "4"), ("Text", " A"), ("FontFamily", "2")] {
+            let i = host.ui.state.props.iter().position(|p| p.name == name).unwrap();
+            let r = host.ui.state.prop_rows.iter().position(|row| matches!(row, PropRow::Prop(k) if *k == i)).unwrap();
+            let list = host.rect(host.ui.state.props_list);
+            let at = (list.left + 200.0, list.top + view::PROPS_PAD + r as f32 * view::ROW + view::ROW / 2.0);
+            host.pan(at, at, 16.0, 1);
+            frames(&mut host, 2);
+            host.type_text(text);
+            frames(&mut host, 2);
+            host.press_key("Enter");
+            frames(&mut host, 3);
+        }
+        let history = |posted: &std::sync::Mutex<Vec<serde_json::Value>>| posted.lock().unwrap().iter().rev().find(|m| m["type"] == "history").cloned().unwrap();
+        assert_eq!(history(&posted), serde_json::json!({ "type": "history", "canUndo": true, "canRedo": false, "undo": "Change FontFamily", "redo": "" }));
+        let page = |host: &mut Headless<App>, msg: Incoming| {
+            sent.lock().unwrap().clear();
+            to_ui.send(msg).unwrap();
+            host.ui.waker().invalidate(host.ui.state.inbox, Dirty::APPLY);
+            frames(host, 3);
+            sets(&sent)
+        };
+        assert_eq!(page(&mut host, Incoming::Undo), [(node, "FontFamily".to_owned(), "FontTextTitle".to_owned())], "the family first");
+        assert_eq!(history(&posted), serde_json::json!({ "type": "history", "canUndo": true, "canRedo": true, "undo": "Change Text", "redo": "Change FontFamily" }));
+        assert_eq!(page(&mut host, Incoming::Undo), [(node, "Text".to_owned(), "Hi".to_owned())]);
+        assert_eq!(page(&mut host, Incoming::Redo), [(node, "Text".to_owned(), "Hi A".to_owned())]);
+        assert_eq!(history(&posted)["undo"], "Change Text");
+        assert_eq!(history(&posted)["redo"], "Change FontFamily");
+        let count = posted.lock().unwrap().iter().filter(|m| m["type"] == "history").count();
+        frames(&mut host, 5);
+        assert_eq!(posted.lock().unwrap().iter().filter(|m| m["type"] == "history").count(), count, "only when it changes");
+    }
+
     /// A page's code.flush: Auto writes and answers once the writes are done; Manual answers at
     /// once, with what is left.
     #[test]
@@ -5719,7 +5779,8 @@ mod shots {
             let mut state = with_changes(mode);
             state.embedded = true;
             let log = posted.clone();
-            state.to_page = Some(Box::new(move |m| log.lock().unwrap().push(m)));
+            // The page's own messages only, not the history it hears too.
+            state.to_page = Some(Box::new(move |m| if m["type"] != "history" { log.lock().unwrap().push(m) }));
             let (mut host, sent, to_ui) = wired(state);
             to_ui.send(Incoming::Flush(serde_json::json!(7))).unwrap();
             host.ui.waker().invalidate(host.ui.state.inbox, Dirty::APPLY);
@@ -5750,7 +5811,8 @@ mod shots {
             state.pending.insert((118, "FontSize".into()), "22".into());
             state.embedded = true;
             let log = posted.clone();
-            state.to_page = Some(Box::new(move |m| log.lock().unwrap().push(m)));
+            // The page's own messages only, not the history it hears too.
+            state.to_page = Some(Box::new(move |m| if m["type"] != "history" { log.lock().unwrap().push(m) }));
             let (mut host, sent, to_ui) = wired(state);
             to_ui.send(Incoming::Flush(serde_json::json!(8))).unwrap();
             host.ui.waker().invalidate(host.ui.state.inbox, Dirty::APPLY);
