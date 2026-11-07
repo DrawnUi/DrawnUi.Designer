@@ -1590,7 +1590,7 @@ fn layers_panel(app: &mut App) -> Build<SkiaLayout> {
         &tr("panel-layers"),
         (
             text(11.0, FAINT).vertical_options(LayoutOptions::Center).observe(|me, app: &App| {
-                me.set_text(if app.rows.is_empty() && !(app.app.is_some() && app.tree.revision > 0) { String::new() } else { tr_args("controls-count", &[("count", app.rows.len().into())]) });
+                me.set_text(if app.rows.is_empty() && !(app.app.is_some() && app.tree.revision > 0) { String::new() } else { tr_args("controls-count", &[("count", app.controls_in_app().into())]) });
                 // In a page: its Undo / Redo buttons follow the history.
                 app.post_history();
             }),

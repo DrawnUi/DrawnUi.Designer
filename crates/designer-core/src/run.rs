@@ -300,6 +300,8 @@ fn start(hub: &Shared, project: &str) -> Result<(), Refusal> {
             std::fs::File::create(l).ok()
         });
         let mut errors: Vec<String> = vec![];
+        // The lines after a rustc error headline, until its first label.
+        let mut detail = false;
         let mut tail: Vec<String> = vec![];
         let deadline = tokio::time::sleep(timeout);
         tokio::pin!(deadline);
@@ -314,6 +316,17 @@ fn start(hub: &Shared, project: &str) -> Result<(), Refusal> {
                         }
                         if is_error_line(&line) && !errors.contains(&line) {
                             errors.push(line.clone());
+                            detail = true;
+                        } else if detail {
+                            // rustc puts where and why on the lines under its headline.
+                            match error_detail(&line) {
+                                Some(Detail::Where(at)) => errors.push(at),
+                                Some(Detail::Why(why)) => {
+                                    errors.push(why);
+                                    detail = false;
+                                }
+                                None => detail = !line.trim().is_empty(),
+                            }
                         }
                         tail.push(line.clone());
                         if tail.len() > 20 {
@@ -440,6 +453,23 @@ fn failure(what: Refusal, errors: &[String], tail: &[String], log: Option<&str>)
     (message, Some(what))
 }
 
+enum Detail {
+    Where(String),
+    Why(String),
+}
+
+/// Under a rustc error headline: its place (`  --> src/main.rs:133:24`) and its first label
+/// (`   |     ^^^^^ expected `u32`, found `&str``), each as one short line.
+fn error_detail(line: &str) -> Option<Detail> {
+    let t = line.trim();
+    if let Some(at) = t.strip_prefix("--> ") {
+        return Some(Detail::Where(format!("  at {at}")));
+    }
+    let gutter = t.split_once('|')?.1;
+    let label = gutter.trim_start().trim_start_matches(['^', '-', '_', ' ']).trim();
+    (gutter.contains(['^']) && !label.is_empty()).then(|| Detail::Why(format!("  {label}")))
+}
+
 /// An MSBuild / compiler error line (`File.cs(3,1): error CS1002: ; expected`), or rustc's
 /// (`error[E0425]: cannot find value`, `error: expected one of ...`).
 fn is_error_line(line: &str) -> bool {
@@ -507,6 +537,17 @@ mod framework_tests {
         let other = DefaultLauncher.command(&app, "ws://127.0.0.1:54400").unwrap();
         assert_eq!(other.env, [("DRAWNUI_DESIGNER_URL".to_string(), "ws://127.0.0.1:54400".to_string())]);
         assert!(super::is_error_line("error[E0425]: cannot find value `x` in this scope") && !super::is_error_line("   Compiling drawnui v0.1.0"));
+        let detail = |l: &str| match super::error_detail(l) {
+            Some(super::Detail::Where(s)) | Some(super::Detail::Why(s)) => s,
+            None => String::new(),
+        };
+        assert_eq!(detail("   --> sample/src/main.rs:133:24"), "  at sample/src/main.rs:133:24");
+        assert_eq!(detail("133 |         .font_size(\"28\")"), "");
+        assert_eq!(detail("    |                    ^^^^ expected `u32`, found `&str`"), "  expected `u32`, found `&str`");
+        assert_eq!(detail("    |"), "");
+        // rustc's own E0308 lines: a secondary label first, then the main one on the same line.
+        assert_eq!(detail("    |          --------- arguments to this method are incorrect"), "");
+        assert_eq!(detail("    |          --------- ^^^^ expected `u32`, found `&str`"), "  expected `u32`, found `&str`");
     }
 
     #[test]

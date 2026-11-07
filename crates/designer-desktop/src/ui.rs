@@ -2702,6 +2702,11 @@ impl App {
         }
     }
 
+    /// Layers' count: the rows of controls in the app, not the rows kept for Undo of controls taken out here.
+    pub(crate) fn controls_in_app(&self) -> usize {
+        self.rows.iter().filter(|r| !self.is_removed(self.tree.nodes[r.node].id)).count()
+    }
+
     /// Control `id` was taken out here (its row stays, dimmed).
     pub(crate) fn is_removed(&self, id: u64) -> bool {
         self.removed.iter().any(|r| r.node.id == id)
@@ -4144,6 +4149,7 @@ mod shots {
         assert_eq!(host.ui.state.tree.nodes[host.ui.state.rows[row].node].parent, Some(116));
         assert_eq!(host.ui.state.live_index(116, 117), 0, "it stays first of the stack");
         assert_eq!(host.ui.state.row_change(117), Some((true, false)));
+        assert_eq!(host.ui.state.controls_in_app(), host.ui.state.rows.len() - 1, "the kept row is not counted");
         assert!(host.ui.state.status.contains("taken out of the app, not in code yet"), "{}", host.ui.state.status);
         // Write: out of the code too.
         sent.lock().unwrap().clear();
