@@ -2132,7 +2132,8 @@ namespace DrawnUi.Designer.Agent
         /// <summary>
         /// The canvas as base64 PNG. While the window presents frames: DrawnView.TakeScreenShot, the next frame's
         /// own surface image, encoded on the render thread (works on the GPU). When it is hidden (minimized,
-        /// display off: no frame within 300 ms), the canvas draws a frame into a raster surface instead.
+        /// display off: no frame within 300 ms), the canvas draws a frame into a raster surface instead, on Windows only
+        /// (see <see cref="OffscreenAllowed"/>); elsewhere the snapshot waits up to 3 s for the canvas's own frame.
         /// </summary>
         private static async Task<(string Png, uint Width, uint Height)> Snapshot()
         {
@@ -2155,11 +2156,15 @@ namespace DrawnUi.Designer.Agent
                     take.Invoke(_canvas, new object[] { callback });
                     Call(_canvas, "Update");
                 });
-                if (await Task.WhenAny(waiter.Task, Task.Delay(300)) == waiter.Task)
+                // Off Windows the canvas's own render thread draws it: a slow frame (a first Vulkan frame) is
+                // waited for, never drawn by the agent.
+                if (await Task.WhenAny(waiter.Task, Task.Delay(OffscreenAllowed ? 300 : 3000)) == waiter.Task)
                     return await waiter.Task;
                 await Ui(() => SnapshotWaiters.Remove(waiter)); // no frame: the window does not present
             }
 
+            if (!OffscreenAllowed)
+                throw new InvalidOperationException("the app draws no frame (is it in the background?): bring it to the front for a snapshot");
             await SettleOffscreen();
             var frame = await Ui(() => RenderOffscreen(keepImage: true));
             return Encode(frame); // PNG encoding off the UI thread
@@ -2230,6 +2235,15 @@ namespace DrawnUi.Designer.Agent
         private static Type _imageInfoType;
         private static Func<long> _nanos;
 
+        /// <summary>
+        /// The agent may draw the canvas itself (a frame into its own raster surface, on the UI thread) only on
+        /// Windows, where the hosts draw on the UI thread or stop drawing while the window does not present. On
+        /// Android, iOS and Mac Catalyst the canvas has its own render thread (Vulkan, OpenGL, Metal): a frame drawn
+        /// from the UI thread would race it, and GPU caches made on its context from another thread crash the
+        /// driver. There the agent waits for the canvas's own frames.
+        /// </summary>
+        private static bool OffscreenAllowed => OperatingSystem.IsWindows();
+
         private static bool WindowHidden()
         {
             if (_host.CanvasHidden(_canvas))
@@ -2247,23 +2261,27 @@ namespace DrawnUi.Designer.Agent
         /// <summary>
         /// DrawnUI measures and arranges inside the draw pass: after a change (setProperty, openScreen, hot reload)
         /// rects and visibility are stale until a frame is drawn. When the canvas waits for a frame and the window
-        /// does not draw one within 150 ms (hidden, display off), the agent draws frames itself.
+        /// does not draw one within 150 ms (hidden, display off), the agent draws frames itself on Windows; elsewhere
+        /// it waits up to 1.5 s for the canvas's own frame (see <see cref="OffscreenAllowed"/>) and answers with what
+        /// the last frame laid out.
         /// </summary>
         private static async Task EnsureCurrent()
         {
             var (dirty, hidden, frame) = await Ui(() => (CanvasDirty(), WindowHidden(), FrameNumber()));
-            if (!dirty)
+            if (!dirty || (hidden && !OffscreenAllowed))
                 return;
             if (!hidden)
             {
-                for (var waited = 0; waited < 150; waited += 15)
+                var wait = OffscreenAllowed ? 150 : 1500;
+                for (var waited = 0; waited < wait; waited += 15)
                 {
                     await Task.Delay(15);
                     if (await Ui(FrameNumber) != frame)
                         return; // the window presents
                 }
             }
-            await SettleOffscreen();
+            if (OffscreenAllowed)
+                await SettleOffscreen();
         }
 
         /// <summary>
