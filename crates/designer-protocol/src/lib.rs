@@ -445,6 +445,9 @@ pub enum RunState {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum HubToEditor {
+    /// The designer version of the hub, its first message on connect: an editor of another version
+    /// (or one that hears the apps first, from a hub older than this message) says so.
+    Hub { version: String },
     /// The phones on a USB cable the hub watches for apps: Android phones through adb, iPhones and
     /// iPads through usbmux. Sent on connect and whenever a phone is plugged in or out.
     Cables { android: u32, ios: u32 },

@@ -1918,7 +1918,12 @@ fn selection_header() -> Build<SkiaLayout> {
                 me.set_tint_color(c(if app.status_error { WARN } else { OK }));
                 me.set_opacity(if app.status.is_empty() { 0.0 } else { 1.0 });
             }),
-            text(12.0, MUTED).max_lines(1).fill_x().vertical_options(LayoutOptions::Center).observe(|me, app: &App| me.set_text(app.status.as_str())),
+            // Cut to one line here; the whole text in its tooltip and for a screen reader.
+            text(12.0, MUTED).max_lines(1).fill_x().vertical_options(LayoutOptions::Center).accessibility_role(Aria::STATUS).accessibility_live(Aria::LIVE_POLITE).observe(|me, app: &App| {
+                me.set_text(app.status.as_str());
+                me.set_tooltip(app.status.as_str());
+                me.set_accessibility_label(app.status.as_str());
+            }),
         )),
     )))
 }
@@ -2433,16 +2438,19 @@ pub fn unwritten_menu(app: &App) -> Build<SkiaShape> {
         Some(AfterFlush::Close) => ("unwritten-write-close", "unwritten-skip-close"),
         _ => ("unwritten-write-restart", "unwritten-skip-restart"),
     };
-    let title = tr_args("unwritten-title", &[("count", app.unwritten_count().into())]);
-    let rows = vec![
-        SkiaShape::new().fill_x().padding((10, 6)).accessibility_role(Aria::PRESENTATION).children(text(12.0, MUTED).text(title.clone())),
-        menu_item(tr(write), |_| false, |app, cx| app.answer_unwritten(true, cx)),
+    // After a flush that could not write them all: no Write, only on without them, or stay.
+    let title = tr_args(if app.confirm_failed { "unwritten-failed-title" } else { "unwritten-title" }, &[("count", app.unwritten_count().into())]);
+    let mut rows = vec![SkiaShape::new().fill_x().padding((10, 6)).accessibility_role(Aria::PRESENTATION).children(text(12.0, MUTED).text(title.clone()))];
+    if !app.confirm_failed {
+        rows.push(menu_item(tr(write), |_| false, |app, cx| app.answer_unwritten(true, cx)));
+    }
+    let rows = rows.into_iter().chain([
         menu_item(tr(skip), |_| false, |app, cx| app.answer_unwritten(false, cx)),
         menu_item(tr("unwritten-cancel"), |_| false, |app, cx| {
             app.confirm = None;
             app.close_popup(cx);
         }),
-    ];
+    ]).collect();
     let longest = [title.chars().count(), tr(write).chars().count(), tr(skip).chars().count()].into_iter().max().unwrap_or(20);
     menu_panel(rows, menu_width(longest)).accessibility_label(title)
 }
@@ -2477,13 +2485,24 @@ fn status_bar() -> Build<SkiaLayout> {
                     tr("status-connecting")
                 })
             }),
+            // Joined the hub of another designer: said while connected to it.
+            text(11.0, WARN).max_lines(1).accessibility_role(Aria::STATUS).observe(|me, app: &App| {
+                let notice = app.other_hub.as_deref().filter(|_| app.connected).map_or(String::new(), |v| app.other_hub_text(v));
+                me.set_text(if notice.is_empty() { String::new() } else { format!("·  {notice}") });
+                me.set_tooltip(notice.as_str());
+                me.set_accessibility_label(notice.as_str());
+            }),
             // A run that failed says why (the build's first error line), until the next run.
-            text(11.0, ERROR).max_lines(1).observe(|me, app: &App| {
+            text(11.0, ERROR).max_lines(1).accessibility_role(Aria::STATUS).observe(|me, app: &App| {
                 let failed = app.runs.iter().find(|(_, (state, _))| *state == designer_protocol::RunState::Failed);
                 me.set_text(failed.map_or(String::new(), |(project, (_, message))| {
                     let name = std::path::Path::new(project).file_name().map_or(project.clone(), |n| n.to_string_lossy().into_owned());
                     format!("·  {}", tr_args("status-run-failed", &[("name", name.into()), ("message", message.lines().next().unwrap_or_default().to_owned().into())]))
                 }));
+                // Every line of the failure in its tooltip and for a screen reader.
+                let full = failed.map_or(String::new(), |(_, (_, message))| message.clone());
+                me.set_tooltip(full.as_str());
+                me.set_accessibility_label(full.as_str());
             }),
         )),
     )

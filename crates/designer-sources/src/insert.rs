@@ -48,6 +48,12 @@ pub fn insert_spec(files: &[(String, String)], tree: &RuntimeTree, parent: NodeI
     insert_with(files, tree, parent, index, |style| spec_element(spec, root_types, style, &mut vec![], forms)).map(|s| s.finish(files))
 }
 
+/// Writes `text` (a control's code, such as [`crate::copy_call`] gives) as child `index` of `parent`,
+/// laid out as an insert is; Rust only (other code is written from a spec).
+pub fn insert_text(files: &[(String, String)], tree: &RuntimeTree, parent: NodeId, index: usize, text: &str) -> Result<CodeEdit, Refusal> {
+    rs_insert(files, tree, parent, index, crate::rs::NewControl::Text(text)).unwrap_or_else(|| Err(Refusal::new("src-no-code", &[]))).map(|s| s.finish(files))
+}
+
 /// How the code that makes each of `nodes` writes its children list: `""` for the collection
 /// initializer `Children = { .. }`, else the list it creates (`new List<SkiaControl>`). Nodes with no
 /// such list in code are left out.

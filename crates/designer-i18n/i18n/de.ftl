@@ -84,6 +84,8 @@ status-connected = { $count ->
    *[other] Hub verbunden · { $count } Apps
 }
 status-connecting = Verbindung zum Hub…
+status-other-hub = Mit dem Hub eines anderen Designers verbunden (Version { $version }); schließe ihn, um diesen zu verwenden.
+status-other-hub-older = Mit dem Hub eines älteren Designers verbunden; schließe ihn, um diesen zu verwenden.
 status-run-failed = { $name } fehlgeschlagen: { $message }
 status-live = { $prop } = { $value } in der App, noch nicht im Code
 status-writing = { $prop } wird in den Code geschrieben…
@@ -367,6 +369,7 @@ status-style-pasted = { $count ->
    *[other] { $count } Stileigenschaften in der App gesetzt, noch nicht im Code
 }
 status-style-none = Nichts vom kopierten Stil passt zu { $type }
+status-style-same = { $type } hat den kopierten Stil schon
 status-removed-live = { $type } aus der App entfernt, noch nicht aus dem Code
 status-removed-written = { $type } aus der App und aus dem Code entfernt
 status-restored = { $type } ist wieder in der App
@@ -435,4 +438,8 @@ unwritten-write-run = Schreiben, dann ausführen
 unwritten-skip-run = Ohne Schreiben ausführen
 unwritten-write-close = Schreiben, dann schließen
 unwritten-skip-close = Ohne Schreiben schließen
+unwritten-failed-title = { $count ->
+    [one] { $count } Änderung konnte nicht in den Code geschrieben werden (siehe Statuszeile).
+   *[other] { $count } Änderungen konnten nicht in den Code geschrieben werden (siehe Statuszeile).
+}
 unwritten-cancel = Abbrechen

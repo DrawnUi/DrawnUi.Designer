@@ -375,3 +375,38 @@ fn build(_app: &mut App) -> Build<SkiaLayout> {
     let tree1 = rt(&[(1, None, "SkiaLayout"), (2, Some(1), "SkiaLabel"), (3, Some(1), "SkiaLabel"), (4, Some(1), "SkiaShape"), (5, Some(4), "SkiaLabel")]);
     changed(&single, &set(&single, &tree1, 5, "font_size", "System.Single", "9").unwrap(), "12", "9");
 }
+
+fn sample_tree() -> RtTree {
+    rt(&[
+        (1, None, "SkiaLayout"), (2, Some(1), "SkiaLabel"), (3, Some(1), "SkiaLabel"), (4, Some(1), "SkiaLayout"),
+        (5, Some(4), "SkiaShape"), (6, Some(4), "SkiaShape"), (7, Some(4), "SkiaShape"), (8, Some(1), "SkiaShape"),
+        (9, Some(8), "SkiaLayout"), (10, Some(9), "SkiaLabel"), (11, Some(9), "SkiaLabel"), (12, Some(1), "SkiaLayout"),
+        (13, Some(12), "SkiaButton"), (14, Some(12), "SkiaButton"), (15, Some(1), "SkiaLayout"), (16, Some(15), "SkiaSwitch"), (17, Some(15), "SkiaLabel"),
+    ])
+}
+
+/// A pasted style on `swatch(CORAL, "coral")`, one write after the other: every value goes on that
+/// call, also the color its parameter gets from a constant; none into `swatch`.
+#[test]
+fn a_pasted_style_on_a_helper_call_writes_every_value_on_the_call() {
+    let tree = sample_tree();
+    let mut text = SAMPLE.to_string();
+    for (prop, ty, value) in [("corner_radius", "System.Single", "16"), ("stroke_width", "System.Single", "1"), ("background_color", "drawnui.skia.Color", "#FF222634"), ("padding", "Thickness", "20")] {
+        let v = crate::value_from_runtime(ty, value, value).unwrap();
+        text = crate::set_property(&[("main.rs".into(), text.clone())], &tree, 6, prop, &v).unwrap_or_else(|r| panic!("{prop}: {r:?}")).text;
+    }
+    assert!(text.contains(r#"swatch(CORAL, "coral").corner_radius(16).stroke_width(1).background_color(Color::from_rgb(34, 38, 52)).padding(20)"#), "{text}");
+    assert!(text.contains("SkiaShape::new().corner_radius(10).width_request(44).height_request(44).background_color(color).tag(name)"), "swatch itself untouched");
+}
+
+/// A copy of a control a call makes is that call again (`swatch(ACCENT, "blue")`), written where it goes.
+#[test]
+fn a_copy_of_a_helper_made_control_is_the_call_again() {
+    let tree = sample_tree();
+    let files = [("main.rs".to_string(), SAMPLE.to_string())];
+    let call = crate::copy_call(&files, &tree, 5).unwrap();
+    assert_eq!(call, r#"swatch(ACCENT, "blue")"#);
+    assert_eq!(crate::copy_call(&files, &tree, 2), None, "the title is written in place");
+    let after = crate::insert_text(&files, &tree, 4, 3, &call).unwrap().text;
+    changed(SAMPLE, &after, "", r#", swatch(ACCENT, "blue")"#);
+}

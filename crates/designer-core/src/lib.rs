@@ -176,15 +176,10 @@ impl Hub {
                         let _ = tx.send(Message::text(serde_json::to_string(&msg).expect("serializable")));
                     }
                 }
-                Out::Work(work) => {
-                    let hub = hub.clone();
-                    tokio::task::spawn_blocking(move || {
-                        let done = work.run();
-                        let mut h = hub.lock().unwrap();
-                        let outs = h.core.done(done);
-                        h.send_out(&hub, outs);
-                    });
-                }
+                // One after the other, in order: two writes to one file made at once would each read
+                // it before the other wrote (the second refused as "changed meanwhile"), and a write's
+                // undo record must follow the writes before it.
+                Out::Work(work) => worker().send((hub.clone(), work)).expect("the hub's worker runs"),
             }
         }
     }
@@ -200,6 +195,27 @@ impl Hub {
 }
 
 type Shared = Arc<Mutex<Hub>>;
+
+/// The thread that runs the hubs' work (parsing and writing code), one item at a time, in the
+/// order it was given, off the async threads.
+fn worker() -> &'static std::sync::mpsc::Sender<(Shared, designer_hubcore::Work)> {
+    static WORKER: std::sync::OnceLock<std::sync::mpsc::Sender<(Shared, designer_hubcore::Work)>> = std::sync::OnceLock::new();
+    WORKER.get_or_init(|| {
+        let (tx, rx) = std::sync::mpsc::channel::<(Shared, designer_hubcore::Work)>();
+        std::thread::Builder::new()
+            .name("hub-work".into())
+            .spawn(move || {
+                for (hub, work) in rx {
+                    let done = work.run();
+                    let mut h = hub.lock().unwrap();
+                    let outs = h.core.done(done);
+                    h.send_out(&hub, outs);
+                }
+            })
+            .expect("a thread for the hub's work");
+        tx
+    })
+}
 
 /// A phone was plugged in or out: the count for that kind changes and every editor hears it.
 fn set_cables(hub: &Shared, android: Option<u32>, ios: Option<u32>) {
@@ -523,7 +539,7 @@ mod tests {
             if let Some(Ok(Message::Text(text))) = ws.next().await {
                 // The phones-on-cable count comes on connect; these tests are about other messages.
                 match serde_json::from_str(&text).unwrap() {
-                    HubToEditor::Cables { .. } => continue,
+                    HubToEditor::Cables { .. } | HubToEditor::Hub { .. } => continue,
                     msg => return msg,
                 }
             }
@@ -925,6 +941,52 @@ mod tests {
                 send(&mut ws, &reply).await;
             }
         });
+    }
+
+    /// Two values written at once into one file (Write all): both land, one after the other, neither
+    /// refused as "changed meanwhile" nor lost; both taken back at once (Undo of a pasted style), the
+    /// file is as it was.
+    #[tokio::test]
+    async fn writes_sent_at_once_all_land() {
+        let (ws, _) = start_hub().await;
+        let dir = std::env::temp_dir().join(format!("designer-burst-test-{}", std::process::id()));
+        fake_app(&ws, &dir).await;
+        let (mut editor, _) = connect_async(&ws).await.unwrap();
+        send(&mut editor, &Hello::Editor { protocol: PROTOCOL_VERSION.into() }).await;
+        let app = loop {
+            if let HubToEditor::Apps { apps, .. } = next_editor_msg(&mut editor).await
+                && let Some(a) = apps.first()
+            {
+                break a.id;
+            }
+        };
+        send(&mut editor, &EditorMsg::ToApp { app, msg: HubToApp::GetProps { node: 2 } }).await;
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        let original = std::fs::read_to_string(dir.join("Page.cs")).unwrap();
+        for (request, prop, value) in [(1, "Text", "Yo"), (2, "FontSize", "30")] {
+            send(&mut editor, &EditorMsg::SetCode { request, app, node: 2, prop: prop.into(), value: value.into() }).await;
+        }
+        let mut answers = vec![];
+        while answers.len() < 2 {
+            if let m @ (HubToEditor::CodeEdited { .. } | HubToEditor::CodeRefused { .. }) = next_editor_msg(&mut editor).await {
+                answers.push(m);
+            }
+        }
+        assert!(answers.iter().all(|m| matches!(m, HubToEditor::CodeEdited { .. })), "{answers:?}");
+        let page = std::fs::read_to_string(dir.join("Page.cs")).unwrap();
+        assert!(page.contains("Text = \"Yo\"") && page.contains("FontSize = 30"), "{page}");
+        for request in [2, 1] {
+            send(&mut editor, &EditorMsg::UndoCode { request }).await;
+        }
+        let mut answers = vec![];
+        while answers.len() < 2 {
+            if let m @ (HubToEditor::CodeUndone { .. } | HubToEditor::CodeRefused { .. }) = next_editor_msg(&mut editor).await {
+                answers.push(m);
+            }
+        }
+        assert!(answers.iter().all(|m| matches!(m, HubToEditor::CodeUndone { .. })), "{answers:?}");
+        assert_eq!(std::fs::read_to_string(dir.join("Page.cs")).unwrap(), original);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     async fn start_hub() -> (String, String) {

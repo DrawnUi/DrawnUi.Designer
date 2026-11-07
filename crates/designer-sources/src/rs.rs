@@ -930,14 +930,20 @@ pub(crate) fn set_property(files: &[(String, String)], m: &RuntimeMatch, prop: &
         own = Some(args);
     }
     if let Some(args) = own {
-        let arg = single(args).ok_or_else(not_literal)?;
-        let (f, through) = through_params(&at, at.file, arg, m).ok_or_else(not_literal)?;
-        // A parameter: the argument of this use's call.
+        // A value the designer cannot follow: for a control a call returns, the value goes on that
+        // call (below); written in place, it is refused.
+        let found = single(args).and_then(|arg| through_params(&at, at.file, arg, m).map(|t| (arg, t)));
+        let Some((arg, (f, through))) = found.or_else(|| (!at.outer.is_empty()).then_some((at.node, (at.file, at.node)))) else { return Err(not_literal()) };
+        // A parameter: the argument of this use's call; one that is no literal (a constant passed
+        // in) gets the value after the call instead, on this use only.
         if through.id() != arg.id() {
-            return write_at(f, through);
+            match write_at(f, through) {
+                Err(_) if !at.outer.is_empty() => {}
+                done => return done,
+            }
         }
         // A literal in place, when no other control is made by it.
-        if at.outer.is_empty() {
+        if at.outer.is_empty() && through.id() == arg.id() {
             if let Some(h) = shared {
                 return Err(h);
             }
@@ -1181,6 +1187,19 @@ fn up(mut x: Node) -> Node {
         x = p;
     }
     x
+}
+
+/// For a copy of control `source` of `tree`: when a call of the app's own function makes it
+/// (`swatch(CORAL, "coral")`, Rust), that call with its chain, as the code has it; the copy is written
+/// as the same call. `None` for a control written in place.
+pub fn copy_call(files: &[(String, String)], tree: &RuntimeTree, source: NodeId) -> Option<String> {
+    let rs: Vec<(String, String)> = files.iter().filter(|(u, _)| is_rust(u)).cloned().collect();
+    let m = crate::match_runtime(&rs, tree).into_iter().find(|m| m.node == source && is_rust(&m.uri))?;
+    let trees: Vec<Tree> = rs.iter().map(|(_, t)| parse_rs(t)).collect();
+    let at = locate(&rs, &trees, &m).ok()?;
+    let (f, call) = *at.outer.last()?;
+    let top = chain_top(call);
+    Some(at.files[f].text[call.start_byte()..top.end_byte()].to_owned())
 }
 
 /// The cut that takes the item `key` makes (a control, or a call of the app's function that returns

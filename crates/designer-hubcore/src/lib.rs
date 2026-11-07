@@ -300,7 +300,8 @@ impl HubCore {
         self.next_id += 1;
         let id = self.next_id;
         self.editors.insert(id);
-        let mut first = vec![self.apps_msg()];
+        // First the hub's version, then the apps.
+        let mut first = vec![HubToEditor::Hub { version: env!("CARGO_PKG_VERSION").into() }, self.apps_msg()];
         if let Some(url) = &self.devices {
             first.push(HubToEditor::Devices { url: Some(url.clone()), refusal: None });
         }
@@ -444,6 +445,12 @@ impl HubCore {
                                 None => (spec, HashMap::new()),
                             };
                             write_edit(&*store, &project, |texts| {
+                                // A copy of a control a call makes (`swatch(CORAL, "coral")`): that call again.
+                                if let (Some(c), Some(&source)) = (&copy, sources.get(&Vec::new()))
+                                    && let Some(call) = designer_sources::copy_call(texts, &c.tree, source)
+                                {
+                                    return designer_sources::insert_text(texts, &view, parent, index as usize, &call);
+                                }
                                 // Each copied list in the form its original code writes it.
                                 let ids: Vec<NodeId> = sources.values().copied().collect();
                                 let by_id = copy.as_ref().map(|c| designer_sources::children_forms(texts, &c.tree, &ids)).unwrap_or_default();

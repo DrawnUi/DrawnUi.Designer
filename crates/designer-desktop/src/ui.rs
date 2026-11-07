@@ -316,6 +316,10 @@ pub struct App {
     /// Page mode: a Controls drag carried out of the editor's frame (the page shows where it lands).
     drag_out: bool,
     connected: bool,
+    /// Connected to the hub of another designer: its version (empty: one older than the version
+    /// message). Until then, whether the hub said its version on this connection.
+    other_hub: Option<String>,
+    hub_said: bool,
     apps: Vec<ConnectedApp>,
     /// Apps that connected before and are not connected now, newest first (the hub remembers them).
     recent: Vec<designer_protocol::RecentApp>,
@@ -380,6 +384,8 @@ pub struct App {
     /// The question asked before Restart, Run or closing with changes not in code (Manual): what
     /// waits for its answer.
     confirm: Option<writes::AfterFlush>,
+    /// The question is about changes a flush could not write (it offers no Write).
+    confirm_failed: bool,
     /// A flush of the changes not in code on its way.
     flushing: Option<writes::Flush>,
     /// Writes of a flush: their request, the flush's one step of the history.
@@ -701,6 +707,20 @@ impl App {
         cx.items_reset(self.props_list);
     }
 
+    /// The hub this editor joined is another designer's (`version`, empty when older than the
+    /// version message): its features may differ, so the status says it, and the status bar keeps it.
+    fn joined_other_hub(&mut self, version: String) {
+        log(&format!("the hub is of another designer ({})", if version.is_empty() { "older" } else { &version }));
+        self.status = self.other_hub_text(&version);
+        self.status_error = true;
+        self.other_hub = Some(version);
+    }
+
+    /// "Connected to the hub of another designer (version X); close it to use this one."
+    pub(crate) fn other_hub_text(&self, version: &str) -> String {
+        if version.is_empty() { i18n::tr("status-other-hub-older") } else { i18n::tr_args("status-other-hub", &[("version", version.to_owned().into())]) }
+    }
+
     fn selected_node(&self) -> Option<&Node> {
         self.selected.and_then(|row| self.rows.get(row)).map(|row| &self.tree.nodes[row.node])
     }
@@ -715,11 +735,24 @@ impl App {
             Incoming::Redo => self.redo_step(cx),
             Incoming::Connected(on) => {
                 self.connected = on;
+                // A new connection: its hub says its version again (the old notice goes).
+                if let Some(v) = self.other_hub.take()
+                    && self.status == self.other_hub_text(&v)
+                {
+                    self.status.clear();
+                }
+                self.hub_said = false;
                 if on && self.settings.allow_devices {
                     self.send_hub(EditorMsg::AllowDevices { on: true });
                 }
             }
             Incoming::Hub(HubToEditor::Cables { android, ios }) => self.cables = (android, ios),
+            Incoming::Hub(HubToEditor::Hub { version }) => {
+                self.hub_said = true;
+                if version != env!("CARGO_PKG_VERSION") {
+                    self.joined_other_hub(version);
+                }
+            }
             Incoming::Hub(HubToEditor::Devices { url, refusal }) => {
                 // The switch follows the hub, also when an AI agent turned it on or off (MCP), and is
                 // remembered: the next start opens the port again.
@@ -734,6 +767,10 @@ impl App {
                 }
             }
             Incoming::Hub(HubToEditor::Apps { apps, recent }) => {
+                // The apps before the hub's version: a hub of an older designer.
+                if !std::mem::replace(&mut self.hub_said, true) {
+                    self.joined_other_hub(String::new());
+                }
                 self.recent = recent;
                 let names: Vec<String> = apps.iter().map(|a| format!("{} (pid {})", a.info.name, a.info.pid)).collect();
                 log(&format!("apps: {}", if names.is_empty() { "none".to_owned() } else { names.join(", ") }));
@@ -2703,11 +2740,16 @@ impl App {
     /// They become live edits, each with its dot, Undo and Write (and Write all).
     fn paste_style(&mut self, cx: &mut Cx) {
         let (Some(style), Some((node, type_name))) = (self.style.clone(), self.selected_live().map(|n| (n.id, short_type(&n.type_name).to_owned()))) else { return };
-        let mut count = 0;
+        let (mut count, mut fits) = (0, 0);
         let mut values = vec![];
         for (name, value) in style {
             let Some(before) = self.props.iter().find(|p| p.name == name).map(|p| p.value.clone()) else { continue };
             let shown = self.pending.get(&(node, name.clone())).cloned().unwrap_or_else(|| before.clone());
+            fits += 1;
+            // A value the control already has changes nothing (no change to write either).
+            if value == shown {
+                continue;
+            }
             let request = self.request();
             self.send(HubToApp::SetProperty { request, node, name: name.clone(), value: value.clone() });
             self.live_original.entry((node, name.clone())).or_insert(before);
@@ -2720,7 +2762,7 @@ impl App {
             self.send(HubToApp::GetProps { node });
             self.status = i18n::tr_args("status-style-pasted", &[("count", count.into())]);
         } else {
-            self.status = i18n::tr_args("status-style-none", &[("type", type_name.into())]);
+            self.status = i18n::tr_args(if fits > 0 { "status-style-same" } else { "status-style-none" }, &[("type", type_name.into())]);
         }
         self.status_error = false;
         self.rebuild_prop_rows();
@@ -2931,6 +2973,17 @@ impl MenuAction {
     }
 }
 
+/// The Layers menu shortcut a key press means: Ctrl+Shift+Z redoes too (Command+Shift+Z is the
+/// macOS one), and on macOS, whose keyboards' delete key is Backspace, Backspace and
+/// Command+Backspace delete (Delete still does).
+fn menu_key((key, command, shift): (&str, bool, bool), mac: bool) -> (&str, bool, bool) {
+    match (key, command, shift) {
+        ("KeyZ", true, true) => MenuAction::Redo.shortcut(),
+        ("Backspace", _, false) if mac => MenuAction::Delete.shortcut(),
+        k => k,
+    }
+}
+
 /// Zero-size control the link thread wakes; it drains the inbox in the frame (no polling).
 struct Inbox;
 
@@ -3066,8 +3119,7 @@ fn keys(ui: Ui<App>) -> Ui<App> {
         if m.alt && !command && !m.shift && matches!(key.key, "ArrowUp" | "ArrowDown") {
             return app.move_selected_by(if key.key == "ArrowUp" { -1 } else { 1 });
         }
-        // Ctrl+Shift+Z redoes too (Command+Shift+Z is the macOS one).
-        let shortcut = if (key.key, command, m.shift) == ("KeyZ", true, true) { MenuAction::Redo.shortcut() } else { (key.key, command, m.shift) };
+        let shortcut = menu_key((key.key, command, m.shift), cfg!(target_os = "macos"));
         if let Some(action) = MenuAction::ALL.into_iter().find(|a| a.shortcut() == shortcut).filter(|_| !m.alt) {
             if app.action_enabled(action) {
                 app.run_action(action, cx);
@@ -3949,6 +4001,24 @@ mod shots {
         let mut written: Vec<String> = sent.lock().unwrap().iter().filter_map(|m| if let EditorMsg::SetCode { node: 118, prop, .. } = m { Some(prop.clone()) } else { None }).collect();
         written.sort();
         assert_eq!(written, ["FontSize", "TextColor"]);
+    }
+
+    /// A pasted style's value the control already has is no change (nothing live, nothing to write).
+    #[test]
+    fn paste_style_skips_the_values_the_control_has() {
+        let (mut host, sent, to_ui) = label_selected();
+        host.key_down("KeyC", ctrl(true));
+        host.settle();
+        let (x, y) = row_at(row_of(&host, 116));
+        host.tap(x, y);
+        let prop = |name: &str, t: &str, v: &str| designer_protocol::Prop { name: name.into(), type_name: t.into(), value: v.into(), ..Default::default() };
+        feed(&mut host, &to_ui, HubToEditor::FromApp { app: 1, msg: AppMsg::Props { node: 116, props: vec![prop("TextColor", "DrawnUi.Color", "#FFFFFFFF")] } });
+        sent.lock().unwrap().clear();
+        host.key_down("KeyV", ctrl(true));
+        host.settle();
+        assert!(!sent.lock().unwrap().iter().any(|m| matches!(m, EditorMsg::ToApp { msg: HubToApp::SetProperty { .. }, .. })), "{:?}", sent.lock().unwrap());
+        assert_eq!(host.ui.state.pending_count(), 0);
+        assert_eq!(host.ui.state.status, "SkiaStack already has the copied style");
     }
 
     #[test]
@@ -5959,6 +6029,103 @@ mod shots {
         frames(&mut host, 3);
         assert_eq!(sets(&sent), [(node, "IsClippedToBounds".to_owned(), "True".to_owned())]);
         assert!(host.ui.state.pending.is_empty());
+    }
+
+    /// Restart in Auto with a change the code refuses: nothing restarts, the question says what was
+    /// not written and offers to restart without it or to stay; changes are never dropped silently.
+    #[test]
+    fn a_restart_stops_on_changes_that_could_not_be_written() {
+        let (mut host, sent, to_ui) = wired(with_changes(WriteMode::Auto));
+        host.key_down("KeyR", ctrl(false));
+        frames(&mut host, 3);
+        let writes = set_codes(&sent);
+        assert_eq!(writes.len(), 2);
+        edited(&mut host, &to_ui, writes[0].0, writes[0].1);
+        let refusal = designer_protocol::Refusal::new("src-not-literal", &[("key", &"x")]);
+        feed(&mut host, &to_ui, HubToEditor::CodeRefused { request: writes[1].0, node: writes[1].1, reason: refusal.to_string(), refusal: Some(refusal) });
+        assert_eq!(restarts(&sent), 0, "not restarted");
+        assert!(host.ui.state.confirm.is_some() && host.ui.state.confirm_failed && host.ui.state.unwritten_count() == 1);
+        let skip = at_label(&mut host, "Restart without writing");
+        host.tap(skip.0, skip.1);
+        frames(&mut host, 3);
+        assert_eq!(restarts(&sent), 1, "restarted once asked");
+    }
+
+    /// A long status line ("Not written to code: ...") is cut to one line, its whole text kept for a
+    /// screen reader and in its tooltip.
+    #[test]
+    fn a_long_status_reads_in_full() {
+        let mut state = with_props();
+        let long = "Not written to code: `build/2/text_color` is not a literal the designer can change (an expression or a call), so it stays live with its dot";
+        state.status = long.into();
+        state.status_error = true;
+        let mut host = host(state);
+        host.ui.set_accessibility_enabled(true);
+        host.frame_after(drawnui::ACCESSIBILITY_INTERVAL_MS);
+        assert!(host.ui.accessibility_nodes().iter().any(|n| n.label == long), "the whole text for a screen reader: {:?}", host.ui.accessibility_nodes().iter().filter(|n| n.label.starts_with("Not")).map(|n| n.label.clone()).collect::<Vec<_>>());
+    }
+
+    /// Joined the hub of another designer (another version, or one older than the version message):
+    /// the status bar says it for a screen reader too; the hub of this designer, nothing.
+    #[test]
+    fn the_hub_of_another_designer_is_named() {
+        let (mut host, _, to_ui) = wired(with_props());
+        host.ui.set_accessibility_enabled(true);
+        let notice = |host: &mut Headless<App>| {
+            host.frame_after(drawnui::ACCESSIBILITY_INTERVAL_MS);
+            host.ui.accessibility_nodes().iter().find(|n| n.label.starts_with("Connected to the hub of")).map(|n| n.label.clone())
+        };
+        let connect = |host: &mut Headless<App>, first: HubToEditor| {
+            to_ui.send(Incoming::Connected(true)).unwrap();
+            feed(host, &to_ui, first);
+            feed(host, &to_ui, HubToEditor::Apps { apps: vec![], recent: vec![] });
+        };
+        connect(&mut host, HubToEditor::Hub { version: "0.3.9".into() });
+        assert_eq!(notice(&mut host).as_deref(), Some("Connected to the hub of another designer (version 0.3.9); close it to use this one."));
+        connect(&mut host, HubToEditor::Cables { android: 0, ios: 0 });
+        assert_eq!(notice(&mut host).as_deref(), Some("Connected to the hub of an older designer; close it to use this one."), "the apps came before a version");
+        connect(&mut host, HubToEditor::Hub { version: env!("CARGO_PKG_VERSION").into() });
+        assert_eq!(notice(&mut host), None, "this designer's hub");
+    }
+
+    /// On macOS Backspace and Command+Backspace delete the selected control; elsewhere Backspace
+    /// is no menu key.
+    #[test]
+    fn backspace_deletes_on_macos() {
+        let delete = MenuAction::Delete.shortcut();
+        assert_eq!((menu_key(("Backspace", false, false), true), menu_key(("Backspace", true, false), true)), (delete, delete));
+        assert_eq!(menu_key(("Delete", false, false), true), delete);
+        assert_eq!(menu_key(("Backspace", false, false), false), ("Backspace", false, false), "not elsewhere");
+        assert_eq!(menu_key(("KeyZ", true, true), false), MenuAction::Redo.shortcut());
+    }
+
+    /// Undo of a Duplicate: the copy goes from the app and from Layers once the app's tree comes
+    /// without it; the count follows.
+    #[test]
+    fn undo_of_a_duplicate_takes_its_row_away() {
+        let (mut host, sent, to_ui) = label_selected();
+        let before = host.ui.state.rows.len();
+        host.key_down("KeyD", ctrl(false));
+        frames(&mut host, 2);
+        answer_copy(&mut host, &sent, &to_ui, 117, chip());
+        let Some(HubToApp::Insert { request, .. }) = last_insert(&sent) else { panic!() };
+        let mut tree = host.ui.state.tree.clone();
+        let at = tree.nodes.iter().position(|n| n.id == 117).unwrap();
+        tree.nodes.insert(at + 1, Node { id: 9001, parent: Some(116), type_name: "DrawnUi.Draw.SkiaShape".into(), visible: true, rect: [0.0, 0.0, 10.0, 10.0], ..Default::default() });
+        let without = host.ui.state.tree.clone();
+        feed(&mut host, &to_ui, HubToEditor::FromApp { app: 1, msg: AppMsg::Inserted { request, node: Some(9001), parent: Some(116), index: Some(1) } });
+        tree.revision += 1;
+        feed(&mut host, &to_ui, HubToEditor::FromApp { app: 1, msg: AppMsg::Tree(tree) });
+        assert_eq!(host.ui.state.rows.len(), before + 1);
+        sent.lock().unwrap().clear();
+        host.key_down("KeyZ", ctrl(false));
+        frames(&mut host, 3);
+        assert!(sent.lock().unwrap().iter().any(|m| matches!(m, EditorMsg::ToApp { msg: HubToApp::Remove { node: 9001, .. }, .. })), "{:?}", sent.lock().unwrap());
+        let mut after = without;
+        after.revision += 2;
+        feed(&mut host, &to_ui, HubToEditor::FromApp { app: 1, msg: AppMsg::Tree(after) });
+        assert_eq!(host.ui.state.rows.len(), before, "the copy's row went: {:?}", host.ui.state.rows.iter().map(|r| host.ui.state.tree.nodes[r.node].id).collect::<Vec<_>>());
+        assert!(!host.ui.state.rows.iter().any(|r| host.ui.state.tree.nodes[r.node].id == 9001));
     }
 
     /// A page's code.flush: Auto writes and answers once the writes are done; Manual answers at

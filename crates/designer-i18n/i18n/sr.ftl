@@ -87,6 +87,8 @@ status-connected = { $count ->
    *[other] Hab povezan · { $count } aplikacija
 }
 status-connecting = Povezivanje sa habom…
+status-other-hub = Povezano sa habom drugog dizajnera (verzija { $version }); zatvori ga da bi koristio ovaj.
+status-other-hub-older = Povezano sa habom starijeg dizajnera; zatvori ga da bi koristio ovaj.
 status-run-failed = { $name }: neuspeh: { $message }
 status-live = { $prop } = { $value } u aplikaciji, još nije u kodu
 status-writing = { $prop } se upisuje u kod…
@@ -370,6 +372,7 @@ status-style-copied = Stil kontrole { $type } kopiran, { $count ->
 }
 status-style-pasted = Svojstva stila u aplikaciji, još nisu u kodu: { $count }
 status-style-none = Ništa od kopiranog stila ne odgovara kontroli { $type }
+status-style-same = { $type } već ima kopirani stil
 status-removed-live = { $type } uklonjena iz aplikacije, još ne iz koda
 status-removed-written = { $type } uklonjena iz aplikacije i iz koda
 status-restored = { $type } je ponovo u aplikaciji
@@ -438,4 +441,9 @@ unwritten-write-run = Upiši ih, pa pokreni
 unwritten-skip-run = Pokreni bez upisa
 unwritten-write-close = Upiši ih, pa zatvori
 unwritten-skip-close = Zatvori bez upisa
+unwritten-failed-title = { $count ->
+    [one] { $count } izmenu nije moguće upisati u kod (vidi statusnu liniju).
+    [few] { $count } izmene nije moguće upisati u kod (vidi statusnu liniju).
+   *[other] { $count } izmena nije moguće upisati u kod (vidi statusnu liniju).
+}
 unwritten-cancel = Otkaži

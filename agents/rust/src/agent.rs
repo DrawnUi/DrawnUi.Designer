@@ -1050,6 +1050,14 @@ mod tests {
         }
         assert_eq!(names(&mut rig), ["SkiaLabel", "SkiaButton"]);
 
+        // A duplicate (its values given) taken out again (Undo of Duplicate): the tree after it has
+        // the control no more.
+        let outs: Vec<_> = rig.ask(HubToApp::Insert { request: 11, parent: rig.agent.wire_id(root), index: Some(1), type_name: "SkiaLabel".into(), props: vec![("text".into(), "Copy".into()), ("font_size".into(), "28".into())], children: vec![] }).into_iter().map(msg).collect();
+        let Some(&AppMsg::Inserted { node: Some(copy), .. }) = outs.first() else { panic!("{outs:?}") };
+        let outs: Vec<_> = rig.ask(HubToApp::Remove { request: 12, node: copy }).into_iter().map(msg).collect();
+        let Some(AppMsg::Tree(after)) = outs.iter().rev().find(|m| matches!(m, AppMsg::Tree(_))) else { panic!("a tree after the removal: {outs:?}") };
+        assert!(!after.nodes.iter().any(|n| n.id == copy), "the removed copy is gone from the tree: {:?}", after.nodes.iter().map(|n| (n.id, n.type_name.clone(), n.text.clone())).collect::<Vec<_>>());
+
         // Insert at 1: a label with its default text, and the laid-out tree after it.
         let outs: Vec<_> = rig.ask(HubToApp::Insert { request: 1, parent: rig.agent.wire_id(root), index: Some(1), type_name: "SkiaLabel".into(), props: vec![], children: vec![] }).into_iter().map(msg).collect();
         let Some(&AppMsg::Inserted { request: 1, node: Some(new), index: Some(1), .. }) = outs.first() else { panic!("{outs:?}") };

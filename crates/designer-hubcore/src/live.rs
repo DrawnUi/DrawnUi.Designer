@@ -191,8 +191,10 @@ impl Live {
                 {
                     spec.children.remove(i);
                 }
-                // Itself inserted (or inside an insert): not in the code, nothing to remember.
+                // Itself inserted (or inside an insert): not in the code, nothing to remember, and
+                // its live values go with it (no rebuilt control takes them).
                 if !in_code {
+                    self.live_set.retain(|id, _| !inside.contains(id));
                     return;
                 }
                 let Some(parent) = n.parent else { return };

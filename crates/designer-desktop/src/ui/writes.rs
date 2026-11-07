@@ -149,9 +149,24 @@ impl App {
         for then in f.then {
             match then {
                 AfterFlush::Page(request) => self.post_page(serde_json::json!({ "type": "code.flushed", "request": request, "written": f.written, "left": left })),
+                // Changes that could not be written are never dropped without asking: restart,
+                // run or close anyway, or stay.
+                other if left > 0 && self.confirm.is_none() => self.ask_failed(other, cx),
                 other => self.go_on(other, cx),
             }
         }
+    }
+
+    /// After a flush that left changes not written: the question without a Write.
+    fn ask_failed(&mut self, then: AfterFlush, cx: &mut Cx) {
+        self.ask_unwritten(then, cx);
+        self.confirm_failed = true;
+        if let Some(popup) = self.popup.take() {
+            cx.close_popup_window(popup);
+        }
+        let size = cx.canvas_size();
+        let anchor = drawnui::skia::Rect::from_xywh(size.width / 2.0 - 150.0, 44.0, 300.0, 0.0);
+        self.popup = Some(cx.open_popup_window(view::unwritten_menu(self), anchor, PopupWindowOptions { cpu: true, ..Default::default() }));
     }
 
     /// What waited for the changes: done now.
@@ -194,6 +209,7 @@ impl App {
     pub(crate) fn ask_unwritten(&mut self, then: AfterFlush, cx: &mut Cx) {
         self.close_popup(cx);
         self.confirm = Some(then);
+        self.confirm_failed = false;
         let size = cx.canvas_size();
         let anchor = drawnui::skia::Rect::from_xywh(size.width / 2.0 - 150.0, 44.0, 300.0, 0.0);
         self.popup = Some(cx.open_popup_window(view::unwritten_menu(self), anchor, PopupWindowOptions { cpu: true, ..Default::default() }));

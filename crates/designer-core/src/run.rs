@@ -32,11 +32,19 @@ pub trait Launcher: Send + Sync + 'static {
 
 /// `dotnet watch run` in the project folder for `dotnet-*` engines, with the agent passed in
 /// `DRAWNUI_DESIGNER_AGENT` (the project maps it to its startup hooks) and the hub in
-/// `DRAWNUI_DESIGNER_URL`.
+/// `DRAWNUI_DESIGNER_URL`. `cargo run` in the crate's folder for a DrawnUI for Rust app (its project
+/// is its Cargo.toml): a debug build, where the agent attaches by itself.
 pub struct DefaultLauncher;
 
 impl Launcher for DefaultLauncher {
     fn command(&self, app: &RecentApp, hub_url: &str) -> Result<LaunchCommand, Refusal> {
+        if app.engine == "rust" && Path::new(&app.project).file_name().is_some_and(|n| n.eq_ignore_ascii_case("Cargo.toml")) {
+            let mut env = vec![];
+            if hub_url != format!("ws://127.0.0.1:{DEFAULT_PORT}") {
+                env.push(("DRAWNUI_DESIGNER_URL".into(), hub_url.into()));
+            }
+            return Ok(LaunchCommand { program: "cargo".into(), args: vec!["run".into()], env, cwd: project_dir(&app.project).to_path_buf() });
+        }
         if !app.engine.starts_with("dotnet-") {
             return Err(Refusal::new("run-no-way", &[("engine", &app.engine)]));
         }
@@ -309,9 +317,10 @@ fn start(hub: &Shared, project: &str) -> Result<(), Refusal> {
                         if tail.len() > 20 {
                             tail.remove(0);
                         }
-                        let next = if line.contains("Build failed") || line.contains("Build FAILED") {
+                        // dotnet's and cargo's words for a failed build and a built app.
+                        let next = if line.contains("Build failed") || line.contains("Build FAILED") || line.starts_with("error: could not compile") {
                             Some((RunState::Failed, failure(Refusal::new("run-build-failed", &[]), &errors, &tail)))
-                        } else if line.contains("Build succeeded") || line.contains("Started") {
+                        } else if line.contains("Build succeeded") || line.contains("Started") || line.trim_start().starts_with("Running `") {
                             Some((RunState::Starting, ("built, starting the app".to_string(), None)))
                         } else {
                             None
@@ -426,9 +435,11 @@ fn failure(what: Refusal, errors: &[String], tail: &[String]) -> (String, Option
     (message, Some(what))
 }
 
-/// An MSBuild / compiler error line: `File.cs(3,1): error CS1002: ; expected`.
+/// An MSBuild / compiler error line (`File.cs(3,1): error CS1002: ; expected`), or rustc's
+/// (`error[E0425]: cannot find value`, `error: expected one of ...`).
 fn is_error_line(line: &str) -> bool {
     line.split(": error ").nth(1).is_some_and(|rest| rest.chars().next().is_some_and(|c| c.is_ascii_uppercase()))
+        || (line.starts_with("error[E") || (line.starts_with("error: ") && !line.starts_with("error: could not compile")))
 }
 
 fn forward_lines(stream: Option<impl AsyncRead + Unpin + Send + 'static>, tx: mpsc::UnboundedSender<String>) {
@@ -479,6 +490,18 @@ mod framework_tests {
         let command = DefaultLauncher.command(&app, &format!("ws://127.0.0.1:{DEFAULT_PORT}")).unwrap();
         let targets = command.args.iter().find(|a| a.starts_with("--property:CustomAfterMicrosoftCommonTargets=")).expect("the repo targets");
         assert!(targets.ends_with(r"agents\dotnet\DrawnUi.Designer.targets"), "{targets}");
+    }
+
+    /// A DrawnUI for Rust app runs with `cargo run` in its crate's folder; cargo's words are read.
+    #[test]
+    fn a_rust_app_runs_with_cargo() {
+        let app = RecentApp { name: "designer-agent-sample".into(), engine: "rust".into(), project: "/apps/sample/Cargo.toml".into(), agent: None, last_seen: 0, platform: None };
+        let command = DefaultLauncher.command(&app, &format!("ws://127.0.0.1:{DEFAULT_PORT}")).unwrap();
+        assert_eq!((command.program.as_str(), command.args.as_slice(), command.cwd.as_path()), ("cargo", &["run".to_string()][..], Path::new("/apps/sample")));
+        assert!(command.env.is_empty());
+        let other = DefaultLauncher.command(&app, "ws://127.0.0.1:54400").unwrap();
+        assert_eq!(other.env, [("DRAWNUI_DESIGNER_URL".to_string(), "ws://127.0.0.1:54400".to_string())]);
+        assert!(super::is_error_line("error[E0425]: cannot find value `x` in this scope") && !super::is_error_line("   Compiling drawnui v0.1.0"));
     }
 
     #[test]

@@ -118,12 +118,13 @@ fn a_new_editor_gets_the_apps_and_what_they_reported() {
     let (editor, outs) = core.editor_hello(PROTOCOL_VERSION).unwrap();
     assert!(outs.iter().all(|o| matches!(o, Out::ToEditor(Some(e), _) if *e == editor)));
     let got = to_editor(&outs, editor);
-    assert!(matches!(got[0], HubToEditor::Apps { apps, .. } if apps[0].id == app));
-    assert!(matches!(got[1], HubToEditor::Devices { url: Some(_), .. }));
-    assert!(matches!(got[2], HubToEditor::FromApp { msg: AppMsg::Screens { .. }, .. }));
-    assert_eq!(got[3], &HubToEditor::FromApp { app, msg: AppMsg::Tree(tree()) });
-    assert_eq!(got[4], &HubToEditor::Cables { android: 1, ios: 0 }, "cables last");
-    assert_eq!(got.len(), 5);
+    assert_eq!(got[0], &HubToEditor::Hub { version: env!("CARGO_PKG_VERSION").into() }, "the hub's version first");
+    assert!(matches!(got[1], HubToEditor::Apps { apps, .. } if apps[0].id == app));
+    assert!(matches!(got[2], HubToEditor::Devices { url: Some(_), .. }));
+    assert!(matches!(got[3], HubToEditor::FromApp { msg: AppMsg::Screens { .. }, .. }));
+    assert_eq!(got[4], &HubToEditor::FromApp { app, msg: AppMsg::Tree(tree()) });
+    assert_eq!(got[5], &HubToEditor::Cables { android: 1, ios: 0 }, "cables last");
+    assert_eq!(got.len(), 6);
 }
 
 #[test]
@@ -487,6 +488,20 @@ fn insert_write_then_undo() {
     assert!(s.core.apps[&s.app].live.inserts.contains_key(&20), "live-only again until it is taken out");
     s.remove(12, 20);
     assert!(s.core.apps[&s.app].live.inserts.is_empty() && s.core.apps[&s.app].live.removes.is_empty(), "taking out an unwritten insert leaves nothing");
+}
+
+/// A copy added live and changed live, then taken out (Undo of a Duplicate): the trees after it
+/// bring nothing back and put its values on no other control.
+#[test]
+fn a_copy_taken_out_leaves_no_live_values() {
+    let mut s = Session::new();
+    s.insert(10, 2, 1, 20, "A");
+    ed(&mut s.core, s.editor, EditorMsg::ToApp { app: s.app, msg: HubToApp::SetProperty { request: 11, node: 20, name: "Text".into(), value: "A2".into() } });
+    ed(&mut s.core, s.editor, EditorMsg::ToApp { app: s.app, msg: HubToApp::Remove { request: 12, node: 20 } });
+    s.tree.nodes.retain(|n| n.id != 20);
+    let t = s.tree.clone();
+    let outs = ap(&mut s.core, s.app, AppMsg::Tree(t));
+    assert!(!outs.iter().any(|o| matches!(o, Out::ToApp(..) | Out::ToEditor(_, HubToEditor::Replayed { .. }))), "{outs:?}");
 }
 
 #[test]

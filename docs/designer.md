@@ -138,7 +138,9 @@ Write to code changes the crate's `.rs` files (see What Write to code changes, R
 snapshot shows the app's window, not its popup windows. `DRAWNUI_DESIGNER=0` turns the agent off, `DRAWNUI_DESIGNER_URL` points it
 at another hub. While no designer runs it tries the one address every 2 s on its own thread and adds no work to the
 UI thread; connected, each request costs one frame. The sample is `agents/rust/sample` (`cargo run -p
-designer-agent-sample` in `agents/rust`); its Quick actions switch opens a popup menu.
+designer-agent-sample` in `agents/rust`); its Quick actions switch opens a popup menu. Run app and Restart app start
+a desktop app with `cargo run` in its crate's folder (a debug build, so the agent attaches); the line at the bottom
+says when the build fails, with its first error.
 
 **Rust apps in a web page (DrawFiddle).** In the browser build (`wasm32-unknown-emscripten`, debug or release)
 `attach!` wraps the app the same way, and the page carries the messages: no socket, no thread, no timer. Until a
@@ -244,6 +246,9 @@ shows `SkiaLabel`; the agent works with drawnui-react 0.1.0-preview.33 and newer
 allowed, connect to port 54272 on the network. To use other ports, set
 `DRAWNUI_DESIGNER_PORT` for the designer (the MCP port is that port + 1) and
 `DRAWNUI_DESIGNER_URL=ws://127.0.0.1:<port>` for the app. In VS Code the setting is `drawnuiDesigner.port`.
+When a designer already holds the port, a second one joins its hub. A hub of another designer version (an older
+build still running) is named in the status bar: "Connected to the hub of another designer (version X); close it
+to use this one".
 
 ## The window
 
@@ -252,7 +257,7 @@ allowed, connect to port 54272 on the network. To use other ports, set
 | Menu | Items |
 |---|---|
 | File | Run app (the recent apps that are not running), Restart app (Ctrl+R) · Settings (Ctrl+,), About · Exit |
-| Edit | Undo, Redo (Ctrl+Z, Ctrl+Y) · Copy (Ctrl+C), Paste (Ctrl+V), Duplicate (Ctrl+D) · Copy style (Ctrl+Shift+C), Paste style (Ctrl+Shift+V) · Delete (Del) |
+| Edit | Undo, Redo (Ctrl+Z, Ctrl+Y) · Copy (Ctrl+C), Paste (Ctrl+V), Duplicate (Ctrl+D) · Copy style (Ctrl+Shift+C), Paste style (Ctrl+Shift+V) · Delete (Del; on macOS also Backspace and Cmd+Backspace) |
 
 Right of the apps, **Pick** (Ctrl+P): lit while the next click in the app selects a control. At the right end, the
 count of changes not in code with **Write all** (while there are some), Settings, and Help (F1).
@@ -301,7 +306,8 @@ Each row of a changed property has two buttons at its right:
   after Write, the edit in your C# file is taken back too, byte for byte, as long as that spot of the file was
   not changed since.
 - **Write** (the `<>` icon) writes the value into your C# file. It shows on a changed row, and on any row
-  under the mouse. The line at the bottom of the window says which file changed, or why nothing was written.
+  under the mouse. The line at the bottom of the window says which file changed, or why nothing was written; a
+  long line is cut, and its whole text is in its tooltip and read by a screen reader.
 
 **Help** (the question mark next to Settings) explains all of this in the window.
 
@@ -394,8 +400,8 @@ menu, and the same keys without it while no text field has the keyboard:
 | Paste | Ctrl+V | Adds the copy, whole: inside the selected control when it is a layout (last), else right after it. |
 | Duplicate | Ctrl+D | Copy and Paste right after the selected control, in one step. |
 | Copy style | Ctrl+Shift+C | Remembers only the Set properties that make the look: colors, fonts, strokes, corners, shadows, gradients, padding, opacity, and the alignment (HorizontalOptions, VerticalOptions, text alignment). Never the content (text, sources, items) nor size and place (sizes, margin, grid cells, z order, translations). |
-| Paste style | Ctrl+Shift+V | Sets those properties live on the selected control, the ones its type has. |
-| Delete | Del | Takes the selected control out of the app. |
+| Paste style | Ctrl+Shift+V | Sets those properties live on the selected control, the ones its type has and with another value. |
+| Delete | Del | Takes the selected control out of the app. On macOS Backspace and Cmd+Backspace do too (not in a text field). |
 
 On macOS the keys use Command. What is copied stays in the designer (not on the system clipboard). An item that
 cannot act reads disabled: Paste with nothing copied, Paste style with no style, Delete on the root.
@@ -407,8 +413,9 @@ Every change starts in the running app only, as a property edit does:
   children inside `Children = { .. }` (the original's own form, such as `new List<SkiaControl> { .. }`, when its
   code uses that), one per line, a level deeper. It gets only the values the original's code sets (and those
   changed live in the designer): values the library sets for itself, such as `UseCache`, stay out.
-- Paste style makes ordinary live edits, one per property, each with its dot, Undo and Write. While a control has
-  more than one, **Write all** in the Properties header writes them all.
+- Paste style makes ordinary live edits, one per property, each with its dot, Undo and Write; a value the control
+  already has is no edit. While a control has more than one, **Write all** in the Properties header writes them all.
+- A copy of a control your own function makes (`swatch(CORAL, "coral")` in Rust) is written as that call again.
 - A deleted control keeps its row where it was, its name dimmed and "taken out" beside it. Undo puts it back in the
   app at the same place, with what it held; Write takes it out of the code too, and Undo after that puts the
   code back first.
@@ -437,7 +444,9 @@ In every mode the title bar shows how many changes are not in code yet, with **W
 one step of the history (in a page this is a strip under the Layers header). What cannot be written stays live with its dot:
 an app with no code the designer can reach (a browser page that sends none), a value the code computes, a write the
 code refuses.
-With Manual, Restart app and Run app ask first: write the changes, go on without them, or cancel. Closing the
+With Manual, Restart app and Run app ask first: write the changes, go on without them, or cancel. When Auto writes
+first and some changes cannot be written, the restart stops and asks: go on without them (they are lost), or cancel;
+the line at the bottom says why they were not written. Closing the
 designer (its close button, Alt+F4, Cmd+Q, File, Exit) with changes not in code goes the same way: Auto and Always
 write them first, then the window closes; Manual asks. An app that closes by itself takes its live changes with it.
 

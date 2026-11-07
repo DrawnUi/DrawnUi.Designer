@@ -87,6 +87,8 @@ status-connected = { $count ->
    *[many] Хаб подключён · { $count } приложений
 }
 status-connecting = Подключение к хабу…
+status-other-hub = Подключено к хабу другого дизайнера (версия { $version }); закройте его, чтобы использовать этот.
+status-other-hub-older = Подключено к хабу более старого дизайнера; закройте его, чтобы использовать этот.
 status-run-failed = { $name }: ошибка: { $message }
 status-live = { $prop } = { $value } в приложении, ещё не в коде
 status-writing = { $prop } записывается в код…
@@ -370,6 +372,7 @@ status-style-copied = Стиль { $type } скопирован, { $count ->
 }
 status-style-pasted = Свойства стиля в приложении, в коде пока нет: { $count }
 status-style-none = Скопированный стиль не подходит к { $type }
+status-style-same = У { $type } уже есть скопированный стиль
 status-removed-live = { $type } убран из приложения, из кода пока нет
 status-removed-written = { $type } убран из приложения и из кода
 status-restored = { $type } снова в приложении
@@ -438,4 +441,9 @@ unwritten-write-run = Записать и запустить
 unwritten-skip-run = Запустить без записи
 unwritten-write-close = Записать и закрыть
 unwritten-skip-close = Закрыть без записи
+unwritten-failed-title = { $count ->
+    [one] { $count } изменение не удалось записать в код (см. строку состояния).
+    [few] { $count } изменения не удалось записать в код (см. строку состояния).
+   *[other] { $count } изменений не удалось записать в код (см. строку состояния).
+}
 unwritten-cancel = Отмена
