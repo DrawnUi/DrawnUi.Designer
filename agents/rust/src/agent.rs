@@ -747,6 +747,18 @@ impl<S: 'static> App for Agent<S> {
     fn focus_out(&mut self) {
         App::focus_out(&mut self.ui)
     }
+    fn mark_key_handled(&mut self, key: drawnui::InputKey) {
+        App::mark_key_handled(&mut self.ui, key)
+    }
+    fn system_theme(&mut self, theme: drawnui::SystemTheme) {
+        App::system_theme(&mut self.ui, theme)
+    }
+    fn screen_reader_running(&mut self, running: bool) {
+        App::screen_reader_running(&mut self.ui, running)
+    }
+    fn app_closing(&mut self) -> bool {
+        App::app_closing(&mut self.ui)
+    }
     fn back(&mut self) -> bool {
         App::back(&mut self.ui)
     }
@@ -1123,6 +1135,27 @@ mod tests {
         assert_eq!(has(&outs, copy), Some(true), "a tree with the copy: {outs:?}");
         let outs = rig.ask_hidden(HubToApp::Remove { request: 2, node: copy });
         assert_eq!(has(&outs, copy), Some(false), "a tree without the copy: {outs:?}");
+    }
+
+    /// What the host tells the app goes through the agent to it: the system theme, and a close the
+    /// app holds back (it asks "save first?").
+    #[test]
+    fn the_hosts_calls_reach_the_app() {
+        #[derive(Default)]
+        struct Themed {
+            theme: Option<drawnui::SystemTheme>,
+        }
+        let ui = Ui::new(Themed::default(), |_s: &mut Themed| SkiaLayout::column().children(SkiaLabel::new("Hi")))
+            .font_bytes("Default", FONT)
+            .on_system_theme_changed(|s: &mut Themed, theme, _cx| s.theme = Some(theme))
+            .on_app_closing(|_s: &mut Themed, _cx| false);
+        let (_hub, inbox) = mpsc::channel();
+        let (out, _answers) = mpsc::channel();
+        let waker = ui.waker();
+        let mut agent = Agent::with(ui, Wire { inbox, queued: Arc::new(AtomicBool::new(false)), out }, waker);
+        App::system_theme(&mut agent, drawnui::SystemTheme::Dark);
+        assert_eq!(agent.ui.state.theme, Some(drawnui::SystemTheme::Dark));
+        assert!(!App::app_closing(&mut agent), "the app keeps its window open");
     }
 
     #[test]
