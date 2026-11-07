@@ -154,13 +154,15 @@ function startSession(send: (text: string) => void): void {
     await settle();
     const screens = readScreens();
     if (screens) sendMsg({ type: "screens", screens: screens.list });
+    watchActions(true);
+    sendActions();
     await sendTree();
   });
 }
 
 function endSession(): void {
   if (!state.out) return;
-  try { setPick(undefined); setHighlight(undefined); hookFrames(false); dropStandIns(); unpinAll(); } catch { /* never into the app */ }
+  try { setPick(undefined); setHighlight(undefined); hookFrames(false); watchActions(false); dropStandIns(); unpinAll(); } catch { /* never into the app */ }
   state.out = undefined;
   state.queue = Promise.resolve();
   for (const w of state.frameWaiters.splice(0)) w();
@@ -276,6 +278,14 @@ async function handle(msg: any): Promise<void> {
       case "openScreen":
         await openScreen(String(msg.route));
         break;
+      case "runAction": {
+        const actions = designerActions();
+        if (!actions?.Run(String(msg.path))) throw new Error(`the app has no action "${msg.path}"`);
+        // what the action changed: the tree after it
+        await settle();
+        await sendTree();
+        break;
+      }
       case "focus":
         break; // a browser tab cannot bring itself to the front
       default:
@@ -1335,6 +1345,40 @@ function specOf(c: Ctl): object {
   const props = (readProps(c) as any[]).filter((p) => p.isSet && p.isDefault !== true && !String(p.value).startsWith("<")).map((p) => ({ name: p.name, value: p.value, typeName: p.typeName }));
   const children = c.IsTemplated || c.ItemTemplate ? [] : appChildren(c).map(specOf);
   return { typeName: typeOf(c), props, children };
+}
+
+// ---------------------------------------------------------------- actions
+
+/** drawnui-react's DesignerActions (designerAction / useDesignerAction / <DesignerAction>), when this version has it. */
+function designerActions(): { Paths: string[]; Run(path: string): boolean; Changed: Set<() => void> } | undefined {
+  const a = (Core as any).DesignerActions ?? (ReactEntry as any).DesignerActions;
+  return a && Array.isArray(a.Paths) && typeof a.Run === "function" ? a : undefined;
+}
+
+/** Sends the app's actions; an app without any (or an older drawnui-react) sends none. */
+function sendActions(): void {
+  const actions = designerActions();
+  if (actions) sendMsg({ type: "actions", actions: actions.Paths.map((path) => ({ path })) });
+}
+
+let actionsQueued = false;
+
+/** DesignerActions changed: one list goes out on the next tick (a component mounting several adds them at once). */
+function onActionsChanged(): void {
+  if (actionsQueued || !state.out) return;
+  actionsQueued = true;
+  queueMicrotask(() => {
+    actionsQueued = false;
+    if (state.out) sendActions();
+  });
+}
+
+function watchActions(on: boolean): void {
+  const changed = designerActions()?.Changed;
+  if (changed instanceof Set) {
+    if (on) changed.add(onActionsChanged);
+    else changed.delete(onActionsChanged);
+  }
 }
 
 // ---------------------------------------------------------------- screens

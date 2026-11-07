@@ -107,6 +107,27 @@ class TestCanvas {
     check("enum-like strings offer choices", prop("HorizontalOptions")?.choices?.join() === "Start,Center,End,Fill");
     check("engine state is not listed", !prop("AccessibilityId") && !prop("RenderingScale") && !prop("DrawingRect") && !prop("Tapped"));
 
+    // designer actions (a drawnui-react with DesignerActions): sent when declared, run, left out when removed
+    if (!listeners && (Core as any).DesignerActions) {
+      let ran = "";
+      const lastActions = async (from: number) => {
+        for (let t = 0; t < 500 && !got.slice(from).some((m) => m.type === "actions"); t += 5) await wait(5);
+        return got.slice(from).filter((m) => m.type === "actions").pop();
+      };
+      let from = got.length;
+      const remove = (Lib as any).designerAction("Levels/Level 3", () => { ran = "level 3"; });
+      const list = await lastActions(from);
+      check("actions: a declared one is sent", !!list?.actions?.some((a: any) => a.path === "Levels/Level 3"), JSON.stringify(list));
+      await ask({ type: "runAction", path: "Levels/Level 3" }, "tree");
+      check("runAction runs it", ran === "level 3");
+      const err = await ask({ type: "runAction", path: "Nope" }, "error");
+      check("an unknown action is an error", /no action/.test(err.message), JSON.stringify(err));
+      from = got.length;
+      remove();
+      const after = await lastActions(from);
+      check("a removed action leaves the list", !!after && !after.actions.some((a: any) => a.path === "Levels/Level 3"), JSON.stringify(after));
+    } else if (!listeners) console.log("skip actions: this drawnui-react has no DesignerActions");
+
     // a live set survives a re-render; a code change ends it
     receive({ type: "setProperty", request: 1, node: label.AccessibilityId, name: "Margin", value: "5,6,7,8" });
     receive({ type: "setProperty", request: 2, node: label.AccessibilityId, name: "FontSize", value: "28" });
