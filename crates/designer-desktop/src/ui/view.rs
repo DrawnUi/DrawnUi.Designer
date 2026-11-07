@@ -1350,7 +1350,7 @@ fn screens_panel(app: &mut App) -> Build<SkiaLayout> {
         Vec::<drawnui::Detached>::new(),
         (
             panel_scroll().fill().content(SkiaStack::new().spacing(0).padding((0, 4)).accessibility_role(Aria::LIST).accessibility_label(tr("panel-screens")).assign(&mut app.screens_list).items(
-                |app: &App| app.screens.len(),
+                |app: &App| app.screen_rows().len(),
                 || {
                     let (cell, h) = row_cell(false);
                     (
@@ -1359,29 +1359,72 @@ fn screens_panel(app: &mut App) -> Build<SkiaLayout> {
                                 return;
                             }
                             let Some(index) = me.base().context_index else { return };
-                            if let Some(screen) = app.screens.get(index) {
-                                app.send(HubToApp::OpenScreen { route: screen.route.clone() });
+                            match app.screen_rows().get(index) {
+                                Some(super::ScreenRow::Screen(i)) => {
+                                    if let Some(screen) = app.screens.get(*i) {
+                                        app.send(HubToApp::OpenScreen { route: screen.route.clone() });
+                                    }
+                                }
+                                Some(super::ScreenRow::Action(i)) => {
+                                    if let Some(action) = app.action(*i) {
+                                        app.send(HubToApp::RunAction { path: action.path.clone() });
+                                    }
+                                }
+                                _ => {}
                             }
                         }),
                         h,
                     )
                 },
                 |cell: &RowHandles, app: &App, index: usize, cx: &mut Cx| {
-                    let Some(s) = app.screens.get(index) else { return };
-                    let title = s.title.clone().unwrap_or_else(|| s.route.clone());
-                    if let Some(mut me) = cx.get_mut(cell.root) {
-                        me.set_accessibility_label(tr_args("screen-open", &[("title", title.clone().into())]));
+                    let row = app.screen_rows().get(index).cloned();
+                    // A header reads as one; screens and actions as list rows (cells are reused).
+                    let header = matches!(row, Some(super::ScreenRow::Group(_)));
+                    if let Some(mut me) = cx.get_mut(cell.label) {
+                        me.set_font_family(if header { "Semibold" } else { "Default" });
+                        me.set_font_size(if header { 12.0 } else { 13.0 });
+                        me.set_text_color(c(if header { MUTED } else { TEXT }));
                     }
-                    set(cx, cell.label, title);
-                    set(cx, cell.detail, String::new());
                     if let Some(mut me) = cx.get_mut(cell.icon) {
-                        me.set_tint_color(c(MUTED));
+                        me.set_is_visible(!header);
                     }
-                    cell_icon(cx, cell, icons::LAYOUT_PANEL_TOP, MUTED, None);
+                    set(cx, cell.detail, String::new());
+                    match row {
+                        Some(super::ScreenRow::Screen(i)) => {
+                            let Some(s) = app.screens.get(i) else { return };
+                            let title = s.title.clone().unwrap_or_else(|| s.route.clone());
+                            if let Some(mut me) = cx.get_mut(cell.root) {
+                                me.set_accessibility_role(Aria::LIST_ITEM);
+                                me.set_accessibility_label(tr_args("screen-open", &[("title", title.clone().into())]));
+                            }
+                            set(cx, cell.label, title);
+                            cell_icon(cx, cell, icons::LAYOUT_PANEL_TOP, MUTED, None);
+                        }
+                        Some(super::ScreenRow::Group(group)) => {
+                            let title = if group.is_empty() { tr("actions") } else { group.replace('/', " \u{203A} ") };
+                            if let Some(mut me) = cx.get_mut(cell.root) {
+                                me.set_accessibility_role(Aria::HEADING);
+                                me.set_accessibility_label(title.as_str());
+                            }
+                            set(cx, cell.label, title.to_uppercase());
+                            cell_icon(cx, cell, icons::PLAY, MUTED, None);
+                        }
+                        Some(super::ScreenRow::Action(i)) => {
+                            let Some(a) = app.action(i) else { return };
+                            let name = super::action_name(&a.path).to_owned();
+                            if let Some(mut me) = cx.get_mut(cell.root) {
+                                me.set_accessibility_role(Aria::LIST_ITEM);
+                                me.set_accessibility_label(tr_args("action-run", &[("name", name.clone().into())]));
+                            }
+                            set(cx, cell.label, name);
+                            cell_icon(cx, cell, icons::PLAY, ACCENT, None);
+                        }
+                        None => {}
+                    }
                 },
             )),
             empty_state(icons::LAYOUT_PANEL_TOP, &tr("empty-screens-title"), &tr("empty-screens-hint"))
-                .observe(|me, app: &App| me.set_is_visible(app.app.is_some() && app.screens.is_empty())),
+                .observe(|me, app: &App| me.set_is_visible(app.app.is_some() && app.screen_rows().is_empty())),
         ),
     )
 }

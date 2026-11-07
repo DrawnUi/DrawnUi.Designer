@@ -40,6 +40,14 @@ struct AppArg {
 }
 
 #[derive(Deserialize, schemars::JsonSchema)]
+struct ActionArg {
+    /// The app's id, from list_apps.
+    app: AppId,
+    /// An action's path from list_actions, e.g. `Levels/Level 3`.
+    path: String,
+}
+
+#[derive(Deserialize, schemars::JsonSchema)]
 struct ScreenArg {
     /// The app's id, from list_apps.
     app: AppId,
@@ -345,6 +353,23 @@ impl Designer {
         match h.core.apps.get(&app) {
             Some(a) => json_result(json!(a.screens.clone().unwrap_or_default())),
             None => failed(format!("no app with id {app} is connected (see list_apps)")),
+        }
+    }
+
+    #[tool(description = "List the actions an app declared for the designer: states it can jump to without being played to them (a level, a game state, a dialog). Each has a path, its groups before its name: `Levels/Level 3`. Run one with run_action.")]
+    async fn list_actions(&self, Parameters(AppArg { app }): Parameters<AppArg>) -> Result<CallToolResult, ErrorData> {
+        let h = self.hub.lock().unwrap();
+        match h.core.apps.get(&app) {
+            Some(a) => json_result(json!(a.actions.clone().unwrap_or_default())),
+            None => failed(format!("no app with id {app} is connected (see list_apps)")),
+        }
+    }
+
+    #[tool(description = "Run an action of list_actions in the app (on its UI thread): the app jumps to that state. What it shows next may take a moment (a transition); call get_tree or snapshot after it.")]
+    async fn run_action(&self, Parameters(ActionArg { app, path }): Parameters<ActionArg>) -> Result<CallToolResult, ErrorData> {
+        match self.send(app, HubToApp::RunAction { path: path.clone() }) {
+            Ok(()) => json_result(json!({"running": path})),
+            Err(e) => failed(e),
         }
     }
 

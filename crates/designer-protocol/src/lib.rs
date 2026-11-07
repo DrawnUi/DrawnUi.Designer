@@ -70,6 +70,9 @@ pub enum AppMsg {
     Tree(Tree),
     /// The screens the app can open (a shell's routes).
     Screens { screens: Vec<Screen> },
+    /// What the app can be put into from the designer (a level, a game state, a dialog): the
+    /// actions the app declared, sent on connect and again whenever the list changes.
+    Actions { actions: Vec<Action> },
     /// The properties of one control, the answer to [`HubToApp::GetProps`].
     Props { node: NodeId, props: Vec<Prop> },
     /// The answer to [`HubToApp::Pick`]: the topmost control at that point, if any.
@@ -247,6 +250,14 @@ pub struct Screen {
     pub title: Option<String>,
 }
 
+/// An action the app declared for the designer: run it and the app jumps to that state.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct Action {
+    /// Its name with its groups before it, slash-separated: `Levels/Level 3`. Unique in the app.
+    pub path: String,
+}
+
 /// What the hub asks of an app.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "type", rename_all = "camelCase", rename_all_fields = "camelCase")]
@@ -266,6 +277,9 @@ pub enum HubToApp {
     /// Set a property on the live control (lost on restart).
     SetProperty { request: u32, node: NodeId, name: String, value: String },
     OpenScreen { route: String },
+    /// Runs an action of [`AppMsg::Actions`] on the app's UI thread. A failure comes back as
+    /// [`AppMsg::Error`] without a request.
+    RunAction { path: String },
     /// Bring the app's window to the front (restored if minimized). The editor that asks has the
     /// user's click, so on Windows it grants the app the right to take the foreground first.
     Focus,

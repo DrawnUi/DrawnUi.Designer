@@ -51,6 +51,8 @@ pub struct App {
     pub info: AppInfo,
     pub tree: Option<Tree>,
     pub screens: Option<Vec<Screen>>,
+    /// The actions the app declared for the designer (a level, a game state).
+    pub actions: Option<Vec<Action>>,
     /// The last properties the app sent for each control: their types spell a [`EditorMsg::SetCode`].
     pub props: HashMap<NodeId, Vec<Prop>>,
     /// The app's last hot reload step and when (seconds since the Unix epoch).
@@ -168,7 +170,7 @@ impl HubCore {
             self.recent.insert(0, RecentApp { name: info.name.clone(), engine: info.engine.clone(), project, agent: info.agent.clone().or(old_agent), last_seen: now(), platform: info.platform.clone() });
             self.recent.truncate(MAX_RECENT);
         }
-        self.apps.insert(id, App { info, tree: None, screens: None, props: HashMap::new(), hot_reload: None, notes: VecDeque::new(), live: live::Live::default() });
+        self.apps.insert(id, App { info, tree: None, screens: None, actions: None, props: HashMap::new(), hot_reload: None, notes: VecDeque::new(), live: live::Live::default() });
         Some((id, vec![Out::ToEditor(None, self.apps_msg())]))
     }
 
@@ -229,6 +231,7 @@ impl HubCore {
         match &msg {
             AppMsg::Tree(tree) => app.tree = Some(tree.clone()),
             AppMsg::Screens { screens } => app.screens = Some(screens.clone()),
+            AppMsg::Actions { actions } => app.actions = Some(actions.clone()),
             AppMsg::Props { node, props } => {
                 app.props.insert(*node, props.clone());
             }
@@ -312,6 +315,9 @@ impl HubCore {
         for (&app, a) in &self.apps {
             if let Some(screens) = &a.screens {
                 first.push(HubToEditor::FromApp { app, msg: AppMsg::Screens { screens: screens.clone() } });
+            }
+            if let Some(actions) = &a.actions {
+                first.push(HubToEditor::FromApp { app, msg: AppMsg::Actions { actions: actions.clone() } });
             }
             if let Some(tree) = &a.tree {
                 first.push(HubToEditor::FromApp { app, msg: AppMsg::Tree(tree.clone()) });

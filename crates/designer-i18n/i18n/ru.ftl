@@ -22,7 +22,7 @@ controls-count = { $count ->
    *[many] { $count } элементов
 }
 empty-screens-title = Нет экранов
-empty-screens-hint = Здесь появятся маршруты оболочки приложения.
+empty-screens-hint = Здесь приложение показывает свои маршруты и действия, объявленные для дизайнера.
 empty-app-title = Нет подключённого приложения
 empty-app-hint = Запустите приложение DrawnUI с агентом дизайнера или запустите последнее.
 empty-selection-title = Ничего не выбрано
@@ -460,3 +460,7 @@ update-whats-new = Что нового
 update-later = Позже
 check-updates = Проверять обновления
 check-updates-hint = При запуске и раз в день спрашивает GitHub о новой версии. Больше ничего не отправляется.
+
+# Actions (Screens panel)
+actions = Действия
+action-run = Выполнить { $name }

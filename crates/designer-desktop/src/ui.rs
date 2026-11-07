@@ -165,6 +165,26 @@ enum PropRow {
     Prop(usize),
 }
 
+/// One row of the Screens panel.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum ScreenRow {
+    Screen(usize),
+    /// An actions group's header: its path (`Levels`; empty for actions without a group).
+    Group(String),
+    /// The shown app's action at that index.
+    Action(usize),
+}
+
+/// An action's groups (`Levels` for `Levels/Level 3`), empty without a slash.
+pub(crate) fn action_group(path: &str) -> &str {
+    path.rsplit_once('/').map_or("", |(group, _)| group)
+}
+
+/// An action's own name (`Level 3` for `Levels/Level 3`).
+pub(crate) fn action_name(path: &str) -> &str {
+    path.rsplit_once('/').map_or(path, |(_, name)| name)
+}
+
 /// The groups in the order a person looks for them; the agent puts every property in one.
 const GROUPS: [&str; 5] = ["Layout", "Text", "Look", "Transform", "Behavior"];
 
@@ -356,6 +376,8 @@ pub struct App {
     /// middle of a rebuild. The next tree that has it selects it again; another selection drops it.
     reselect: Option<(AppId, String, String)>,
     screens: Vec<Screen>,
+    /// The actions each app declared for the designer, by app (kept for apps not shown).
+    actions: std::collections::HashMap<AppId, Vec<designer_protocol::Action>>,
     tree: Tree,
     /// Every shown control in tree order; `rows` is this minus what folded nodes hide.
     outline: Vec<Row>,
@@ -825,6 +847,12 @@ impl App {
                 cx.items_reset(self.apps_list);
                 cx.items_reset(self.screens_list);
             }
+            Incoming::Hub(HubToEditor::FromApp { app, msg: AppMsg::Actions { actions } }) => {
+                self.actions.insert(app, actions);
+                if Some(app) == self.app {
+                    cx.items_reset(self.screens_list);
+                }
+            }
             Incoming::Hub(HubToEditor::FromApp { app, msg }) if Some(app) == self.app => match msg {
                 AppMsg::Tree(tree) => {
                     log(&format!("tree: {} nodes, revision {}", tree.nodes.len(), tree.revision));
@@ -1233,6 +1261,30 @@ impl App {
 
     /// The left column's width (Screens and Controls; in a page Controls alone): as dragged, else in a
     /// page what the page asked or narrower than on the desktop, so Layers in the middle has the room.
+    /// The Screens panel's rows: the screens, then the shown app's actions under their groups.
+    pub(crate) fn screen_rows(&self) -> Vec<ScreenRow> {
+        let mut rows: Vec<ScreenRow> = (0..self.screens.len()).map(ScreenRow::Screen).collect();
+        let actions = self.app.and_then(|a| self.actions.get(&a)).map_or(&[][..], Vec::as_slice);
+        // Groups in the order the app declared them.
+        let mut groups: Vec<&str> = vec![];
+        for a in actions {
+            let group = action_group(&a.path);
+            if !groups.contains(&group) {
+                groups.push(group);
+            }
+        }
+        for group in groups {
+            rows.push(ScreenRow::Group(group.to_owned()));
+            rows.extend(actions.iter().enumerate().filter(|(_, a)| action_group(&a.path) == group).map(|(i, _)| ScreenRow::Action(i)));
+        }
+        rows
+    }
+
+    /// The shown app's action `index`.
+    pub(crate) fn action(&self, index: usize) -> Option<&designer_protocol::Action> {
+        self.app.and_then(|a| self.actions.get(&a)).and_then(|list| list.get(index))
+    }
+
     fn screens_width(&self) -> f32 {
         match (self.screens_w, self.page_widths.0) {
             (w, _) if w > 0.0 => w,
@@ -3932,6 +3984,30 @@ mod shots {
     /// of `with_controls` (SkiaStack takes children).
     fn label_selected_state() -> App {
         with_controls(with_props())
+    }
+
+    /// The app's designer actions show under its screens, grouped by their paths; a click runs one in the
+    /// app. Writes target/designer-shots/37-actions.png.
+    #[test]
+    fn actions_list_under_the_screens_and_run_in_the_app() {
+        let mut state = connected();
+        state.screens = vec![Screen { route: "//main".into(), title: Some("Main".into()) }];
+        let app = state.app.unwrap();
+        let (mut host, sent, to_ui) = wired(state);
+        let actions = ["Levels/Level 1", "Levels/Level 2", "Game/Paused", "Demo"].map(|p| designer_protocol::Action { path: p.into() }).to_vec();
+        feed(&mut host, &to_ui, HubToEditor::FromApp { app, msg: AppMsg::Actions { actions } });
+        assert_eq!(
+            host.ui.state.screen_rows(),
+            [ScreenRow::Screen(0), ScreenRow::Group("Levels".into()), ScreenRow::Action(0), ScreenRow::Action(1), ScreenRow::Group("Game".into()), ScreenRow::Action(2), ScreenRow::Group(String::new()), ScreenRow::Action(3)]
+        );
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/designer-shots");
+        std::fs::create_dir_all(&dir).unwrap();
+        host.save_png(dir.join("37-actions.png").to_str().unwrap());
+        sent.lock().unwrap().clear();
+        let at = at_label(&mut host, "Run Level 2");
+        host.pan(at, at, 16.0, 1);
+        host.frame_after(16.0);
+        assert!(sent.lock().unwrap().iter().any(|m| matches!(m, EditorMsg::ToApp { msg: HubToApp::RunAction { path }, .. } if path == "Levels/Level 2")), "{:?}", sent.lock().unwrap());
     }
 
     /// The edit field lies over the edited row also after Properties was scrolled down to an unset

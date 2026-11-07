@@ -21,7 +21,7 @@ controls-count = { $count ->
    *[other] { $count } Steuerelemente
 }
 empty-screens-title = Keine Seiten
-empty-screens-hint = Hier erscheinen die Routen der Shell der App.
+empty-screens-hint = Hier meldet die App ihre Shell-Routen und die Aktionen, die sie für den Designer anbietet.
 empty-app-title = Keine App verbunden
 empty-app-hint = Starte eine DrawnUI-App mit dem Designer-Agenten oder starte die letzte erneut.
 empty-selection-title = Nichts ausgewählt
@@ -456,3 +456,7 @@ update-whats-new = Was ist neu
 update-later = Später
 check-updates = Nach Updates suchen
 check-updates-hint = Fragt GitHub beim Start und einmal am Tag nach einer neueren Version. Sonst wird nichts gesendet.
+
+# Actions (Screens panel)
+actions = Aktionen
+action-run = { $name } ausführen

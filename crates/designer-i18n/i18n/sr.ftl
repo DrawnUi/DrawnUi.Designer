@@ -22,7 +22,7 @@ controls-count = { $count ->
    *[other] { $count } kontrola
 }
 empty-screens-title = Nema ekrana
-empty-screens-hint = Ovde se pojavljuju rute školjke aplikacije.
+empty-screens-hint = Ovde aplikacija prikazuje svoje rute i akcije koje nudi dizajneru.
 empty-app-title = Nijedna aplikacija nije povezana
 empty-app-hint = Pokreni DrawnUI aplikaciju sa agentom dizajnera ili pokreni poslednju.
 empty-selection-title = Ništa nije izabrano
@@ -460,3 +460,7 @@ update-whats-new = Šta je novo
 update-later = Kasnije
 check-updates = Proveravaj ažuriranja
 check-updates-hint = Pri pokretanju i jednom dnevno pita GitHub za noviju verziju. Ništa drugo se ne šalje.
+
+# Actions (Screens panel)
+actions = Akcije
+action-run = Pokreni { $name }

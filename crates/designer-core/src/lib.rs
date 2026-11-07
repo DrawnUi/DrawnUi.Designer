@@ -1023,7 +1023,7 @@ mod tests {
             client.call_tool(p).await.unwrap()
         };
         let tools: Vec<String> = client.list_all_tools().await.unwrap().into_iter().map(|t| t.name.to_string()).collect();
-        for t in ["list_apps", "list_screens", "open_screen", "get_tree", "get_properties", "select", "pick", "set_property", "write_property", "snapshot", "focus", "run_app", "restart_app"] {
+        for t in ["list_apps", "list_screens", "open_screen", "list_actions", "run_action", "get_tree", "get_properties", "select", "pick", "set_property", "write_property", "snapshot", "focus", "run_app", "restart_app"] {
             assert!(tools.iter().any(|x| x == t), "{t} missing from {tools:?}");
         }
 
@@ -1104,7 +1104,7 @@ mod tests {
         let (status, _) = post(json!({"jsonrpc": "2.0", "method": "notifications/initialized"})).await;
         assert_eq!(status, 202);
         let (_, msg) = post(json!({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})).await;
-        assert_eq!(msg.unwrap()["result"]["tools"].as_array().unwrap().len(), 23);
+        assert_eq!(msg.unwrap()["result"]["tools"].as_array().unwrap().len(), 25);
         let (_, msg) = post(json!({"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "list_apps", "arguments": {}}})).await;
         let msg = msg.unwrap();
         let apps: serde_json::Value = serde_json::from_str(msg["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
