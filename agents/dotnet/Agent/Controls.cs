@@ -64,15 +64,31 @@ namespace DrawnUi.Designer.Agent
                 {
                     types = e.Types.Where(t => t != null).ToArray();
                 }
+                catch
+                {
+                    continue; // an assembly whose types need one the app does not carry (MessagePack on a phone)
+                }
                 foreach (var type in types)
+                {
+                    try
+                    {
+                        AddKind(type);
+                    }
+                    catch
+                    {
+                        // a type that needs an assembly the app does not carry is not a control to place
+                    }
+                }
+
+                void AddKind(Type type)
                 {
                     if (!type.IsClass || type.IsAbstract || type.ContainsGenericParameters || !type.IsPublic // nested types are not IsPublic
                         || type.GetConstructor(Type.EmptyTypes) == null || !IsType(type, "DrawnUi.Draw.SkiaControl")
                         || type.IsDefined(typeof(ObsoleteAttribute), false)
                         || type.GetCustomAttribute<EditorBrowsableAttribute>()?.State == EditorBrowsableState.Never)
-                        continue;
+                        return;
                     if (!own && LibraryParts.Contains(type.Name) || own && screens.Contains(type))
-                        continue;
+                        return;
                     var group = GroupOf(type);
                     var container = group is "Layout" or "Shapes" && !IsType(type, "DrawnUi.Draw.SkiaScroll");
                     kinds.Add(new ControlKind { Type = type, Group = group, Own = own, Container = container, Defaults = DefaultsOf(type, group) });
