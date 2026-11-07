@@ -122,7 +122,7 @@ drawnui::run("My app", || drawnui_designer_agent::attach!(Ui::new(App::default()
 ```
 
 `attach!` returns the app with the agent around it in debug builds and the app as it is in release builds. The crate
-turns on drawnui's `designer` feature itself (drawnui 0.1.0-preview.35 or newer from crates.io). The
+turns on drawnui's `designer` feature itself (drawnui 0.1.0-preview.36 or newer from crates.io). The
 app shows up with engine `rust`, its exe name, and its crate's `Cargo.toml` as the project. The tree lists the
 controls with their type, tag, text and where they are drawn, the engine's own parts (a button's caption, a
 switch's look, scroll bars) marked as the library's; each open popup window (a menu, a dropdown) follows as a root

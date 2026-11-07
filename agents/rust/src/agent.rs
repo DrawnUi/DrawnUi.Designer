@@ -1149,14 +1149,15 @@ mod tests {
             theme: Option<drawnui::SystemTheme>,
             menu: bool,
         }
-        let ui = Ui::new(Themed::default(), |_s: &mut Themed| SkiaLayout::column().children(SkiaLabel::new("Hi")))
-            .font_bytes("Default", FONT)
-            .on_system_theme_changed(|s: &mut Themed, theme, _cx| s.theme = Some(theme))
-            .on_app_closing(|_s: &mut Themed, _cx| false)
-            .on_context_menu(|s: &mut Themed, _menu, _cx| {
+        let ui = Ui::new(Themed::default(), |_s: &mut Themed| {
+            SkiaLayout::column().children(SkiaLabel::new("Hi").on_context_menu(|_me, s: &mut Themed, _cx, _menu| {
                 s.menu = true;
                 true
-            });
+            }))
+        })
+            .font_bytes("Default", FONT)
+            .on_system_theme_changed(|s: &mut Themed, theme, _cx| s.theme = Some(theme))
+            .on_app_closing(|_s: &mut Themed, _cx| false);
         let (_hub, inbox) = mpsc::channel();
         let (out, _answers) = mpsc::channel();
         let waker = ui.waker();
@@ -1164,11 +1165,13 @@ mod tests {
         App::system_theme(&mut agent, drawnui::SystemTheme::Dark);
         assert_eq!(agent.ui.state.theme, Some(drawnui::SystemTheme::Dark));
         assert!(!App::app_closing(&mut agent), "the app keeps its window open");
-        // A screen reader's "show menu" reaches the app's menu (once laid out and drawn).
+        // A screen reader's "show menu" on the label opens the label's menu (once laid out and drawn).
         let mut surface = skia::surfaces::raster_n32_premul((400, 300)).unwrap();
         let (mut gpu, mut host) = (drawnui::Gpu::raster(), Host::default());
         agent.frame(&mut Frame { surface: &mut surface, gpu: &mut gpu, width: 400.0, height: 300.0, scale: 1.0, time_ms: 16.0, host: &mut host });
-        assert!(App::accessibility_context_menu(&mut agent, 0), "the root's menu was routed");
+        // Accessibility ids are tree indexes: 0 the column (no menu), 1 the label.
+        assert!(!App::accessibility_context_menu(&mut agent, 0), "no menu on the column");
+        assert!(App::accessibility_context_menu(&mut agent, 1) && agent.ui.state.menu, "the label's menu opened");
         assert!(agent.ui.state.menu);
     }
 
