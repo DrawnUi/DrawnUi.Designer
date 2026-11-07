@@ -306,6 +306,8 @@ pub struct App {
     pressed: Option<ControlId>,
     /// Counts hover changes: a change of the state, so the hover looks are drawn again.
     hover_changes: u32,
+    /// The clickable control under the mouse (`interactive`), so its icon can light up too.
+    pub(crate) hovered_control: Option<ControlId>,
     light_segment: Handle<SkiaLayout>,
     inbox_rx: Option<Receiver<Incoming>>,
     to_hub: Option<ToHub>,
@@ -7227,6 +7229,33 @@ mod shots {
         });
         assert_eq!(back.as_deref(), Some("#FFFFFFFF"), "Esc puts the old color back");
         assert!(host.ui.state.pending.is_empty());
+    }
+
+    /// The mouse over an icon button lights the icon itself (full text color), not only its
+    /// background: Settings in the title bar.
+    #[test]
+    fn a_hovered_icon_button_lights_its_icon() {
+        let mut host = host(connected());
+        let r = host.rect(host.ui.state.settings_button);
+        // The brightest pixel inside the button: the icon's strokes.
+        let brightest = |host: &mut Headless<App>| {
+            let mut best = 0u32;
+            for y in (r.top as i32 + 2)..(r.bottom as i32 - 2) {
+                for x in (r.left as i32 + 2)..(r.right as i32 - 2) {
+                    let p = host.pixel(x, y);
+                    best = best.max(p.r() as u32 + p.g() as u32 + p.b() as u32);
+                }
+            }
+            best
+        };
+        let rest = brightest(&mut host);
+        host.hover(r.center_x(), r.center_y());
+        host.settle();
+        let over = brightest(&mut host);
+        assert!(over > rest + 60, "the icon brightens under the mouse: {rest} -> {over}");
+        host.hover(r.center_x(), r.bottom + 200.0);
+        host.settle();
+        assert!(brightest(&mut host) <= rest + 10, "and goes back when the mouse leaves");
     }
 
     /// A click on Layers' empty space below the rows lets go of the selection; a click on a row selects.

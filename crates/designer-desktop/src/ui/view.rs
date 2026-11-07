@@ -221,6 +221,11 @@ fn veiled(base: Color, hovered: bool, pressed: bool) -> Color {
 pub(super) fn interactive<T: Control>(b: Build<T>, base: impl Fn(&App, Option<usize>) -> Color + 'static) -> Build<T> {
     b.on_hovered(|me, app: &mut App, _cx, over| {
         app.hover_changes = app.hover_changes.wrapping_add(1);
+        if over {
+            app.hovered_control = Some(me.id());
+        } else if app.hovered_control == Some(me.id()) {
+            app.hovered_control = None;
+        }
         if !over && app.pressed == Some(me.id()) {
             app.pressed = None;
         }
@@ -258,6 +263,21 @@ fn bold(size: f32, color: Tone) -> Build<SkiaLabel> {
 
 fn icon(svg: &'static str, size: f32, color: Tone) -> Build<SkiaSvg> {
     SkiaSvg::from_string(svg).width_request(size).height_request(size).tint_color(c(color)).vertical_options(LayoutOptions::Center)
+}
+
+/// The icon of a clickable control `button`: MUTED at rest, full TEXT while the mouse is over the
+/// control, ACCENT while `active` says the control is on (Pick).
+fn button_icon(svg: &'static str, size: f32, button: Handle<SkiaShape>, active: fn(&App) -> bool) -> Build<SkiaSvg> {
+    icon(svg, size, MUTED).observe(move |me, app: &App| {
+        let tone = if active(app) {
+            ACCENT
+        } else if app.hovered_control == Some(button.into()) {
+            TEXT
+        } else {
+            MUTED
+        };
+        me.set_tint_color(c(tone));
+    })
 }
 
 /// The icon and its color for a control type: layouts blue, text white, inputs green, media violet,
@@ -457,6 +477,7 @@ fn title_bar(app: &mut App) -> Build<SkiaLayout> {
 
 /// A square icon button, named for screen readers by what it does (`label`).
 fn icon_button(svg: &'static str, label: &str, tap: impl Fn(&mut App, &mut Cx) + 'static) -> Build<SkiaShape> {
+    let mut me = Handle::<SkiaShape>::default();
     interactive(
         SkiaShape::new()
             .corner_radius(6)
@@ -465,6 +486,7 @@ fn icon_button(svg: &'static str, label: &str, tap: impl Fn(&mut App, &mut Cx) +
             .vertical_options(LayoutOptions::Center)
             .accessibility_role(Aria::BUTTON)
             .accessibility_label(label)
+            .assign(&mut me)
             .on_tapped(move |_me, app: &mut App, cx| {
                 if left_click(cx) {
                     tap(app, cx)
@@ -472,7 +494,7 @@ fn icon_button(svg: &'static str, label: &str, tap: impl Fn(&mut App, &mut Cx) +
             }),
         |_, _| Color::TRANSPARENT,
     )
-    .children(icon(svg, 16.0, MUTED).center())
+    .children(button_icon(svg, 16.0, me, |_| false).center())
 }
 
 /// One segment of a segmented switch (the Properties order, the theme).
@@ -2298,8 +2320,10 @@ fn sort_toggle(caption: &str, order: PropsOrder) -> Build<SkiaShape> {
 
 /// The Layers header's Pick button: while on, the next click in the app selects a control here.
 fn pick_button() -> Build<SkiaShape> {
+    let mut me = Handle::<SkiaShape>::default();
     interactive(
         SkiaShape::new()
+            .assign(&mut me)
             .corner_radius(6)
             .stroke_width(1)
             .padding((8, 3))
@@ -2314,7 +2338,7 @@ fn pick_button() -> Build<SkiaShape> {
         |app, _| c(if app.pick_mode { SELECTION } else { PANEL }),
     )
         .children(SkiaRow::new().spacing(5).children((
-            icon(icons::CROSSHAIR, 13.0, MUTED).observe(|me, app: &App| me.set_tint_color(c(if app.pick_mode { ACCENT } else { MUTED }))),
+            button_icon(icons::CROSSHAIR, 13.0, me, |app| app.pick_mode),
             bold(11.0, TEXT).observe(|me, app: &App| me.set_text(tr(if app.pick_mode { "pick-active" } else { "pick" }))),
         )))
 }
@@ -2322,8 +2346,10 @@ fn pick_button() -> Build<SkiaShape> {
 /// The title bar's Pick, right of the apps: the pill's look, lit while the next click in the app
 /// picks a control (Ctrl+P).
 fn top_pick_button() -> Build<SkiaShape> {
+    let mut me = Handle::<SkiaShape>::default();
     interactive(
         SkiaShape::new()
+            .assign(&mut me)
             .corner_radius(12)
             .stroke_width(1)
             .padding((10, 4))
@@ -2339,7 +2365,7 @@ fn top_pick_button() -> Build<SkiaShape> {
         |app, _| c(if app.pick_mode { SELECTION } else { PANEL }),
     )
     .children(SkiaRow::new().spacing(6).children((
-        icon(icons::CROSSHAIR, 13.0, MUTED).observe(|me, app: &App| me.set_tint_color(c(if app.pick_mode { ACCENT } else { MUTED }))),
+        button_icon(icons::CROSSHAIR, 13.0, me, |app| app.pick_mode),
         bold(12.0, TEXT).observe(|me, app: &App| me.set_text(tr(if app.pick_mode { "pick-active" } else { "pick" }))),
     )))
 }
