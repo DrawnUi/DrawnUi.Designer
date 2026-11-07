@@ -1020,13 +1020,14 @@ namespace DrawnUi.Designer.Agent
             get => _watchedShellRef != null && _watchedShellRef.TryGetTarget(out var shell) ? shell : null;
             set => _watchedShellRef = value == null ? null : new WeakReference<object>(value);
         }
-        private static EventInfo _hotReload;
-        private static Delegate _onHotReload;
+        private static EventInfo _hotReload, _childrenChanged;
+        private static Delegate _onHotReload, _onChildrenChanged;
 
         /// <summary>
         /// Subscribes, once each while a designer is connected, to what tells that the screen changed without the hub
         /// asking: the framework's page changes (MAUI: Application.PageAppearing, any navigation), DrawnUi's hot reload
-        /// (Super.HotReload), and the navigated event of the app's SkiaShell (a new one after a rebuild). UI thread.
+        /// (Super.HotReload), controls the app adds or removes itself (Super.ChildrenChanged: a dialog shown after the
+        /// first tree), and the navigated event of the app's SkiaShell (a new one after a rebuild). UI thread.
         /// </summary>
         private static void WatchNavigation()
         {
@@ -1037,6 +1038,9 @@ namespace DrawnUi.Designer.Agent
                 var super = _canvas?.GetType().Assembly.GetType("DrawnUi.Draw.Super") ?? LoadedType("DrawnUi.Draw.Super");
                 if (super?.GetEvent("HotReload", BindingFlags.Public | BindingFlags.Static) is { } reload)
                     reload.AddEventHandler(null, _onHotReload = Bridge((_hotReload = reload).EventHandlerType, nameof(OnHotReloaded), 0));
+                // DrawnUi before this event: the tree follows only the events above
+                if (super?.GetEvent("ChildrenChanged", BindingFlags.Public | BindingFlags.Static) is { } children)
+                    children.AddEventHandler(null, _onChildrenChanged = Bridge((_childrenChanged = children).EventHandlerType, nameof(OnNavigated), 1));
             }
             if (_canvas == null || FindShell() is not { } shell || ReferenceEquals(shell, _watchedShell))
                 return;
@@ -1056,6 +1060,8 @@ namespace DrawnUi.Designer.Agent
             _host.WatchNavigation(false);
             _hotReload?.RemoveEventHandler(null, _onHotReload);
             (_hotReload, _onHotReload) = (null, null);
+            _childrenChanged?.RemoveEventHandler(null, _onChildrenChanged);
+            (_childrenChanged, _onChildrenChanged) = (null, null);
             UnwatchShell();
             (_watchedShell, _shellNavigated) = (null, null);
             WatchScrolls(null);

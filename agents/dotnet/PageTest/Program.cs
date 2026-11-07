@@ -57,6 +57,22 @@ Check((float)tree["width"] == 400 && (float)tree["height"] == 300, $"canvas pixe
 await early;
 Check(Next("tree") != null, "the early getTree was answered after the hello");
 
+// A control the app adds by itself (a dialog after the first tree): a new tree follows without a getTree,
+// with DrawnUi that raises Super.ChildrenChanged.
+if (typeof(Super).GetEvent("ChildrenChanged") != null)
+{
+    var added = new SkiaLabel { Text = "Added by the app" };
+    column.AddSubView(added);
+    host.AdvanceFrames(2, 16);
+    var pushed = Next("tree");
+    Check(pushed["nodes"].AsArray().Any(n => (string)n["text"] == "Added by the app"), "a control the app adds is sent in a new tree");
+    column.RemoveSubView(added);
+    host.AdvanceFrames(2, 16);
+    Check(!Next("tree")["nodes"].AsArray().Any(n => (string)n["text"] == "Added by the app"), "and its removal too");
+}
+else
+    Console.WriteLine("skip a control the app adds: this DrawnUi has no Super.ChildrenChanged");
+
 var id = (long)labelNode["id"];
 await handle($"{{\"type\":\"getProps\",\"node\":{id}}}");
 var props = Next("props")["props"].AsArray();
