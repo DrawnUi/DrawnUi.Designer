@@ -692,7 +692,15 @@ namespace DrawnUi.Designer.Agent
             var screens = await Ui(ReadScreens);
             if (screens != null)
                 await Send(new { type = "screens", screens });
-            await SendActions();
+            // the actions never cost the session: a failure is a note, the tree still goes out
+            try
+            {
+                await SendActions();
+            }
+            catch (Exception e)
+            {
+                await SendError(null, "actions: " + Unwrap(e).Message);
+            }
             await SendTree();
         }
 

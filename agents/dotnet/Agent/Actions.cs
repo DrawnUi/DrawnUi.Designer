@@ -72,7 +72,16 @@ namespace DrawnUi.Designer.Agent
             var paths = new List<string>();
             if (DesignerActionsType()?.GetProperty("Paths", BindingFlags.Public | BindingFlags.Static)?.GetValue(null) is IEnumerable<string> declared)
                 paths.AddRange(declared);
-            foreach (var (path, _) in Previews())
+            List<(string Path, MethodInfo Method)> previews;
+            try
+            {
+                previews = Previews();
+            }
+            catch
+            {
+                previews = _previews = new(); // a reflection failure leaves Hot Preview out, never the session
+            }
+            foreach (var (path, _) in previews)
                 if (!paths.Contains(path))
                     paths.Add(path);
             return paths;
@@ -87,9 +96,11 @@ namespace DrawnUi.Designer.Agent
             if (_previews != null)
                 return _previews;
             var found = new List<(string, MethodInfo)>();
+            // Only the assemblies that reference Hot Preview's attribute can use it; reading the others' types would
+            // also load what they reference, which a phone build may not carry (MessagePack in Hot Preview's own).
             foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
             {
-                if (assembly.IsDynamic || IsFrameworkAssembly(assembly))
+                if (assembly.IsDynamic || IsFrameworkAssembly(assembly) || !ReferencesHotPreview(assembly))
                     continue;
                 Type[] types;
                 try
@@ -100,20 +111,47 @@ namespace DrawnUi.Designer.Agent
                 {
                     types = e.Types.Where(t => t != null).ToArray();
                 }
-                foreach (var type in types)
-                foreach (var method in type.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.DeclaredOnly))
+                catch
                 {
-                    if (method.ReturnType != typeof(void) || method.GetParameters().Length != 0 || method.ContainsGenericParameters)
-                        continue;
-                    var attribute = method.GetCustomAttributesData().FirstOrDefault(a => a.AttributeType.FullName == "HotPreview.PreviewAttribute");
-                    if (attribute == null)
-                        continue;
-                    var name = attribute.ConstructorArguments.Select(a => a.Value).OfType<string>().FirstOrDefault(s => !string.IsNullOrWhiteSpace(s))
-                               ?? method.Name.Replace('_', ' ');
-                    found.Add(("Previews/" + name, method));
+                    continue;
+                }
+                foreach (var type in types)
+                {
+                    try
+                    {
+                        foreach (var method in type.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.DeclaredOnly))
+                        {
+                            if (method.ReturnType != typeof(void) || method.GetParameters().Length != 0 || method.ContainsGenericParameters)
+                                continue;
+                            var attribute = method.GetCustomAttributesData().FirstOrDefault(a => a.AttributeType.FullName == "HotPreview.PreviewAttribute");
+                            if (attribute == null)
+                                continue;
+                            var name = attribute.ConstructorArguments.Select(a => a.Value).OfType<string>().FirstOrDefault(s => !string.IsNullOrWhiteSpace(s))
+                                       ?? method.Name.Replace('_', ' ');
+                            found.Add(("Previews/" + name, method));
+                        }
+                    }
+                    catch
+                    {
+                        // a type whose members need an assembly the app does not carry: not a preview of ours
+                    }
                 }
             }
             return _previews = found;
+        }
+
+        /// <summary>The assembly references Hot Preview's attribute assembly (HotPreview, where [Preview] lives), or
+        /// declares that attribute itself.</summary>
+        private static bool ReferencesHotPreview(Assembly assembly)
+        {
+            try
+            {
+                return assembly.GetReferencedAssemblies().Any(r => r.Name == "HotPreview") || assembly.GetType("HotPreview.PreviewAttribute", false) != null;
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         private static bool IsFrameworkAssembly(Assembly assembly)
@@ -122,7 +160,7 @@ namespace DrawnUi.Designer.Agent
             return name.StartsWith("System", StringComparison.Ordinal) || name.StartsWith("Microsoft", StringComparison.Ordinal)
                    || name.StartsWith("SkiaSharp", StringComparison.Ordinal) || name.StartsWith("DrawnUi", StringComparison.Ordinal)
                    || name.StartsWith("Mono", StringComparison.Ordinal) || name.StartsWith("Xamarin", StringComparison.Ordinal)
-                   || name == "mscorlib" || name == "netstandard" || name == "HotPreview";
+                   || name == "mscorlib" || name == "netstandard" || name.StartsWith("HotPreview", StringComparison.Ordinal);
         }
 
         /// <summary>Runs an action on the UI thread: DesignerActions first, then a [Preview] command.</summary>
