@@ -12,6 +12,9 @@ param([string[]]$Arch = @('x64', 'arm64'))
 $ErrorActionPreference = 'Stop'
 $repo = (Resolve-Path "$PSScriptRoot\..").Path
 $cargoHome = if ($env:CARGO_HOME) { $env:CARGO_HOME } else { Join-Path $env:USERPROFILE '.cargo' }
+# The variables below are for these builds only: put back as they were at the end, so a later build in
+# the same shell (the web UI, a debug run) does not get them.
+$saved = @{}; foreach ($n in 'RUSTFLAGS', 'CFLAGS', 'CARGO_TARGET_DIR') { $saved[$n] = [Environment]::GetEnvironmentVariable($n) }
 $env:RUSTFLAGS = "--remap-path-prefix=$cargoHome=/cargo --remap-path-prefix=$repo=/build -C link-arg=/PDBALTPATH:%_PDB%"
 # The C parts (tree-sitter) keep their source paths in assert messages: built without asserts, as
 # release C code is.
@@ -36,4 +39,8 @@ try {
         "$out"
         "SHA256 $((Get-FileHash $out -Algorithm SHA256).Hash)"
     }
-} finally { Pop-Location }
+} finally {
+    Pop-Location
+    # [NullString]: a $null would leave the variable set to "" for every later process.
+    foreach ($n in $saved.Keys) { [Environment]::SetEnvironmentVariable($n, $(if ($null -eq $saved[$n]) { [NullString]::Value } else { $saved[$n] })) }
+}
