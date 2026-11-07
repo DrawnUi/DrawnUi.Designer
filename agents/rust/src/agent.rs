@@ -759,6 +759,9 @@ impl<S: 'static> App for Agent<S> {
     fn app_closing(&mut self) -> bool {
         App::app_closing(&mut self.ui)
     }
+    fn accessibility_context_menu(&mut self, id: u32) -> bool {
+        App::accessibility_context_menu(&mut self.ui, id)
+    }
     fn back(&mut self) -> bool {
         App::back(&mut self.ui)
     }
@@ -1137,18 +1140,23 @@ mod tests {
         assert_eq!(has(&outs, copy), Some(false), "a tree without the copy: {outs:?}");
     }
 
-    /// What the host tells the app goes through the agent to it: the system theme, and a close the
-    /// app holds back (it asks "save first?").
+    /// What the host tells the app goes through the agent to it: the system theme, a close the app
+    /// holds back (it asks "save first?"), and a screen reader's "show menu".
     #[test]
     fn the_hosts_calls_reach_the_app() {
         #[derive(Default)]
         struct Themed {
             theme: Option<drawnui::SystemTheme>,
+            menu: bool,
         }
         let ui = Ui::new(Themed::default(), |_s: &mut Themed| SkiaLayout::column().children(SkiaLabel::new("Hi")))
             .font_bytes("Default", FONT)
             .on_system_theme_changed(|s: &mut Themed, theme, _cx| s.theme = Some(theme))
-            .on_app_closing(|_s: &mut Themed, _cx| false);
+            .on_app_closing(|_s: &mut Themed, _cx| false)
+            .on_context_menu(|s: &mut Themed, _menu, _cx| {
+                s.menu = true;
+                true
+            });
         let (_hub, inbox) = mpsc::channel();
         let (out, _answers) = mpsc::channel();
         let waker = ui.waker();
@@ -1156,6 +1164,12 @@ mod tests {
         App::system_theme(&mut agent, drawnui::SystemTheme::Dark);
         assert_eq!(agent.ui.state.theme, Some(drawnui::SystemTheme::Dark));
         assert!(!App::app_closing(&mut agent), "the app keeps its window open");
+        // A screen reader's "show menu" reaches the app's menu (once laid out and drawn).
+        let mut surface = skia::surfaces::raster_n32_premul((400, 300)).unwrap();
+        let (mut gpu, mut host) = (drawnui::Gpu::raster(), Host::default());
+        agent.frame(&mut Frame { surface: &mut surface, gpu: &mut gpu, width: 400.0, height: 300.0, scale: 1.0, time_ms: 16.0, host: &mut host });
+        assert!(App::accessibility_context_menu(&mut agent, 0), "the root's menu was routed");
+        assert!(agent.ui.state.menu);
     }
 
     #[test]
