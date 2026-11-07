@@ -444,3 +444,15 @@ unwritten-failed-title = { $count ->
 }
 unwritten-more-reasons = und { $count } weitere
 unwritten-cancel = Abbrechen
+
+# Updates (desktop)
+update-pill = Update { $version }
+update-available = DrawnUI Designer { $version } ist verfügbar
+update-downloading = DrawnUI Designer { $version } wird geladen…
+update-failed = DrawnUI Designer { $version } konnte nicht installiert werden: { $why }
+update-install = Aktualisieren und neu starten
+update-download = Herunterladen
+update-whats-new = Was ist neu
+update-later = Später
+check-updates = Nach Updates suchen
+check-updates-hint = Fragt GitHub beim Start und einmal am Tag nach einer neueren Version. Sonst wird nichts gesendet.

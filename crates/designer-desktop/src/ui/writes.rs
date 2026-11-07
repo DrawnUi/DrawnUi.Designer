@@ -59,6 +59,9 @@ pub(crate) enum AfterFlush {
     Restart,
     Run(String),
     Close,
+    /// Update and restart (desktop): the window closes when the new version is in place.
+    #[cfg_attr(target_os = "emscripten", allow(dead_code))]
+    Update,
 }
 
 /// A flush on its way: its writes not answered yet, how many took, and what waits for it.
@@ -183,6 +186,10 @@ impl App {
             AfterFlush::Run(project) => self.run_now(project, cx),
             // Ends the designer without asking again.
             AfterFlush::Close => cx.close_app(),
+            #[cfg(not(target_os = "emscripten"))]
+            AfterFlush::Update => self.install_update_now(),
+            #[cfg(target_os = "emscripten")]
+            AfterFlush::Update => {}
         }
     }
 

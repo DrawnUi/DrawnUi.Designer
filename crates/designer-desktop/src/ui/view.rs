@@ -467,6 +467,7 @@ fn title_bar(app: &mut App) -> Build<SkiaLayout> {
             top_pick_button(),
         ))),
         SkiaRow::new().spacing(10).column(1).vertical_options(LayoutOptions::Center).children((
+            update_button(),
             changes_button(),
             // Help last, at the far end, as in most desktop tools.
             icon_button(icons::SETTINGS, &tr("settings"), |app, cx| app.open_settings(cx)).assign(&mut app.settings_button),
@@ -1097,9 +1098,10 @@ fn about_section() -> Build<SkiaLayout> {
                 .margin((40, 6, 40, 0)),
             SkiaRow::new().spacing(20).horizontal_options(LayoutOptions::Center).margin((0, 6, 0, 0)).children((
                 link("drawnui.net", "https://drawnui.net"),
-                link("GitHub", "https://github.com/DrawnUi/DrawnUi.Net"),
+                link("GitHub", "https://github.com/DrawnUi/DrawnUi.Designer"),
             )),
         )),
+        update_option(),
         section_label(&tr("made-with")),
         credit(
             SkiaSvg::from_string(DRAWNUI_MARK).width_request(34).height_request(34).center(),
@@ -2455,13 +2457,104 @@ fn changes_button() -> Build<SkiaShape> {
     )))
 }
 
+/// A newer release on GitHub: its version in the title bar; a click opens what can be done with it.
+#[cfg(not(target_os = "emscripten"))]
+fn update_button() -> Build<SkiaShape> {
+    use crate::update::Install;
+    interactive(
+        SkiaShape::new()
+            .corner_radius(6)
+            .stroke_width(1)
+            .stroke_color(c(ACCENT))
+            .padding((8, 3))
+            .vertical_options(LayoutOptions::Center)
+            .accessibility_role(Aria::BUTTON)
+            .is_visible(false)
+            .observe(|me, app: &App| {
+                let label = app.offered().map(|u| update_line(app, &u.version)).unwrap_or_default();
+                me.set_is_visible(app.offered().is_some());
+                me.set_accessibility_label(label.as_str());
+                me.set_tooltip(label.as_str());
+            })
+            .on_tapped(|me, app: &mut App, cx| {
+                if left_click(cx) && app.install != Install::Downloading {
+                    let s = me.base().scale.max(0.1);
+                    let r = me.base().rect;
+                    app.open_update_menu(drawnui::skia::Rect::new(r.left / s, r.top / s, r.right / s, r.bottom / s), cx);
+                }
+            }),
+        |_, _| c(PANEL),
+    )
+    .children(SkiaRow::new().spacing(6).children((
+        icon(icons::DOWNLOAD, 13.0, ACCENT),
+        text(11.0, TEXT).observe(|me, app: &App| {
+            let version = app.offered().map(|u| u.version.clone()).unwrap_or_default();
+            me.set_text(tr_args(if app.install == Install::Downloading { "update-downloading" } else { "update-pill" }, &[("version", version.into())]));
+        }),
+    )))
+}
+
+/// The web build has no updates of its own (the page ships it).
+#[cfg(target_os = "emscripten")]
+fn update_button() -> Build<SkiaShape> {
+    SkiaShape::new().is_visible(false)
+}
+
+/// Settings, About: Check for updates (desktop).
+fn update_option() -> Build<SkiaLayout> {
+    let row = SkiaStack::new().spacing(0).fill_x().margin((0, 16, 0, 0));
+    #[cfg(not(target_os = "emscripten"))]
+    let row = row.children(option_row(&tr("check-updates"), &tr("check-updates-hint"), setting_switch(tr("check-updates"), |app| !app.settings.updates_off, |app, on| app.set_check_updates(on))));
+    #[cfg(target_os = "emscripten")]
+    let row = row.is_visible(false);
+    row
+}
+
+/// What the update stands at, in a sentence: available, downloading, or why it failed.
+#[cfg(not(target_os = "emscripten"))]
+fn update_line(app: &App, version: &str) -> String {
+    use crate::update::Install;
+    match &app.install {
+        Install::Idle => tr_args("update-available", &[("version", version.to_owned().into())]),
+        Install::Downloading => tr_args("update-downloading", &[("version", version.to_owned().into())]),
+        Install::Failed(why) => tr_args("update-failed", &[("version", version.to_owned().into()), ("why", why.clone().into())]),
+    }
+}
+
+/// The update's menu: Update and restart (after a failure, the download page instead), What's new, Later.
+#[cfg(not(target_os = "emscripten"))]
+pub fn update_menu(app: &App) -> Build<SkiaShape> {
+    use crate::update::Install;
+    let Some(update) = app.offered().cloned() else { return menu_panel(vec![], 110.0) };
+    let title = update_line(app, &update.version);
+    let failed = matches!(app.install, Install::Failed(_));
+    let mut rows = vec![SkiaShape::new().fill_x().padding((10, 6)).accessibility_role(Aria::PRESENTATION).children(text(12.0, if failed { ERROR } else { MUTED }).fill_x().max_lines(3).text(title.clone()))];
+    if failed {
+        let url = update.url.clone();
+        rows.push(menu_item(tr("update-download"), |_| false, move |app, cx| {
+            app.close_popup(cx);
+            cx.open_url(&url);
+        }));
+    } else {
+        rows.push(menu_item(tr("update-install"), |_| false, |app, cx| app.update_and_restart(cx)));
+    }
+    let page = update.page.clone();
+    rows.push(menu_item(tr("update-whats-new"), |_| false, move |app, cx| {
+        app.close_popup(cx);
+        cx.open_url(&page);
+    }));
+    rows.push(menu_item(tr("update-later"), |_| false, |app, cx| app.skip_update(cx)));
+    let longest = [title.chars().count().min(48), tr("update-install").chars().count(), tr("update-whats-new").chars().count()].into_iter().max().unwrap_or(20);
+    menu_panel(rows, menu_width(longest)).accessibility_label(title)
+}
+
 /// The question before Restart, Run or closing with changes not in code: write them first, go on
 /// without them, or stay.
 pub fn unwritten_menu(app: &App) -> Build<SkiaShape> {
     use super::writes::AfterFlush;
     let (write, skip) = match app.confirm {
         Some(AfterFlush::Run(_)) => ("unwritten-write-run", "unwritten-skip-run"),
-        Some(AfterFlush::Close) => ("unwritten-write-close", "unwritten-skip-close"),
+        Some(AfterFlush::Close | AfterFlush::Update) => ("unwritten-write-close", "unwritten-skip-close"),
         _ => ("unwritten-write-restart", "unwritten-skip-restart"),
     };
     // After a flush that could not write them all: no Write, only on without them, or stay.

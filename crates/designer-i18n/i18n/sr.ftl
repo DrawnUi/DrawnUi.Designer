@@ -448,3 +448,15 @@ unwritten-failed-title = { $count ->
 }
 unwritten-more-reasons = i još { $count }
 unwritten-cancel = Otkaži
+
+# Updates (desktop)
+update-pill = Ažuriraj na { $version }
+update-available = DrawnUI Designer { $version } je dostupan
+update-downloading = Preuzimanje DrawnUI Designer { $version }…
+update-failed = DrawnUI Designer { $version } nije mogao da se instalira: { $why }
+update-install = Ažuriraj i pokreni ponovo
+update-download = Preuzmi
+update-whats-new = Šta je novo
+update-later = Kasnije
+check-updates = Proveravaj ažuriranja
+check-updates-hint = Pri pokretanju i jednom dnevno pita GitHub za noviju verziju. Ništa drugo se ne šalje.

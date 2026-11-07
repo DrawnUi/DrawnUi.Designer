@@ -16,6 +16,8 @@ use designer_i18n as i18n;
 mod icons;
 #[cfg(not(target_os = "emscripten"))]
 mod platform;
+#[cfg(not(target_os = "emscripten"))]
+mod update;
 mod ui;
 #[cfg(target_os = "emscripten")]
 mod web;

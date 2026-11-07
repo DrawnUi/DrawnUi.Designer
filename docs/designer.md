@@ -15,7 +15,9 @@ Today it attaches to DrawnUi.Net WPF apps and DrawnUi.Maui apps on Windows.
 
 ## Start the designer
 
-**Desktop window.** From this repository:
+**Desktop window.** Download it from the repository's Releases: `drawnui-designer-<version>-windows-x64.exe` or
+`-windows-arm64.exe` (one file, run it), or `DrawnUI-Designer-<version>-macos-universal.zip` (unzip, move the app to
+Applications). Or from this repository:
 
 ```powershell
 cargo run -p designer-desktop --release
@@ -24,12 +26,12 @@ cargo run -p designer-desktop --release
 The window starts the hub, the small local server that apps and editors connect to. If a hub already runs
 (another window, or VS Code), the window uses that one.
 
-**VS Code.** Download `drawnui-designer-0.4.1.vsix` from the repository's Releases and install it (**Extensions:
+**VS Code.** Download `drawnui-designer-0.5.0.vsix` from the repository's Releases and install it (**Extensions:
 Install from VSIX...**, or the command below); once it is on the Marketplace, search the Extensions view for
 **DrawnUI Designer** (`drawnui.drawnui-designer`) instead.
 
 ```powershell
-code --install-extension drawnui-designer-0.4.1.vsix
+code --install-extension drawnui-designer-0.5.0.vsix
 ```
 
 Then run **DrawnUI: Open Designer**. The designer opens beside your code and starts the hub if none is running. The
@@ -262,8 +264,11 @@ to use this one".
 | File | Run app (the recent apps that are not running), Restart app (Ctrl+R) · Settings (Ctrl+,), About · Exit |
 | Edit | Undo, Redo (Ctrl+Z, Ctrl+Y) · Copy (Ctrl+C), Paste (Ctrl+V), Duplicate (Ctrl+D) · Copy style (Ctrl+Shift+C), Paste style (Ctrl+Shift+V) · Delete (Del; on macOS also Backspace and Cmd+Backspace) |
 
-Right of the apps, **Pick** (Ctrl+P): lit while the next click in the app selects a control. At the right end, the
-count of changes not in code with **Write all** (while there are some), Settings, and Help (F1).
+Right of the apps, **Pick** (Ctrl+P): lit while the next click in the app selects a control. At the right end, a
+newer release (**Update** and its version, while one is out), the count of changes not in code with **Write all**
+(while there are some), Settings, and Help (F1). A click on Update offers **Update and restart** (the new version
+replaces this one and opens; changes not in code are written or asked about first, as before closing), **What's new**
+(its release page) and **Later** (that version is not offered again).
 
 Click a title, or press Alt with its underlined letter. Alt alone puts the keyboard on the bar: Left and Right
 move between the titles, Down, Enter or Space open one. In a menu, Up and Down move through the items that can act
@@ -332,7 +337,8 @@ Each row of a changed property has two buttons at its right:
   (an editor never connects from another device). The token is made once and kept in the designer's settings folder
   (`device-token`), so apps built with it keep connecting. The system may ask once to allow the designer on the
   network.
-- **About**: the version, links, what the designer is made with and what it uses.
+- **About**: the version, links, **Check for updates** (on by default: the desktop window asks GitHub for a newer
+  release at start and once a day, nothing else is sent), what the designer is made with and what it uses.
 
 Screen readers (Narrator, NVDA, VoiceOver, Orca) read every control with its name and state, and the keyboard
 walks them: Tab between groups, the arrow keys inside a list, a menu or a switch, Enter or Space to act.

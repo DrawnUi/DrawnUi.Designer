@@ -42,10 +42,10 @@ Six themes, six languages (English, Deutsch, Español, Français, Русский
 
 ## Get started
 
-**1. Run the designer.** On Windows, download the latest build from
-[Releases](https://github.com/DrawnUi/DrawnUi.Designer/releases), unzip it and run `drawnui-designer.exe`; builds for
-more platforms follow. Or `cargo run -p designer-desktop --release` from this repository (Rust needed), or the
-[VS Code extension](#vs-code).
+**1. Run the designer.** Download the latest build from
+[Releases](https://github.com/DrawnUi/DrawnUi.Designer/releases): one exe for Windows (x64 or ARM64), or the app for
+macOS (Apple silicon and Intel) in a zip. It tells you when a newer release is out and updates itself. Or
+`cargo run -p designer-desktop --release` from this repository (Rust needed), or the [VS Code extension](#vs-code).
 
 **2. Add the agent to your app.** It is active in debug and development builds only; release builds carry nothing
 of it.
@@ -126,12 +126,12 @@ screens, controls and screenshots when the designer asks. One console line at st
 
 **DrawnUI: Open Designer** in the Command Palette opens the designer beside your code, for Windows.
 
-- **From Releases:** download `drawnui-designer-0.4.1.vsix` from
+- **From Releases:** download `drawnui-designer-0.5.0.vsix` from
   [Releases](https://github.com/DrawnUi/DrawnUi.Designer/releases), then in VS Code run **Extensions: Install from
   VSIX...**, or:
 
   ```powershell
-  code --install-extension drawnui-designer-0.4.1.vsix
+  code --install-extension drawnui-designer-0.5.0.vsix
   ```
 
 - **From the Marketplace** (once it is published there): search the Extensions view for **DrawnUI Designer**, or

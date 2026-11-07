@@ -25,12 +25,22 @@ pub enum Incoming {
     /// written (Auto, Always) and the page is answered with `code.flushed`.
     #[cfg_attr(not(target_os = "emscripten"), allow(dead_code))]
     Flush(serde_json::Value),
+    /// A newer release on GitHub (desktop).
+    #[cfg(not(target_os = "emscripten"))]
+    UpdateFound(crate::update::Update),
+    /// "Update and restart" could not finish: why.
+    #[cfg(not(target_os = "emscripten"))]
+    UpdateFailed(String),
     /// Page mode: the page's Undo / Redo (its buttons in the Visual view): what Ctrl+Z / Ctrl+Y do.
     #[cfg_attr(not(target_os = "emscripten"), allow(dead_code))]
     Undo,
     #[cfg_attr(not(target_os = "emscripten"), allow(dead_code))]
     Redo,
 }
+
+/// Wakes the window's inbox from another thread.
+#[cfg(not(target_os = "emscripten"))]
+type Wake = std::sync::Arc<dyn Fn() + Send + Sync>;
 
 /// Sends one message to the hosting page (page mode).
 type ToPage = Box<dyn Fn(serde_json::Value)>;
@@ -92,6 +102,10 @@ pub struct Settings {
     pub instant_changes: bool,
     /// When the live changes are written to code (Settings, Code).
     pub write_mode: WriteMode,
+    /// Settings, About: no check for a newer release.
+    pub updates_off: bool,
+    /// The release Later was pressed for: not offered again.
+    pub skipped_update: String,
 }
 
 fn section_or_default<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Section, D::Error> {
@@ -310,6 +324,14 @@ pub struct App {
     pub(crate) hovered_control: Option<ControlId>,
     light_segment: Handle<SkiaLayout>,
     inbox_rx: Option<Receiver<Incoming>>,
+    /// The inbox's own sender and its wake, for the update threads.
+    #[cfg(not(target_os = "emscripten"))]
+    to_self: Option<(std::sync::mpsc::Sender<Incoming>, Wake)>,
+    /// A newer release on GitHub, and where installing it is.
+    #[cfg(not(target_os = "emscripten"))]
+    pub(crate) update: Option<crate::update::Update>,
+    #[cfg(not(target_os = "emscripten"))]
+    pub(crate) install: crate::update::Install,
     to_hub: Option<ToHub>,
     /// Page mode: messages to the hosting page (`drag.out`).
     pub(crate) to_page: Option<ToPage>,
@@ -737,6 +759,10 @@ impl App {
             Incoming::Flush(request) => self.page_flush(request, cx),
             Incoming::Undo => self.undo_step(cx),
             Incoming::Redo => self.redo_step(cx),
+            #[cfg(not(target_os = "emscripten"))]
+            Incoming::UpdateFound(update) => self.update = Some(update),
+            #[cfg(not(target_os = "emscripten"))]
+            Incoming::UpdateFailed(why) => self.install = crate::update::Install::Failed(why),
             Incoming::Connected(on) => {
                 self.connected = on;
                 // A new connection: its hub says its version again (the old notice goes).
@@ -1240,6 +1266,50 @@ impl App {
         }
     }
 
+    /// The newer release the title bar offers: none after Later for it, or with the check off.
+    #[cfg(not(target_os = "emscripten"))]
+    pub(crate) fn offered(&self) -> Option<&crate::update::Update> {
+        self.update.as_ref().filter(|u| !self.settings.updates_off && u.version != self.settings.skipped_update)
+    }
+
+    /// Settings, About, Check for updates.
+    #[cfg(not(target_os = "emscripten"))]
+    pub(crate) fn set_check_updates(&mut self, on: bool) {
+        self.settings.updates_off = !on;
+        crate::update::CHECK.store(on, std::sync::atomic::Ordering::Relaxed);
+        self.save_settings();
+    }
+
+    /// Later: the offered release is not offered again.
+    #[cfg(not(target_os = "emscripten"))]
+    pub(crate) fn skip_update(&mut self, cx: &mut Cx) {
+        self.close_popup(cx);
+        if let Some(version) = self.offered().map(|u| u.version.clone()) {
+            self.settings.skipped_update = version;
+            self.save_settings();
+        }
+    }
+
+    /// Update and restart: changes not in code are written first (or asked about), as before closing.
+    #[cfg(not(target_os = "emscripten"))]
+    pub(crate) fn update_and_restart(&mut self, cx: &mut Cx) {
+        self.close_popup(cx);
+        if self.install != crate::update::Install::Downloading && !self.changes_first(writes::AfterFlush::Update, cx) {
+            self.install_update_now();
+        }
+    }
+
+    /// Downloads the offered release and swaps it in; this process ends when it is in place.
+    #[cfg(not(target_os = "emscripten"))]
+    pub(crate) fn install_update_now(&mut self) {
+        let (Some(update), Some((tx, wake))) = (self.offered().cloned(), self.to_self.clone()) else { return };
+        self.install = crate::update::Install::Downloading;
+        crate::update::install(update, move |why| {
+            let _ = tx.send(Incoming::UpdateFailed(why));
+            wake();
+        });
+    }
+
     fn save_settings(&self) {
         if self.persist {
             self.settings.save();
@@ -1452,6 +1522,15 @@ impl App {
         (self.picker, self.picker_old, self.picker_typing) = (Some(current), Some(current), false);
         self.picking_selection = true;
         self.popup = Some(cx.open_popup_window(color::color_picker(self), anchor, PopupWindowOptions { cpu: true, ..Default::default() }));
+    }
+
+    /// Opens the update's menu under its title bar button (`anchor` in points).
+    #[cfg(not(target_os = "emscripten"))]
+    pub fn open_update_menu(&mut self, anchor: drawnui::skia::Rect, cx: &mut Cx) {
+        if let Some(popup) = self.popup.take() {
+            cx.close_popup_window(popup);
+        }
+        self.popup = Some(cx.open_popup_window(view::update_menu(self), anchor, PopupWindowOptions { cpu: true, ..Default::default() }));
     }
 
     /// Opens the language menu under the Language button (`anchor` in points; `center` in canvas pixels).
@@ -3206,9 +3285,13 @@ fn make() -> Box<dyn drawnui::App> {
         let root = view::build(app);
         inbox = app.inbox;
         root
-    })
-    .font("Default", "assets/OpenSans-Regular.ttf")
-    .font("Semibold", "assets/OpenSans-Semibold.ttf")
+    });
+    // The desktop exe carries its fonts (one file to download and to update); the page fetches them.
+    #[cfg(not(target_os = "emscripten"))]
+    let ui = ui.font_bytes("Default", include_bytes!("../assets/OpenSans-Regular.ttf")).font_bytes("Semibold", include_bytes!("../assets/OpenSans-Semibold.ttf"));
+    #[cfg(target_os = "emscripten")]
+    let ui = ui.font("Default", "assets/OpenSans-Regular.ttf").font("Semibold", "assets/OpenSans-Semibold.ttf");
+    let ui = ui
     .background(view::window_background())
     // Icon buttons show their screen-reader name as a tooltip: one text for both. The look is
     // DrawnUI's default bubble.
@@ -3227,6 +3310,18 @@ fn make() -> Box<dyn drawnui::App> {
     ui.state.waker = Some(ui.waker());
     let waker = ui.waker();
     let wake = move || waker.invalidate(inbox, Dirty::APPLY);
+    #[cfg(not(target_os = "emscripten"))]
+    {
+        let waker = ui.waker();
+        let wake: Wake = std::sync::Arc::new(move || waker.invalidate(inbox, Dirty::APPLY));
+        crate::update::CHECK.store(!ui.state.settings.updates_off, std::sync::atomic::Ordering::Relaxed);
+        ui.state.to_self = Some((to_ui.clone(), wake.clone()));
+        let tx = to_ui.clone();
+        crate::update::start(move |update| {
+            let _ = tx.send(Incoming::UpdateFound(update));
+            wake();
+        });
+    }
     #[cfg(not(target_os = "emscripten"))]
     crate::net::start(*PORT.get().expect("port set before run"), to_ui, from_ui, wake);
     #[cfg(target_os = "emscripten")]
@@ -5005,6 +5100,36 @@ mod shots {
         app
     }
 
+    /// A newer release shows in the title bar; its menu offers Update and restart, What's new and
+    /// Later, and Later puts it away for that version. Writes target/designer-shots/36-update-*.png.
+    #[test]
+    fn the_title_bar_offers_a_newer_release() {
+        let mut state = with_controls(with_props());
+        state.update = Some(crate::update::Update { version: "0.6.0".into(), url: "https://dl/x64.exe".into(), page: "https://gh/v0.6.0".into() });
+        let mut host = host(state);
+        host.ui.set_accessibility_enabled(true);
+        host.frame_after(drawnui::ACCESSIBILITY_INTERVAL_MS);
+        let pill = host.ui.accessibility_nodes().iter().find(|n| n.role == Aria::BUTTON && n.label == "DrawnUI Designer 0.6.0 is available").map(|n| n.rect).expect("the update button");
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/designer-shots");
+        std::fs::create_dir_all(&dir).unwrap();
+        host.save_png(dir.join("36-update-pill.png").to_str().unwrap());
+        host.tap(pill.center_x(), pill.center_y());
+        host.settle();
+        line_at(&mut host, "Update and restart");
+        line_at(&mut host, "What's new");
+        let later = line_at(&mut host, "Later");
+        host.hover(later.0, later.1);
+        for _ in 0..3 {
+            host.frame_after(16.0);
+        }
+        host.save_png(dir.join("36-update-menu.png").to_str().unwrap());
+        host.tap(later.0, later.1);
+        host.settle();
+        assert_eq!(host.ui.state.settings.skipped_update, "0.6.0");
+        host.frame_after(drawnui::ACCESSIBILITY_INTERVAL_MS);
+        assert!(!host.ui.accessibility_nodes().iter().any(|n| n.label == "DrawnUI Designer 0.6.0 is available"), "Later: the button is gone");
+    }
+
     fn host(state: App) -> Headless<App> {
         let font = |name: &str| assets(&format!("assets/{name}")).expect("font file");
         let ui = Ui::new(state, view::build)
@@ -6651,6 +6776,21 @@ more"), "the build failed: error[E0433]: no `Cow`");
     }
 
     #[test]
+    fn a_newer_release_is_offered_until_later_or_the_check_is_off() {
+        let mut app = App { update: Some(crate::update::Update { version: "0.6.0".into(), url: "u".into(), page: "p".into() }), ..Default::default() };
+        assert_eq!(app.offered().map(|u| u.version.as_str()), Some("0.6.0"));
+        app.settings.skipped_update = "0.6.0".into();
+        assert!(app.offered().is_none(), "Later: not offered again");
+        app.update = Some(crate::update::Update { version: "0.7.0".into(), url: "u".into(), page: "p".into() });
+        assert!(app.offered().is_some(), "a newer one is");
+        app.settings.updates_off = true;
+        assert!(app.offered().is_none(), "the check is off");
+        // An older settings file has neither: the check is on.
+        let old: Settings = serde_json::from_str("{}").unwrap();
+        assert!(!old.updates_off && old.skipped_update.is_empty());
+    }
+
+    #[test]
     fn settings_come_back_as_saved() {
         let saved = Settings {
             theme: view::Theme::by_id("graphite"),
@@ -6666,9 +6806,12 @@ more"), "the build failed: error[E0433]: no `Cow`");
             section: Section::About,
             instant_changes: true,
             write_mode: WriteMode::Always,
+            updates_off: true,
+            skipped_update: "0.6.0".into(),
         };
         let back: Settings = serde_json::from_str(&serde_json::to_string(&saved).unwrap()).unwrap();
         assert_eq!(back.theme, saved.theme);
+        assert!(back.updates_off && back.skipped_update == "0.6.0");
         assert!(back.show_internal && back.instant_changes);
         assert_eq!((back.screens_width, back.properties_width), (210.0, 400.0));
         assert_eq!(back.toggled_groups, vec!["Behavior".to_string()]);
