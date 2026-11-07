@@ -2071,10 +2071,11 @@ impl App {
         // on_scrolled the scroll is not reachable, the offset it gave is kept in `props_offset`.
         let offset = cx.find::<SkiaScroll>(self.props_scroll).map_or(self.props_offset, |s| s.viewport_offset_y());
         let viewport = cx.base(self.props_scroll).map_or(f32::MAX, |b| b.rect.height() / b.scale.max(0.1));
+        let (lead, pitch) = row_grid(cx, self.props_list);
         if let Some(mut me) = cx.get_mut(self.edit_overlay) {
             match row {
                 Some(r) => {
-                    let top = view::PROPS_PAD + r as f32 * view::ROW + offset;
+                    let top = lead + r as f32 * pitch + offset;
                     me.set_margin(Thickness::new(148.0, top, view::ACTIONS, 0.0));
                     me.set_is_visible(top > -view::ROW && top < viewport);
                 }
@@ -2365,7 +2366,9 @@ impl App {
         }
         // 0 at the start, negative when scrolled down.
         let offset = cx.find::<SkiaScroll>(self.layers_scroll).map_or(self.layers_offset, |sc| sc.viewport_offset_y());
-        let mut y = (at.y - r.top) / s - offset - view::PROPS_PAD;
+        // In nominal rows of ROW points from here on (the rows as laid may be a little shorter).
+        let (lead, pitch) = row_grid(cx, self.tree_list);
+        let mut y = ((at.y - r.top) / s - offset - lead) / pitch * view::ROW;
         // The rows below the open gap are pushed down by a row: over the gap the drop stays,
         // below it the row under the pointer is the one a row higher.
         if self.gap.target_open > 0.5 {
@@ -2383,7 +2386,7 @@ impl App {
         {
             return None;
         }
-        drop.top = view::PROPS_PAD + drop.row as f32 * view::ROW + offset;
+        drop.top = lead + drop.row as f32 * pitch + offset;
         Some(drop)
     }
 
@@ -2998,7 +3001,8 @@ impl App {
         let (Some(row), Some(base)) = (self.selected, cx.base(self.layers_scroll)) else { return false };
         let (s, r) = (base.scale.max(0.1), base.rect);
         let offset = cx.find::<SkiaScroll>(self.layers_scroll).map_or(self.layers_offset, |sc| sc.viewport_offset_y());
-        let top = r.top / s + view::PROPS_PAD + row as f32 * view::ROW + offset;
+        let (lead, pitch) = row_grid(cx, self.tree_list);
+        let top = r.top / s + lead + row as f32 * pitch + offset;
         let left = r.left / s + view::row_text_left(self.rows[row].depth);
         self.open_layers_menu(drawnui::skia::Rect::new(left, top, left + 120.0, top + view::ROW), cx);
         true
@@ -3227,6 +3231,16 @@ fn keys(ui: Ui<App>) -> Ui<App> {
     })
     .on_key_up(|app: &mut App, key, cx| !app.on_settings && !app.on_help && app.bar_key_up(key, cx))
     .on_popup_window_closed(|app: &mut App, id, cx| app.bar_popup_closed(id, cx))
+}
+
+/// Where a list lays its rows, in points: the first row's top and the row pitch. Rows are whole
+/// pixels, so at 125 % a ROW of 26 pt is 32 px (25.6 pt): `index * ROW` drifts half a pixel a row.
+fn row_grid(cx: &Cx, list: Handle<SkiaLayout>) -> (f32, f32) {
+    cx.find::<SkiaLayout>(list)
+        .zip(cx.base(list).map(|b| b.scale.max(0.1)))
+        .map(|(l, s)| (l.item_offset_pixels(0) / s, l.item_height_pixels(0) / s))
+        .filter(|&(_, pitch)| pitch > 0.0)
+        .unwrap_or((view::PROPS_PAD, view::ROW))
 }
 
 fn make() -> Box<dyn drawnui::App> {
@@ -3918,6 +3932,44 @@ mod shots {
     /// of `with_controls` (SkiaStack takes children).
     fn label_selected_state() -> App {
         with_controls(with_props())
+    }
+
+    /// The edit field lies over the edited row also after Properties was scrolled down to an unset
+    /// property under Others.
+    #[test]
+    fn the_edit_field_lies_on_its_row_after_a_scroll() {
+        let mut state = label_selected_state();
+        for i in 0..40 {
+            state.props.push(Prop { name: format!("P{i:02}"), type_name: "System.Double".into(), value: "1".into(), group: Some("Text".into()), ..Default::default() });
+        }
+        state.rebuild_prop_rows();
+        for scale in [1.0, 1.25, 1.5] {
+        let mut host = host_at(label_selected_state_with(&state), scale);
+        let list = host.rect(host.ui.state.props_scroll);
+        for _ in 0..6 {
+            host.wheel(list.center_x(), list.center_y(), -1.0);
+            host.settle();
+        }
+        host.ui.set_accessibility_enabled(true);
+        host.frame_after(drawnui::ACCESSIBILITY_INTERVAL_MS);
+        let row = host.ui.accessibility_nodes().iter().find(|n| n.role == Aria::LIST_ITEM && n.label.starts_with("P30")).map(|n| n.rect).expect("the P30 row is shown");
+        // Accessibility rects are in points, the host's in pixels.
+        let row = drawnui::skia::Rect::new(row.left * scale, row.top * scale, row.right * scale, row.bottom * scale);
+        let at = (list.left + 200.0 * scale, row.center_y());
+        host.pan(at, at, 16.0, 1);
+        host.frame_after(16.0);
+        assert_eq!(host.ui.state.edit_prop.as_deref(), Some("P30"), "at {scale}: row {row:?} list {list:?} offset {}", host.ui.state.props_offset);
+        let field = host.rect(host.ui.state.edit_overlay);
+        assert!((field.center_y() - row.center_y()).abs() < 2.0 * scale, "at {scale}: field {field:?} row {row:?}");
+        }
+    }
+
+    /// A copy of a fixture's props on a fresh fixture (App is not Clone).
+    fn label_selected_state_with(from: &App) -> App {
+        let mut state = label_selected_state();
+        state.props = from.props.clone();
+        state.rebuild_prop_rows();
+        state
     }
 
     fn label_selected() -> (Headless<App>, std::sync::Arc<std::sync::Mutex<Vec<EditorMsg>>>, std::sync::mpsc::Sender<Incoming>) {
@@ -5137,12 +5189,17 @@ mod shots {
     }
 
     fn host(state: App) -> Headless<App> {
+        host_at(state, 1.0)
+    }
+
+    /// The window at 1280 x 820 points drawn at `scale` (a display at 125 %, 150 %).
+    fn host_at(state: App, scale: f32) -> Headless<App> {
         let font = |name: &str| assets(&format!("assets/{name}")).expect("font file");
         let ui = Ui::new(state, view::build)
             .font_bytes("Default", &font("OpenSans-Regular.ttf"))
             .font_bytes("Semibold", &font("OpenSans-Semibold.ttf"))
             .background(view::window_background());
-        let mut host = Headless::new(keys(ui), 1280, 820, 1.0);
+        let mut host = Headless::new(keys(ui), (1280.0 * scale) as i32, (820.0 * scale) as i32, scale);
         host.ui.state.waker = Some(host.ui.waker());
         host.settle();
         host
