@@ -464,3 +464,4 @@ check-updates-hint = Pri pokretanju i jednom dnevno pita GitHub za noviju verzij
 # Actions (Screens panel)
 actions = Akcije
 action-run = Pokreni { $name }
+status-action-failed = { $name } nije uspelo: { $reason }

@@ -1366,8 +1366,9 @@ fn screens_panel(app: &mut App) -> Build<SkiaLayout> {
                                     }
                                 }
                                 Some(super::ScreenRow::Action(i)) => {
-                                    if let Some(action) = app.action(*i) {
-                                        app.send(HubToApp::RunAction { path: action.path.clone() });
+                                    if let Some(path) = app.action(*i).map(|a| a.path.clone()) {
+                                        app.running_action = Some(path.clone());
+                                        app.send(HubToApp::RunAction { path });
                                     }
                                 }
                                 _ => {}

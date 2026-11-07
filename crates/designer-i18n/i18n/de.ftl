@@ -460,3 +460,4 @@ check-updates-hint = Fragt GitHub beim Start und einmal am Tag nach einer neuere
 # Actions (Screens panel)
 actions = Aktionen
 action-run = { $name } ausführen
+status-action-failed = { $name } ist fehlgeschlagen: { $reason }

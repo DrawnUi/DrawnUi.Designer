@@ -464,3 +464,4 @@ check-updates-hint = При запуске и раз в день спрашив�
 # Actions (Screens panel)
 actions = Действия
 action-run = Выполнить { $name }
+status-action-failed = { $name }: ошибка: { $reason }

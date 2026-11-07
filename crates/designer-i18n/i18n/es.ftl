@@ -460,3 +460,4 @@ check-updates-hint = Pregunta a GitHub por una versión nueva al iniciar y una v
 # Actions (Screens panel)
 actions = Acciones
 action-run = Ejecutar { $name }
+status-action-failed = { $name } falló: { $reason }

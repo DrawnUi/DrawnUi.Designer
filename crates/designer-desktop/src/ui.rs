@@ -378,6 +378,8 @@ pub struct App {
     screens: Vec<Screen>,
     /// The actions each app declared for the designer, by app (kept for apps not shown).
     actions: std::collections::HashMap<AppId, Vec<designer_protocol::Action>>,
+    /// An action just run: an error the app sends before its next tree is that action's.
+    running_action: Option<String>,
     tree: Tree,
     /// Every shown control in tree order; `rows` is this minus what folded nodes hide.
     outline: Vec<Row>,
@@ -855,6 +857,7 @@ impl App {
             }
             Incoming::Hub(HubToEditor::FromApp { app, msg }) if Some(app) == self.app => match msg {
                 AppMsg::Tree(tree) => {
+                    self.running_action = None;
                     log(&format!("tree: {} nodes, revision {}", tree.nodes.len(), tree.revision));
                     self.tree_stale = false;
                     // The selection, or the one still waiting for its control (see `reselect`).
@@ -940,6 +943,11 @@ impl App {
                 }
                 AppMsg::Copied { request, spec } if self.copy_requests.contains_key(&request) => self.copied(request, spec),
                 AppMsg::Moved { request, node, parent, index } => self.moved_answer(request, node, parent, index),
+                AppMsg::Error { request: None, message } if self.running_action.is_some() => {
+                    let path = self.running_action.take().unwrap_or_default();
+                    self.status = i18n::tr_args("status-action-failed", &[("name", action_name(&path).to_owned().into()), ("reason", message.into())]);
+                    self.status_error = true;
+                }
                 AppMsg::Error { request: Some(request), message } if self.tree_requests.remove(&request) => {
                     self.copy_requests.remove(&request);
                     self.status = i18n::tr_args("status-app-refused", &[("reason", message.into())]);
@@ -4008,6 +4016,10 @@ mod shots {
         host.pan(at, at, 16.0, 1);
         host.frame_after(16.0);
         assert!(sent.lock().unwrap().iter().any(|m| matches!(m, EditorMsg::ToApp { msg: HubToApp::RunAction { path }, .. } if path == "Levels/Level 2")), "{:?}", sent.lock().unwrap());
+        // The app could not run it: the status bar says why.
+        feed(&mut host, &to_ui, HubToEditor::FromApp { app, msg: AppMsg::Error { request: None, message: "no level 2 yet".into() } });
+        assert_eq!(host.ui.state.status, "Level 2 failed: no level 2 yet");
+        assert!(host.ui.state.status_error);
     }
 
     /// The edit field lies over the edited row also after Properties was scrolled down to an unset

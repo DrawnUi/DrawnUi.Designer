@@ -461,3 +461,4 @@ check-updates-hint = Asks GitHub for a newer release at start and once a day. No
 # Actions (Screens panel)
 actions = Actions
 action-run = Run { $name }
+status-action-failed = { $name } failed: { $reason }

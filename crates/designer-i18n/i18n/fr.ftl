@@ -460,3 +460,4 @@ check-updates-hint = Demande à GitHub s’il existe une version plus récente a
 # Actions (Screens panel)
 actions = Actions
 action-run = Lancer { $name }
+status-action-failed = { $name } a échoué : { $reason }
