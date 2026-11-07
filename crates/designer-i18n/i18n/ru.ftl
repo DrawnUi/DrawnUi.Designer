@@ -442,8 +442,9 @@ unwritten-skip-run = Запустить без записи
 unwritten-write-close = Записать и закрыть
 unwritten-skip-close = Закрыть без записи
 unwritten-failed-title = { $count ->
-    [one] { $count } изменение не удалось записать в код (см. строку состояния).
-    [few] { $count } изменения не удалось записать в код (см. строку состояния).
-   *[other] { $count } изменений не удалось записать в код (см. строку состояния).
+    [one] { $count } изменение не удалось записать в код:
+    [few] { $count } изменения не удалось записать в код:
+   *[other] { $count } изменений не удалось записать в код:
 }
+unwritten-more-reasons = и ещё { $count }
 unwritten-cancel = Отмена

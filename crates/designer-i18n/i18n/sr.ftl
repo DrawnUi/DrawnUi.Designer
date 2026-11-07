@@ -442,8 +442,9 @@ unwritten-skip-run = Pokreni bez upisa
 unwritten-write-close = Upiši ih, pa zatvori
 unwritten-skip-close = Zatvori bez upisa
 unwritten-failed-title = { $count ->
-    [one] { $count } izmenu nije moguće upisati u kod (vidi statusnu liniju).
-    [few] { $count } izmene nije moguće upisati u kod (vidi statusnu liniju).
-   *[other] { $count } izmena nije moguće upisati u kod (vidi statusnu liniju).
+    [one] { $count } izmenu nije moguće upisati u kod:
+    [few] { $count } izmene nije moguće upisati u kod:
+   *[other] { $count } izmena nije moguće upisati u kod:
 }
+unwritten-more-reasons = i još { $count }
 unwritten-cancel = Otkaži

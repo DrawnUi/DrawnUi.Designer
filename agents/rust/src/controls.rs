@@ -253,7 +253,7 @@ pub fn insert(t: &mut Tree, parent: ControlId, index: Option<u32>, type_name: &s
 /// itself (a button's caption, an editor's text: `Tree::is_internal`, which `Cx::app_children`
 /// still lists). A container has none of those (the containers test), so indexes into one match
 /// the engine's.
-fn app_children(t: &mut Tree, id: ControlId) -> Vec<ControlId> {
+pub(crate) fn app_children(t: &mut Tree, id: ControlId) -> Vec<ControlId> {
     let all = t.cx().app_children(id);
     all.into_iter().filter(|&c| !t.is_internal(c)).collect()
 }

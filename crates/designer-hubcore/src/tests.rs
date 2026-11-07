@@ -1167,3 +1167,63 @@ fn writes_are_taken_back_in_any_order() {
     }
     assert_eq!(store.text("/demo/Page.cs"), page);
 }
+
+const RUST_SAMPLE: &str = include_str!("../../../agents/rust/sample/src/main.rs");
+
+/// One batch (Write all, a restart's writes) on the Rust sample, each write's work still running
+/// when the next is sent, as on the desktop: a copy put into the swatches' tuple first, then the
+/// colors of the swatches after it. Each later write waits for the one before and is matched with
+/// the code as that one left it: the colors land on coral and green (its color argument), not one
+/// control to the left.
+#[test]
+fn writes_of_one_batch_wait_for_the_one_before() {
+    let store = MemStore::with(&[("/app/src/main.rs", RUST_SAMPLE)]);
+    let mut core = HubCore::new(store.clone());
+    let (editor, _) = core.editor_hello(PROTOCOL_VERSION).unwrap();
+    let (app, _) = core.app_hello(AppInfo { engine: "rust".into(), ..info("app", 1, Some("/app/Cargo.toml")) }).unwrap();
+    let n = |id, parent, t: &str| Node { id, parent, type_name: t.into(), ..Default::default() };
+    let kinds = [
+        (1, None, "SkiaLayout"), (2, Some(1), "SkiaLabel"), (3, Some(1), "SkiaLabel"), (4, Some(1), "SkiaLayout"),
+        (5, Some(4), "SkiaShape"), (6, Some(4), "SkiaShape"), (7, Some(4), "SkiaShape"), (8, Some(1), "SkiaShape"),
+        (9, Some(8), "SkiaLayout"), (10, Some(9), "SkiaLabel"), (11, Some(9), "SkiaLabel"), (12, Some(1), "SkiaLayout"),
+        (13, Some(12), "SkiaButton"), (14, Some(12), "SkiaButton"), (15, Some(1), "SkiaLayout"), (16, Some(15), "SkiaSwitch"), (17, Some(15), "SkiaLabel"),
+    ];
+    let mut tree = Tree { revision: 1, nodes: kinds.iter().map(|&(id, p, t)| n(id, p, t)).collect(), ..Default::default() };
+    ap(&mut core, app, AppMsg::Tree(tree.clone()));
+    for id in [6, 7] {
+        ap(&mut core, app, AppMsg::Props { node: id, props: vec![prop("background_color", "drawnui.skia.Color", "#FF000000")] });
+    }
+    // A shape added live after blue.
+    ed(&mut core, editor, EditorMsg::ToApp { app, msg: HubToApp::Insert { request: 1, parent: 4, index: Some(1), type_name: "SkiaShape".into(), props: vec![], children: vec![] } });
+    ap(&mut core, app, AppMsg::Inserted { request: 1, node: Some(100), parent: Some(4), index: Some(1) });
+    tree.nodes.insert(5, n(100, Some(4), "SkiaShape"));
+    tree.revision = 2;
+    ap(&mut core, app, AppMsg::Tree(tree));
+    // The batch: all sent before the first one's work has run.
+    let mut works = vec![core.editor_msg(editor, EditorMsg::InsertCode { request: 2, app, node: 100, parent: 4, index: 0, type_name: "SkiaShape".into(), defaults: vec![], spec: None })];
+    for (request, node, value) in [(3, 6, "#FF010203"), (4, 7, "#FF040506")] {
+        works.push(core.editor_msg(editor, EditorMsg::SetCode { request, app, node, prop: "background_color".into(), value: value.into() }));
+    }
+    let mut answers = vec![];
+    for outs in works {
+        answers.extend(core.run_inline(outs));
+    }
+    let edited = to_editor(&answers, editor).iter().filter(|m| matches!(m, HubToEditor::CodeEdited { .. })).count();
+    assert_eq!(edited, 3, "{answers:?}");
+    let code = store.text("/app/src/main.rs");
+    assert!(code.contains(r#"swatch(ACCENT, "blue"), SkiaShape::new(), swatch(CORAL, "coral").background_color(Color::from_rgb(1, 2, 3)), swatch(Color::from_rgb(4, 5, 6), "green")"#), "{code}");
+}
+
+#[test]
+fn zz_probe_undo_written_insert() {
+    let mut s = Session::new();
+    s.insert(10, 2, 1, 20, "N");
+    assert!(edited(&s.write_insert(11, 20, 2)));
+    assert!(matches!(s.undo(11), HubToEditor::CodeUndone { .. }));
+    let outs = ed(&mut s.core, s.editor, EditorMsg::ToApp { app: s.app, msg: HubToApp::Remove { request: 12, node: 20 } });
+    println!("REMOVE OUTS {outs:?}");
+    s.tree.nodes.retain(|n| n.id != 20);
+    let t = s.tree.clone();
+    let outs = ap(&mut s.core, s.app, AppMsg::Tree(t));
+    println!("TREE OUTS {:?}", outs.iter().filter(|o| !matches!(o, Out::ToEditor(_, HubToEditor::FromApp { .. }))).collect::<Vec<_>>());
+}

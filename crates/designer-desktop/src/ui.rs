@@ -388,6 +388,8 @@ pub struct App {
     confirm: Option<writes::AfterFlush>,
     /// The question is about changes a flush could not write (it offers no Write).
     confirm_failed: bool,
+    /// Why they could not be written (the refusals of that flush), shown in the question.
+    failed_reasons: Vec<String>,
     /// A flush of the changes not in code on its way.
     flushing: Option<writes::Flush>,
     /// Writes of a flush: their request, the flush's one step of the history.
@@ -1008,6 +1010,9 @@ impl App {
             }
             Incoming::Hub(HubToEditor::CodeRefused { request, reason, refusal, .. }) => {
                 let reason = refusal.map_or(reason, |r| i18n::tr_pairs(&r.key, &r.args));
+                if let Some(f) = self.flushing.as_mut().filter(|f| f.requests.contains(&request) && !f.reasons.contains(&reason)) {
+                    f.reasons.push(reason.clone());
+                }
                 (self.history_quiet.remove(&request), self.keep_live.remove(&request), self.write_groups.remove(&request));
                 if let Some((node, prop, before)) = self.undo_requests.remove(&request) {
                     // Still in the code: Undo can try again.
@@ -1705,7 +1710,7 @@ impl App {
     /// Builds and starts a recent app with the designer attached; the changes not in code are written
     /// first (Auto, Always) or the designer asks (Manual).
     fn run_project(&mut self, project: String, cx: &mut Cx) {
-        if self.runs.contains_key(&project) {
+        if self.run_underway(&project) {
             return; // already on its way
         }
         if !self.changes_first(writes::AfterFlush::Run(project.clone()), cx) {
@@ -1713,8 +1718,13 @@ impl App {
         }
     }
 
+    /// A run of `project` is building or starting (a failed one is over: Run tries again).
+    pub(crate) fn run_underway(&self, project: &str) -> bool {
+        self.runs.get(project).is_some_and(|(state, _)| *state != designer_protocol::RunState::Failed)
+    }
+
     pub(crate) fn run_now(&mut self, project: String, cx: &mut Cx) {
-        if self.runs.contains_key(&project) {
+        if self.run_underway(&project) {
             return;
         }
         self.runs.insert(project.clone(), (designer_protocol::RunState::Building, String::new()));
@@ -1727,8 +1737,9 @@ impl App {
     /// Stops a connected app and runs it again (rebuilt, with the designer attached); the changes
     /// not in code are written first (Auto, Always) or the designer asks (Manual).
     fn restart_pill(&mut self, _cell: usize, cx: &mut Cx) {
+        // No app connected (its restart failed to build): Restart runs the app the pill shows.
         if self.apps.get(self.pill_slot()).is_none() {
-            return;
+            return self.tap_pill(0, cx);
         }
         if !self.changes_first(writes::AfterFlush::Restart, cx) {
             self.restart_now(cx);
@@ -6047,6 +6058,9 @@ mod shots {
         feed(&mut host, &to_ui, HubToEditor::CodeRefused { request: writes[1].0, node: writes[1].1, reason: refusal.to_string(), refusal: Some(refusal) });
         assert_eq!(restarts(&sent), 0, "not restarted");
         assert!(host.ui.state.confirm.is_some() && host.ui.state.confirm_failed && host.ui.state.unwritten_count() == 1);
+        // The question says why, itself.
+        let why = i18n::tr_pairs("src-not-literal", &[("key".into(), "x".into())]);
+        assert_eq!(host.ui.state.failed_reasons, [why]);
         let skip = at_label(&mut host, "Restart without writing");
         host.tap(skip.0, skip.1);
         frames(&mut host, 3);
@@ -6090,6 +6104,39 @@ mod shots {
         assert_eq!(notice(&mut host), None, "this designer's hub");
     }
 
+    /// A run whose build failed is over: the status bar names the app and the first error (all of
+    /// it, with where the full output is, in its tooltip), and Run, the pill and Ctrl+R (no app
+    /// connected) run it again at once.
+    #[test]
+    fn a_failed_run_says_why_and_runs_again() {
+        let mut state = with_props();
+        state.apps.clear();
+        state.app = None;
+        let project = "C:/apps/sample/Cargo.toml".to_owned();
+        state.recent = vec![designer_protocol::RecentApp { name: "designer-agent-sample".into(), engine: "rust".into(), project: project.clone(), agent: None, last_seen: 0, platform: None }];
+        let (mut host, sent, to_ui) = wired(state);
+        host.ui.set_accessibility_enabled(true);
+        let runs = |sent: &std::sync::Arc<std::sync::Mutex<Vec<EditorMsg>>>| sent.lock().unwrap().iter().filter(|m| matches!(m, EditorMsg::RunApp { .. })).count();
+        host.key_down("KeyR", ctrl(false));
+        host.settle();
+        assert_eq!(runs(&sent), 1, "Ctrl+R runs the pill's app");
+        let refusal = designer_protocol::Refusal::new("run-build-failed", &[]);
+        let message = format!("{refusal}:
+error[E0433]: failed to resolve: use of undeclared type `Cow`
+full output: C:/logs/designer-agent-sample.log");
+        feed(&mut host, &to_ui, HubToEditor::AppRunState { project: project.clone(), state: designer_protocol::RunState::Failed, message, refusal: Some(refusal) });
+        host.frame_after(drawnui::ACCESSIBILITY_INTERVAL_MS);
+        let labels: Vec<String> = host.ui.accessibility_nodes().iter().map(|n| n.label.clone()).collect();
+        assert!(labels.iter().any(|l| l.contains("full output: C:/logs/designer-agent-sample.log")), "the whole failure for a screen reader: {labels:?}");
+        assert!(labels.iter().any(|l| l == "Run designer-agent-sample"), "the big button runs again: {labels:?}");
+        host.key_down("KeyR", ctrl(false));
+        host.settle();
+        assert_eq!(runs(&sent), 2, "Ctrl+R again");
+        assert_eq!(super::view::first_reason("the build failed:
+error[E0433]: no `Cow`
+more"), "the build failed: error[E0433]: no `Cow`");
+    }
+
     /// On macOS Backspace and Command+Backspace delete the selected control; elsewhere Backspace
     /// is no menu key.
     #[test]
@@ -6128,6 +6175,43 @@ mod shots {
         feed(&mut host, &to_ui, HubToEditor::FromApp { app: 1, msg: AppMsg::Tree(after) });
         assert_eq!(host.ui.state.rows.len(), before, "the copy's row went: {:?}", host.ui.state.rows.iter().map(|r| host.ui.state.tree.nodes[r.node].id).collect::<Vec<_>>());
         assert!(!host.ui.state.rows.iter().any(|r| host.ui.state.tree.nodes[r.node].id == 9001));
+    }
+
+    /// The same with the copy written to code first: Undo takes it out of the code, then out of the
+    /// app, and the tree after that has its row no more.
+    #[test]
+    fn undo_of_a_written_duplicate_takes_its_row_away() {
+        let (mut host, sent, to_ui) = label_selected();
+        let before = host.ui.state.rows.len();
+        host.key_down("KeyD", ctrl(false));
+        frames(&mut host, 2);
+        answer_copy(&mut host, &sent, &to_ui, 117, chip());
+        let Some(HubToApp::Insert { request, .. }) = last_insert(&sent) else { panic!() };
+        let mut tree = host.ui.state.tree.clone();
+        let at = tree.nodes.iter().position(|n| n.id == 117).unwrap();
+        tree.nodes.insert(at + 1, Node { id: 9001, parent: Some(116), type_name: "DrawnUi.Draw.SkiaShape".into(), visible: true, rect: [0.0, 0.0, 10.0, 10.0], ..Default::default() });
+        let without = host.ui.state.tree.clone();
+        feed(&mut host, &to_ui, HubToEditor::FromApp { app: 1, msg: AppMsg::Inserted { request, node: Some(9001), parent: Some(116), index: Some(1) } });
+        tree.revision += 1;
+        feed(&mut host, &to_ui, HubToEditor::FromApp { app: 1, msg: AppMsg::Tree(tree) });
+        sent.lock().unwrap().clear();
+        let (x, y) = row_at(row_of(&host, 9001));
+        host.tap(x, y);
+        let write = at_label(&mut host, "Write SkiaShape to code");
+        host.pan(write, write, 16.0, 1);
+        host.frame_after(16.0);
+        let written = sent.lock().unwrap().iter().find_map(|m| if let EditorMsg::InsertCode { request, node: 9001, .. } = m { Some(*request) } else { None }).expect("InsertCode");
+        feed(&mut host, &to_ui, HubToEditor::CodeEdited { request: written, node: 116, uri: "Page.cs".into(), range: Default::default() });
+        sent.lock().unwrap().clear();
+        host.key_down("KeyZ", ctrl(false));
+        frames(&mut host, 3);
+        assert!(sent.lock().unwrap().contains(&EditorMsg::UndoCode { request: written }), "{:?}", sent.lock().unwrap());
+        feed(&mut host, &to_ui, HubToEditor::CodeUndone { request: written, uri: "Page.cs".into() });
+        assert!(sent.lock().unwrap().iter().any(|m| matches!(m, EditorMsg::ToApp { msg: HubToApp::Remove { node: 9001, .. }, .. })), "{:?}", sent.lock().unwrap());
+        let mut after = without;
+        after.revision += 2;
+        feed(&mut host, &to_ui, HubToEditor::FromApp { app: 1, msg: AppMsg::Tree(after) });
+        assert_eq!(host.ui.state.rows.len(), before, "the copy's row went");
     }
 
     /// A page's code.flush: Auto writes and answers once the writes are done; Manual answers at

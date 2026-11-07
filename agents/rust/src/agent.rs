@@ -584,6 +584,11 @@ fn set_property(t: &mut drawnui::Tree, id: ControlId, name: &str, value: &str) -
     t.set_prop(id, name, &value)
 }
 
+#[cfg(test)]
+pub(crate) fn set_property_for_tests(t: &mut drawnui::Tree, id: ControlId, name: &str, value: &str) -> Result<(), String> {
+    set_property(t, id, name, value)
+}
+
 /// The app's controls are there and laid out: the root has a child drawn somewhere.
 fn tree_ready(t: &drawnui::Tree) -> bool {
     let laid_out = |id: ControlId| t.drawn_rect(id).is_some_and(|r| !r.is_empty());
@@ -640,8 +645,9 @@ pub(crate) fn prop(p: drawnui::designer::PropInfo) -> Prop {
         "f64" => "System.Double",
         "i32" => "System.Int32",
         "u32" | "usize" => "System.Int64",
-        "bool" => "System.Boolean",
-        "String" | "Cow<'static, str>" => "System.String",
+        "bool" | "Option<bool>" => "System.Boolean",
+        // The engine names a borrowed string with its path (`std::borrow::Cow<'static, str>`).
+        t if t == "String" || t.ends_with("Cow<'static, str>") && !t.starts_with("Option<") => "System.String",
         "Color" | "Option<Color>" => "drawnui.skia.Color",
         // `crate::controls::button::SkiaTouchAnimation` reads as the type's own name.
         other if !other.contains('<') => other.rsplit("::").next().unwrap_or(other),

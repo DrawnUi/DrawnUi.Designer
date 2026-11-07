@@ -123,13 +123,17 @@ pub struct HubCore {
     /// Request ids of the hub's own messages to apps (live changes put back): from 2^31 up, apart
     /// from the editors' and the shell's.
     next_request: u32,
-    /// Code writes and undos held while the store is busy, in the order the editors sent them.
+    /// Code writes and undos held while the store is busy or a write is on its way, in the order
+    /// the editors sent them.
     held: std::collections::VecDeque<(u32, EditorMsg)>,
+    /// Writes and undos whose work has not finished: the next one waits, so it is matched with the
+    /// code (and the record of live changes) as the one before left it.
+    writing: usize,
 }
 
 impl HubCore {
     pub fn new(store: Arc<dyn CodeStore>) -> Self {
-        Self { apps: HashMap::new(), recent: vec![], devices: None, cables: (0, 0), next_id: 0, known: HashMap::new(), editors: HashSet::new(), written: HashMap::new(), code: Arc::default(), store, page_project: None, next_request: 1 << 31, held: Default::default() }
+        Self { apps: HashMap::new(), recent: vec![], devices: None, cables: (0, 0), next_id: 0, known: HashMap::new(), editors: HashSet::new(), written: HashMap::new(), code: Arc::default(), store, page_project: None, next_request: 1 << 31, held: Default::default(), writing: 0 }
     }
 
     pub fn store(&self) -> Arc<dyn CodeStore> {
@@ -322,12 +326,34 @@ impl HubCore {
     pub fn editor_msg(&mut self, editor: u32, msg: EditorMsg) -> Vec<Out> {
         // A page has not taken the last edit: this write waits its turn, made against the text the
         // page sends next (never against offsets that are stale by then).
-        let write = matches!(msg, EditorMsg::SetCode { .. } | EditorMsg::InsertCode { .. } | EditorMsg::RemoveCode { .. } | EditorMsg::MoveCode { .. } | EditorMsg::UndoCode { .. });
-        if write && (self.store.busy() || !self.held.is_empty()) {
+        // A write still running (its work on the hub's thread) goes first the same way.
+        if is_write(&msg) && (self.store.busy() || self.writing > 0 || !self.held.is_empty()) {
             self.held.push_back((editor, msg));
             return vec![];
         }
-        self.editor_msg_now(editor, msg)
+        self.send_now(editor, msg)
+    }
+
+    /// [`Self::editor_msg_now`], counting the writes it starts.
+    fn send_now(&mut self, editor: u32, msg: EditorMsg) -> Vec<Out> {
+        let write = is_write(&msg);
+        let outs = self.editor_msg_now(editor, msg);
+        if write {
+            self.writing += outs.iter().filter(|o| matches!(o, Out::Work(_))).count();
+        }
+        outs
+    }
+
+    /// The held writes that may go now: one at a time, each once the one before has finished.
+    fn release(&mut self) -> Vec<Out> {
+        let mut outs = vec![];
+        while !self.store.busy()
+            && self.writing == 0
+            && let Some((editor, msg)) = self.held.pop_front()
+        {
+            outs.extend(self.send_now(editor, msg));
+        }
+        outs
     }
 
     fn editor_msg_now(&mut self, editor: u32, msg: EditorMsg) -> Vec<Out> {
@@ -517,7 +543,9 @@ impl HubCore {
                 }
                 vec![Out::ToEditor(None, HubToEditor::MadeBy { app, revision, names: told })]
             }
-            Finished::Written { editor, request, node, result, change } => match result {
+            Finished::Written { editor, request, node, result, change } => {
+                self.writing = self.writing.saturating_sub(1);
+                let mut out = match result {
                 Ok((uri, range, mut written)) => {
                     if let Some((app, c)) = &change
                         && let Some(a) = self.apps.get_mut(app)
@@ -530,8 +558,14 @@ impl HubCore {
                     vec![Out::ToEditor(Some(editor), HubToEditor::CodeEdited { request, node, uri, range })]
                 }
                 Err(refusal) => vec![refused(editor, request, node, refusal)],
-            },
-            Finished::Undone { editor, request, written, result } => match result {
+                };
+                // The next held write, against the code as this one left it.
+                out.extend(self.release());
+                out
+            }
+            Finished::Undone { editor, request, written, result } => {
+                self.writing = self.writing.saturating_sub(1);
+                let mut out = match result {
                 Ok(()) => {
                     self.shift_written(&written.path, written.at, written.after.len(), written.before.len());
                     if let Some((app, c)) = &written.change
@@ -547,7 +581,10 @@ impl HubCore {
                     self.keep(editor, request, written);
                     vec![refused(editor, request, 0, refusal)]
                 }
-            },
+                };
+                out.extend(self.release());
+                out
+            }
         }
     }
 
@@ -556,14 +593,8 @@ impl HubCore {
     /// The store took its last write (a page sent its code): the held writes go, one by one while
     /// the store is free, each against the code as it is now. Their work runs inline (a page hub).
     pub fn code_arrived(&mut self) -> Vec<Out> {
-        let mut sent = vec![];
-        while !self.store.busy()
-            && let Some((editor, msg)) = self.held.pop_front()
-        {
-            let outs = self.editor_msg_now(editor, msg);
-            sent.extend(self.run_inline(outs));
-        }
-        sent
+        let outs = self.release();
+        self.run_inline(outs)
     }
 
     pub fn run_inline(&mut self, outs: Vec<Out>) -> Vec<Out> {
@@ -715,6 +746,11 @@ pub fn read_sources(store: &dyn CodeStore, dir: &Path) -> Vec<SourceFile> {
         out.push(SourceFile { uri, text, bom: bytes.starts_with(&[0xEF, 0xBB, 0xBF]), bytes });
     }
     out
+}
+
+/// A write to code or its undo.
+fn is_write(msg: &EditorMsg) -> bool {
+    matches!(msg, EditorMsg::SetCode { .. } | EditorMsg::InsertCode { .. } | EditorMsg::RemoveCode { .. } | EditorMsg::MoveCode { .. } | EditorMsg::UndoCode { .. })
 }
 
 /// One code edit as written: the file and the one span that changed, before and after.

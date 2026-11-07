@@ -21,6 +21,8 @@ tungstenite = { version = "0.28", default-features = false, features = ["handsha
 [dev-dependencies]
 drawnui = { version = "0.1.0-preview.33", features = ["designer", "hot-reload"] }
 serde = { version = "1", features = ["derive"] }
+# Copies of the sample's controls written by the designer's code writer must compile (copies_compile.rs).
+designer-sources = { path = "../../crates/designer-sources" }
 
 # Its own workspace, out of the ToolBox root one: the root's drawnui pin (designer-desktop) does not move.
 [workspace]

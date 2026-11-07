@@ -162,8 +162,9 @@ impl Cmd {
     pub(crate) fn enabled(self, app: &App) -> bool {
         match self {
             Cmd::Run => !app.recent.is_empty(),
-            Cmd::Recent(i) => app.recent.get(i).is_some_and(|r| !app.runs.contains_key(&r.project)),
-            Cmd::Restart => app.apps.get(app.pill_slot()).is_some_and(|a| a.info.project.is_some()),
+            Cmd::Recent(i) => app.recent.get(i).is_some_and(|r| !app.run_underway(&r.project)),
+            // No app connected: Restart runs the one the pill shows (after a failed build).
+            Cmd::Restart => app.apps.get(app.pill_slot()).map_or(!app.recent.is_empty(), |a| a.info.project.is_some()),
             Cmd::Act(a) => app.action_enabled(a),
             Cmd::Pick => app.app.is_some(),
             _ => true,

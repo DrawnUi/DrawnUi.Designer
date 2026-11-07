@@ -1808,7 +1808,7 @@ fn layers_panel(app: &mut App) -> Build<SkiaLayout> {
                             icon(icons::PLAY, 14.0, ON_ACCENT),
                             bold(12.0, ON_ACCENT).observe(|me, app: &App| {
                                 let text = match app.recent.first() {
-                                    Some(r) if app.runs.contains_key(&r.project) => tr_args("app-starting-name", &[("name", r.name.clone().into())]),
+                                    Some(r) if app.run_underway(&r.project) => tr_args("app-starting-name", &[("name", r.name.clone().into())]),
                                     Some(r) => tr_args("app-run", &[("name", r.name.clone().into())]),
                                     None => String::new(),
                                 };
@@ -2467,6 +2467,15 @@ pub fn unwritten_menu(app: &App) -> Build<SkiaShape> {
     // After a flush that could not write them all: no Write, only on without them, or stay.
     let title = tr_args(if app.confirm_failed { "unwritten-failed-title" } else { "unwritten-title" }, &[("count", app.unwritten_count().into())]);
     let mut rows = vec![SkiaShape::new().fill_x().padding((10, 6)).accessibility_role(Aria::PRESENTATION).children(text(12.0, MUTED).text(title.clone()))];
+    // Why, the first few (each on up to three lines).
+    let shown = if app.confirm_failed { &app.failed_reasons[..app.failed_reasons.len().min(3)] } else { &[] };
+    for reason in shown {
+        rows.push(SkiaShape::new().fill_x().padding((10, 2, 10, 4)).accessibility_role(Aria::PRESENTATION).children(text(11.0, ERROR).fill_x().max_lines(3).text(format!("• {reason}"))));
+    }
+    if app.confirm_failed && app.failed_reasons.len() > shown.len() {
+        let more = tr_args("unwritten-more-reasons", &[("count", (app.failed_reasons.len() - shown.len()).into())]);
+        rows.push(SkiaShape::new().fill_x().padding((10, 2, 10, 4)).accessibility_role(Aria::PRESENTATION).children(text(11.0, MUTED).text(more)));
+    }
     if !app.confirm_failed {
         rows.push(menu_item(tr(write), |_| false, |app, cx| app.answer_unwritten(true, cx)));
     }
@@ -2477,8 +2486,22 @@ pub fn unwritten_menu(app: &App) -> Build<SkiaShape> {
             app.close_popup(cx);
         }),
     ]).collect();
-    let longest = [title.chars().count(), tr(write).chars().count(), tr(skip).chars().count()].into_iter().max().unwrap_or(20);
-    menu_panel(rows, menu_width(longest)).accessibility_label(title)
+    // The reasons wrap at about 60 characters.
+    let wide = if shown.is_empty() { 0 } else { 60 };
+    let longest = [title.chars().count(), tr(write).chars().count(), tr(skip).chars().count(), wide].into_iter().max().unwrap_or(20);
+    let label = std::iter::once(title).chain(shown.iter().cloned()).collect::<Vec<_>>().join(". ");
+    menu_panel(rows, menu_width(longest)).accessibility_label(label)
+}
+
+/// A run failure's first line, and when it only leads into the build's error lines ("the build
+/// failed:"), the first of them with it.
+pub(crate) fn first_reason(message: &str) -> String {
+    let mut lines = message.lines().map(str::trim).filter(|l| !l.is_empty());
+    let first = lines.next().unwrap_or_default();
+    match first.strip_suffix(':') {
+        Some(head) => lines.next().map_or_else(|| head.to_owned(), |next| format!("{head}: {next}")),
+        None => first.to_owned(),
+    }
 }
 
 /// The bottom line: the link to the hub and how many apps are connected.
@@ -2522,8 +2545,10 @@ fn status_bar() -> Build<SkiaLayout> {
             text(11.0, ERROR).max_lines(1).accessibility_role(Aria::STATUS).observe(|me, app: &App| {
                 let failed = app.runs.iter().find(|(_, (state, _))| *state == designer_protocol::RunState::Failed);
                 me.set_text(failed.map_or(String::new(), |(project, (_, message))| {
-                    let name = std::path::Path::new(project).file_name().map_or(project.clone(), |n| n.to_string_lossy().into_owned());
-                    format!("·  {}", tr_args("status-run-failed", &[("name", name.into()), ("message", message.lines().next().unwrap_or_default().to_owned().into())]))
+                    // The app's name (a Rust app's project is its Cargo.toml), else the project file's.
+                    let name = app.recent.iter().find(|r| r.project == *project).map(|r| r.name.clone()).or_else(|| app.apps.iter().find(|a| a.info.project.as_deref() == Some(project.as_str())).map(|a| a.info.name.clone()));
+                    let name = name.unwrap_or_else(|| std::path::Path::new(project).file_name().map_or(project.clone(), |n| n.to_string_lossy().into_owned()));
+                    format!("·  {}", tr_args("status-run-failed", &[("name", name.into()), ("message", first_reason(message).into())]))
                 }));
                 // Every line of the failure in its tooltip and for a screen reader.
                 let full = failed.map_or(String::new(), |(_, (_, message))| message.clone());

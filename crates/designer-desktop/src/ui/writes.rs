@@ -67,6 +67,8 @@ pub(crate) struct Flush {
     pub requests: std::collections::HashSet<u32>,
     pub written: usize,
     pub then: Vec<AfterFlush>,
+    /// Why the writes refused were refused, in the order they came (each once).
+    pub reasons: Vec<String>,
 }
 
 impl App {
@@ -116,7 +118,7 @@ impl App {
             }
         }
         let done = requests.is_empty();
-        self.flushing = Some(Flush { requests, written: 0, then });
+        self.flushing = Some(Flush { requests, written: 0, then, reasons: vec![] });
         if done {
             self.finish_flush(cx);
         }
@@ -151,16 +153,17 @@ impl App {
                 AfterFlush::Page(request) => self.post_page(serde_json::json!({ "type": "code.flushed", "request": request, "written": f.written, "left": left })),
                 // Changes that could not be written are never dropped without asking: restart,
                 // run or close anyway, or stay.
-                other if left > 0 && self.confirm.is_none() => self.ask_failed(other, cx),
+                other if left > 0 && self.confirm.is_none() => self.ask_failed(other, f.reasons.clone(), cx),
                 other => self.go_on(other, cx),
             }
         }
     }
 
-    /// After a flush that left changes not written: the question without a Write.
-    fn ask_failed(&mut self, then: AfterFlush, cx: &mut Cx) {
+    /// After a flush that left changes not written: the question without a Write, with why.
+    fn ask_failed(&mut self, then: AfterFlush, reasons: Vec<String>, cx: &mut Cx) {
         self.ask_unwritten(then, cx);
         self.confirm_failed = true;
+        self.failed_reasons = reasons;
         if let Some(popup) = self.popup.take() {
             cx.close_popup_window(popup);
         }

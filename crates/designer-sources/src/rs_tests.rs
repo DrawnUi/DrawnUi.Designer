@@ -410,3 +410,11 @@ fn a_copy_of_a_helper_made_control_is_the_call_again() {
     let after = crate::insert_text(&files, &tree, 4, 3, &call).unwrap().text;
     changed(SAMPLE, &after, "", r#", swatch(ACCENT, "blue")"#);
 }
+
+/// A Rust generic type is never an enum: no `Cow::heading` from a value of `Cow<'static, str>`.
+#[test]
+fn a_generic_type_is_no_case() {
+    assert!(crate::value_from_runtime("std::borrow::Cow<'static, str>", "heading", "heading").is_err());
+    assert!(crate::value_from_runtime("Option<Thickness>", "none", "none").is_err());
+    assert!(crate::value_from_runtime("LayoutType", "Column", "Row").is_ok());
+}

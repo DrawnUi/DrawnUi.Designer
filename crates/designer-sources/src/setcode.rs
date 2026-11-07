@@ -55,8 +55,9 @@ pub fn value_from_runtime(type_name: &str, current: &str, text: &str) -> Result<
         _ if !type_name.starts_with("System.") && short == "Thickness" => {
             parse_thickness(t).map(PropValue::Thickness).ok_or_else(|| Refusal::new("src-not-thickness", &[("text", &t)]))
         }
-        // Types without their own ToString show their type name: not a case.
-        _ if !type_name.starts_with("System.") && is_ident(current) && current != short && is_ident(t) => {
+        // Types without their own ToString show their type name: not a case. A generic type
+        // (`Cow<'static, str>`, Rust) is never an enum.
+        _ if !type_name.starts_with("System.") && !type_name.contains('<') && is_ident(current) && current != short && is_ident(t) => {
             plain(SourceEditValue::Case { name: format!("{short}.{t}") })
         }
         _ => Err(Refusal::new("src-type-unsupported", &[("type", &type_name)])),

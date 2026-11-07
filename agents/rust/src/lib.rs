@@ -24,6 +24,8 @@ mod controls;
 mod link;
 #[cfg(target_os = "emscripten")]
 pub mod page;
+#[cfg(all(test, not(target_os = "emscripten")))]
+mod copies_compile;
 
 /// `attach(ui, env!("CARGO_MANIFEST_DIR"))`: the app's own crate folder is the project the designer shows.
 #[macro_export]

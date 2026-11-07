@@ -292,7 +292,9 @@ fn start(hub: &Shared, project: &str) -> Result<(), Refusal> {
     forward_lines(child.stdout.take(), tx.clone());
     forward_lines(child.stderr.take(), tx);
     let hub = hub.clone();
+    let full = log.as_ref().map(|l| l.display().to_string());
     tokio::spawn(async move {
+        let failure = |what: Refusal, errors: &[String], tail: &[String]| failure(what, errors, tail, full.as_deref());
         let mut log = log.and_then(|l| {
             let _ = std::fs::create_dir_all(l.parent()?);
             std::fs::File::create(l).ok()
@@ -429,9 +431,12 @@ fn update(hub: &Shared, project: &str, generation: u64, state: RunState, message
 
 /// What failed (an editor shows it in its language) and the full message with the build's last error
 /// lines under it (AI agents and the log read those).
-fn failure(what: Refusal, errors: &[String], tail: &[String]) -> (String, Option<Refusal>) {
+fn failure(what: Refusal, errors: &[String], tail: &[String], log: Option<&str>) -> (String, Option<Refusal>) {
     let lines = if errors.is_empty() { tail } else { &errors[errors.len().saturating_sub(10)..] };
-    let message = if lines.is_empty() { what.to_string() } else { format!("{what}:\n{}", lines.join("\n")) };
+    let mut message = if lines.is_empty() { what.to_string() } else { format!("{what}:\n{}", lines.join("\n")) };
+    if let Some(log) = log {
+        message.push_str(&format!("\nfull output: {log}"));
+    }
     (message, Some(what))
 }
 

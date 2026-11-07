@@ -439,7 +439,8 @@ unwritten-skip-run = Ohne Schreiben ausführen
 unwritten-write-close = Schreiben, dann schließen
 unwritten-skip-close = Ohne Schreiben schließen
 unwritten-failed-title = { $count ->
-    [one] { $count } Änderung konnte nicht in den Code geschrieben werden (siehe Statuszeile).
-   *[other] { $count } Änderungen konnten nicht in den Code geschrieben werden (siehe Statuszeile).
+    [one] { $count } Änderung konnte nicht in den Code geschrieben werden:
+   *[other] { $count } Änderungen konnten nicht in den Code geschrieben werden:
 }
+unwritten-more-reasons = und { $count } weitere
 unwritten-cancel = Abbrechen

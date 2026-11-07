@@ -55,9 +55,35 @@ pub fn start(port: u16, to_ui: Sender<Incoming>, mut from_ui: UnboundedReceiver<
                             wake();
                         }
                     }
+                    // No hub on the port (the designer that held it closed): this one hosts it now.
+                    // Fails when another hub got there first: then it joins that one.
+                    let _ = tokio::task::spawn_blocking(move || designer_core::spawn(port)).await;
                     tokio::time::sleep(Duration::from_millis(500)).await;
                 }
             });
         })
         .expect("editor link thread");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The hub the window joined goes away (nothing listens on the port any more): the window
+    /// starts its own hub there and connects to it.
+    #[test]
+    fn a_hub_gone_is_hosted_here() {
+        let port = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+        let (to_ui, rx) = std::sync::mpsc::channel();
+        let (_to_hub, from_ui) = tokio::sync::mpsc::unbounded_channel();
+        start(port, to_ui, from_ui, || {});
+        let deadline = std::time::Instant::now() + Duration::from_secs(10);
+        let mut version = None;
+        while version.is_none() && std::time::Instant::now() < deadline {
+            if let Ok(Incoming::Hub(HubToEditor::Hub { version: v })) = rx.recv_timeout(Duration::from_millis(200)) {
+                version = Some(v);
+            }
+        }
+        assert_eq!(version.as_deref(), Some(env!("CARGO_PKG_VERSION")), "a hub of this designer on port {port}");
+    }
 }

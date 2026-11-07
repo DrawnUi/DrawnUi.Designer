@@ -140,7 +140,9 @@ at another hub. While no designer runs it tries the one address every 2 s on its
 UI thread; connected, each request costs one frame. The sample is `agents/rust/sample` (`cargo run -p
 designer-agent-sample` in `agents/rust`); its Quick actions switch opens a popup menu. Run app and Restart app start
 a desktop app with `cargo run` in its crate's folder (a debug build, so the agent attaches); the line at the bottom
-says when the build fails, with its first error.
+says when the build fails, with its first error (all of them, and where the full output is, in its tooltip). A
+failed run is over at once: Run, the pill's run button and Restart app (Ctrl+R, which runs the app when none is
+connected) start it again.
 
 **Rust apps in a web page (DrawFiddle).** In the browser build (`wasm32-unknown-emscripten`, debug or release)
 `attach!` wraps the app the same way, and the page carries the messages: no socket, no thread, no timer. Until a
@@ -246,7 +248,8 @@ shows `SkiaLabel`; the agent works with drawnui-react 0.1.0-preview.33 and newer
 allowed, connect to port 54272 on the network. To use other ports, set
 `DRAWNUI_DESIGNER_PORT` for the designer (the MCP port is that port + 1) and
 `DRAWNUI_DESIGNER_URL=ws://127.0.0.1:<port>` for the app. In VS Code the setting is `drawnuiDesigner.port`.
-When a designer already holds the port, a second one joins its hub. A hub of another designer version (an older
+When a designer already holds the port, a second one joins its hub; when that designer closes, the second one
+starts its own hub on the port. A hub of another designer version (an older
 build still running) is named in the status bar: "Connected to the hub of another designer (version X); close it
 to use this one".
 
@@ -446,7 +449,7 @@ an app with no code the designer can reach (a browser page that sends none), a v
 code refuses.
 With Manual, Restart app and Run app ask first: write the changes, go on without them, or cancel. When Auto writes
 first and some changes cannot be written, the restart stops and asks: go on without them (they are lost), or cancel;
-the line at the bottom says why they were not written. Closing the
+the question lists why they were not written. Closing the
 designer (its close button, Alt+F4, Cmd+Q, File, Exit) with changes not in code goes the same way: Auto and Always
 write them first, then the window closes; Manual asks. An app that closes by itself takes its live changes with it.
 
@@ -529,7 +532,7 @@ functions, to the constructor that makes the control. It changes one span of tex
 | nothing set yet | `.text_color(..)` at the end of the chain, on its own line when the chain's calls are; for a control a helper returns, on that call (`swatch(..).margin(8)`) |
 
 Added, pasted and duplicated controls are written with the engine's own constructors (`SkiaLabel::new("Label")`)
-and their values as builder calls; a control without children gets `.children(..)`. Moves and deletes edit the
+and their values as builder calls (text values such as an accessibility role as strings: `.accessibility_role("heading")`); a control without children gets `.children(..)`. Moves and deletes edit the
 children tuple or `vec![..]`, commas and lines kept; taking out the last child takes out its `.children(..)`. The
 designer refuses, and says why, when the children come from a loop, an iterator or a condition, a value is a
 constant or an expression, a `vec![..]` would get a control of another type, or a tuple already holds 12 controls
