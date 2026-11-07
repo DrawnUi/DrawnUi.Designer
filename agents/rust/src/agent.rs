@@ -65,6 +65,12 @@ pub(crate) trait AppUi: App {
     fn hit_test_visual(&self, at: Point) -> Option<ControlId>;
     /// The app state's type, the host of the main tree's root.
     fn state_type(&self) -> &'static str;
+    /// The app's designer actions (`Ui::designer_action`), in declaration order.
+    fn designer_actions(&self) -> Vec<String>;
+    /// Changes on every add, replace or remove of a designer action.
+    fn designer_actions_revision(&self) -> u32;
+    /// Runs a designer action with the app state; false: no such action.
+    fn run_designer_action(&mut self, path: &str) -> bool;
 }
 
 impl<S: 'static> AppUi for Ui<S> {
@@ -79,6 +85,15 @@ impl<S: 'static> AppUi for Ui<S> {
     }
     fn state_type(&self) -> &'static str {
         std::any::type_name::<S>()
+    }
+    fn designer_actions(&self) -> Vec<String> {
+        Ui::designer_actions(self).map(str::to_owned).collect()
+    }
+    fn designer_actions_revision(&self) -> u32 {
+        Ui::designer_actions_revision(self)
+    }
+    fn run_designer_action(&mut self, path: &str) -> bool {
+        Ui::run_designer_action(self, path)
     }
 }
 
@@ -115,6 +130,8 @@ pub struct Core {
     hidden: bool,
     /// The designer's ids of the controls ([`Core::wire_id`]).
     ids: std::cell::RefCell<WireIds>,
+    /// The designer-actions revision last sent (`None`: not sent yet).
+    actions_sent: Option<u32>,
 }
 
 /// The designer's id of each control told to it, and back. A wire id is never given twice, also
@@ -211,7 +228,7 @@ impl Core {
     }
 
     fn new(wire: Wire, waker: Waker) -> Self {
-        Core { wire, waker, revision: 0, highlight: None, highlight_popup: None, box_color: BOX_COLOR, boxed: None, picking: false, tree_due: false, tree_waited: 0, hidden: false, placing: None, place_line: None, ids: Default::default() }
+        Core { wire, waker, revision: 0, highlight: None, highlight_popup: None, box_color: BOX_COLOR, boxed: None, picking: false, tree_due: false, tree_waited: 0, hidden: false, placing: None, place_line: None, ids: Default::default(), actions_sent: None }
     }
 
     /// The designer's id of control `id`: given once, kept while the control lives.
@@ -243,6 +260,12 @@ impl Core {
 
     fn send(&self, msg: AppMsg) {
         self.wire.send(Out::Msg(msg));
+    }
+
+    /// The app's designer actions, as declared now.
+    fn send_actions(&mut self, ui: &dyn AppUi) {
+        self.actions_sent = Some(ui.designer_actions_revision());
+        self.send(AppMsg::Actions { actions: ui.designer_actions().into_iter().map(|path| designer_protocol::Action { path }).collect() });
     }
 
     fn redraw(&self, ui: &dyn AppUi) {
@@ -285,6 +308,13 @@ impl Core {
             HubToApp::PlaceAt { type_name, x, y } => {
                 self.placing = Some(type_name);
                 self.place_at(ui, x, y);
+            }
+            HubToApp::RunAction { path } => {
+                if ui.run_designer_action(&path) {
+                    // what the action changed: the tree after this frame
+                    return Some(HubToApp::GetTree);
+                }
+                self.send(AppMsg::Error { request: None, message: format!("the app has no action \"{path}\"") });
             }
             HubToApp::OpenScreen { route } => {
                 self.send(AppMsg::Error { request: None, message: format!("openScreen {route}: a DrawnUI for Rust app lists no screens") })
@@ -352,6 +382,13 @@ impl Core {
             HubToApp::GetTree => {
                 self.tree_waited = 0;
                 let tree = self.tree(ui, frame.width, frame.height);
+                // The actions with every tree of an app that has some: a new session (the hub asks for a
+                // tree first) gets them too.
+                if ui.designer_actions().is_empty() {
+                    self.actions_sent = Some(ui.designer_actions_revision()); // none yet: later ones go out when added
+                } else {
+                    self.send_actions(ui);
+                }
                 self.send(AppMsg::Tree(tree));
             }
             HubToApp::GetProps { node } => {
@@ -547,6 +584,10 @@ impl Core {
             App::prepare(ui, frame.width, frame.height, frame.scale, frame.time_ms);
         }
         let more = App::frame(ui, frame);
+        // Actions added or removed while the app runs (a screen offering its own): sent once a tree went out.
+        if self.actions_sent.is_some_and(|sent| sent != ui.designer_actions_revision()) {
+            self.send_actions(ui);
+        }
         if self.highlight.is_some() {
             let _ = guarded(|| self.draw_highlight(ui, frame));
         }
@@ -1173,6 +1214,51 @@ mod tests {
         assert!(!App::accessibility_context_menu(&mut agent, 0), "no menu on the column");
         assert!(App::accessibility_context_menu(&mut agent, 1) && agent.ui.state.menu, "the label's menu opened");
         assert!(agent.ui.state.menu);
+    }
+
+    /// The app's designer actions go out with the tree and again when they change; RunAction runs one
+    /// with the app state, then the tree follows; an unknown one is an error.
+    #[test]
+    fn designer_actions_are_listed_and_run() {
+        #[derive(Default)]
+        struct Game {
+            level: u32,
+        }
+        let ui = Ui::new(Game::default(), |_s: &mut Game| SkiaLayout::column().children(SkiaLabel::new("Hi")))
+            .font_bytes("Default", FONT)
+            .designer_action("Levels/Level 3", |s: &mut Game, _cx| s.level = 3)
+            // an action that offers another one, as a screen does while it is shown
+            .designer_action("Game/Open options", |_s: &mut Game, cx| cx.add_designer_action::<Game>("Dialogs/Options", |s: &mut Game, _cx| s.level = 0));
+        let (hub, inbox) = mpsc::channel();
+        let (out, answers) = mpsc::channel();
+        let queued = Arc::new(AtomicBool::new(false));
+        let waker = ui.waker();
+        let mut agent = Agent::with(ui, Wire { inbox, queued: queued.clone(), out }, waker);
+        let mut surface = skia::surfaces::raster_n32_premul((400, 300)).unwrap();
+        let (mut gpu, mut host) = (drawnui::Gpu::raster(), Host::default());
+        let mut time = 0.0;
+        let mut ask = |agent: &mut Agent<Game>, msg: Option<HubToApp>| -> Vec<AppMsg> {
+            if let Some(msg) = msg {
+                hub.send(msg).unwrap();
+                queued.store(true, Ordering::Release);
+            }
+            for _ in 0..3 {
+                time += 16.0;
+                agent.frame(&mut Frame { surface: &mut surface, gpu: &mut gpu, width: 400.0, height: 300.0, scale: 1.0, time_ms: time, host: &mut host });
+            }
+            answers.try_iter().map(Out::into_msg).collect()
+        };
+        let paths = |msgs: &[AppMsg]| msgs.iter().rev().find_map(|m| if let AppMsg::Actions { actions } = m { Some(actions.iter().map(|a| a.path.clone()).collect::<Vec<_>>()) } else { None });
+        let outs = ask(&mut agent, Some(HubToApp::GetTree));
+        assert_eq!(paths(&outs), Some(vec!["Levels/Level 3".to_owned(), "Game/Open options".to_owned()]), "{outs:?}");
+        let outs = ask(&mut agent, Some(HubToApp::RunAction { path: "Levels/Level 3".into() }));
+        assert_eq!(agent.ui.state.level, 3);
+        assert!(outs.iter().any(|m| matches!(m, AppMsg::Tree(_))), "the tree after it: {outs:?}");
+        let outs = ask(&mut agent, Some(HubToApp::RunAction { path: "Nope".into() }));
+        assert!(outs.iter().any(|m| matches!(m, AppMsg::Error { request: None, message } if message.contains("no action"))), "{outs:?}");
+        // Added while the app runs: the new list goes out.
+        let outs = ask(&mut agent, Some(HubToApp::RunAction { path: "Game/Open options".into() }));
+        assert_eq!(paths(&outs), Some(vec!["Levels/Level 3".to_owned(), "Game/Open options".to_owned(), "Dialogs/Options".to_owned()]), "{outs:?}");
     }
 
     #[test]
