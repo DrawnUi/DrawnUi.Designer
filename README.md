@@ -30,6 +30,8 @@ The designer is itself a DrawnUI app. Every panel, the menu bar, the layers tree
 - **Build the screen.** Drag controls from the Controls panel into Layers, or click to place them in the app.
   Copy, paste, duplicate, copy a style, delete, and drag rows to move controls, then write it all to code. Every
   step goes into the undo history (Ctrl+Z, Ctrl+Y).
+- **Jump to any state.** Your app declares actions (level 12, the game-over dialog, an empty cart) and the
+  designer lists them under its screens: one click puts the running app there.
 - **Pick in the app.** Press Pick, then click a control in the app, or tap it on a phone, and it is selected in the
   designer.
 - **Phones on the cable.** An Android phone or an iPhone on its USB cable connects the same way, no network

@@ -279,7 +279,8 @@ or key does, shows that key, and is dimmed when it cannot act now. The keys work
 while no text field has the keyboard; on macOS they use Command. In a page (DrawFiddle) there is no title bar: Pick
 is in the Layers header, and the count of changes not in code is a strip of its own under it.
 
-**Screens.** The pages your app's shell can open. Tap one to open it in the app.
+**Screens.** The pages your app's shell can open. Tap one to open it in the app. Under them, the app's **actions**
+in their groups (see Actions below): tap one to put the app in that state.
 
 **Controls**, under Screens (drag the line between them to give one more room). The controls your app can
 create, as its agent lists them: the library's by kind (Layout, Text, Media, Input, Shapes, Other), then your own
@@ -348,6 +349,40 @@ and Controls, the folded property and control groups and the last Settings secti
 
 Values are typed as text: `18`, `true`, `Hello`, `Center`, `#FF0000` for colors (`#RGB`, `#RRGGBB` or
 `#AARRGGBB`), and `8`, `8,4` or `8,4,8,4` (left, top, right, bottom) for margins and padding.
+
+## Actions
+
+Some states are hard to reach by hand: level 12 of a game, the game-over dialog, an empty cart. The app declares them
+as actions; the designer lists them under its screens, in their groups, and one click puts the running app there.
+AI agents run the same actions with `list_actions` and `run_action`.
+
+C# (DrawnUi, any head):
+
+```csharp
+using DrawnUi.Draw;
+
+// once, after the app's UI exists
+for (var i = 1; i <= 20; i++)
+{
+    var level = i;
+    DesignerActions.Add($"Levels/Level {level}", () => Game.StartLevel(level));
+}
+DesignerActions.Add("Game/Paused", () => Game.Pause());
+DesignerActions.Add("Dialogs/Options", () => Game.ShowOptions());
+```
+
+- The path names the action and its groups, slash-separated: `Levels/Level 3` shows as **Level 3** under **Levels**.
+  Groups and actions keep the order the app added them in.
+- The action runs on the app's UI thread. A failure shows in the status bar.
+- `Add` returns an `IDisposable` that removes the action again (one a screen offers only while it is shown);
+  `DesignerActions.Remove(path)` removes one by its path. The designer's list follows at once.
+- Nothing runs without a designer: the list only keeps names and callbacks, and Release builds carry no agent.
+- Hot Preview commands (static `[Preview]` methods without parameters that return nothing) show up too, under
+  **Previews**, with no change to the app.
+
+Protocol: the app sends `{"type": "actions", "actions": [{"path": "Levels/Level 3"}]}` on connect and whenever the
+list changes; the hub sends `{"type": "runAction", "path": "Levels/Level 3"}`. An agent for another engine declares
+its actions in that engine's own way and speaks the same two messages.
 
 ## Placing controls
 
@@ -571,6 +606,8 @@ The server runs only while a designer window or the VS Code panel is open.
 | `allow_devices` | `on` | Lets apps on other devices (a phone, another computer on the network) connect, or stops new ones. Returns the address with its secret token. |
 | `list_screens` | `app` | The shell routes and their titles. |
 | `open_screen` | `app`, `route` | Opens a screen. Call `get_tree` about a second later. |
+| `list_actions` | `app` | The actions the app declared: each `path`, its groups before its name (`Levels/Level 3`). |
+| `run_action` | `app`, `path` | Runs an action in the app, on its UI thread. Call `get_tree` or `snapshot` after it. |
 | `get_tree` | `app`, `include_internal` (default false) | The controls drawn now: `id`, `parent`, `type`, `madeBy` (the name the code gives it: the helper or component that made it), `field`, `tag`, `rect` [x, y, width, height] in canvas pixels, `visible`, `host` on a root (the page, or `popup 1` for a popup window's content), `templated: true` on a layout that makes its children from items (nothing goes into it), `item` on a cell made from them (the item it shows), and `source` (file:line of the code that creates it). |
 | `get_properties` | `app`, `node` | Each property's name, .NET type, current value, and whether it was set. |
 | `select` | `app`, `node` (omit to clear) | Draws a box around the control in the app. |
