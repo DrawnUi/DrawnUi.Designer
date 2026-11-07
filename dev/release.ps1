@@ -13,6 +13,9 @@ $ErrorActionPreference = 'Stop'
 $repo = (Resolve-Path "$PSScriptRoot\..").Path
 $cargoHome = if ($env:CARGO_HOME) { $env:CARGO_HOME } else { Join-Path $env:USERPROFILE '.cargo' }
 $env:RUSTFLAGS = "--remap-path-prefix=$cargoHome=/cargo --remap-path-prefix=$repo=/build -C link-arg=/PDBALTPATH:%_PDB%"
+# The C parts (tree-sitter) keep their source paths in assert messages: built without asserts, as
+# release C code is.
+$env:CFLAGS = '/DNDEBUG'
 $env:CARGO_TARGET_DIR = Join-Path $repo 'target\dist'
 $version = (Select-String -Path (Join-Path $repo 'Cargo.toml') -Pattern '^version = "(.+)"').Matches[0].Groups[1].Value
 $targets = [ordered]@{ 'x64' = 'x86_64-pc-windows-msvc'; 'arm64' = 'aarch64-pc-windows-msvc' }

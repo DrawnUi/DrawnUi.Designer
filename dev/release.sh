@@ -36,6 +36,10 @@ echo "$APP_NAME $version"
 # Both architectures, so the download runs on Apple silicon and on Intel.
 RUSTFLAGS="--remap-path-prefix=$cargo_home=/cargo --remap-path-prefix=$repo=/build"
 export RUSTFLAGS
+# The C parts (tree-sitter) keep their source paths in assert messages: built without asserts, as
+# release C code is.
+CFLAGS=-DNDEBUG
+export CFLAGS
 CARGO_TARGET_DIR="$dist"
 export CARGO_TARGET_DIR
 cd "$repo"
