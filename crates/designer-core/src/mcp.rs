@@ -635,6 +635,8 @@ impl ServerHandler for Designer {
     fn get_info(&self) -> ServerConfig {
         ServerConfig::new(ServerCapabilities::builder().enable_tools().build()).with_instructions(
             "DrawnUI Designer: inspect and change running DrawnUI apps. Start with list_apps, then get_tree for an app. \
+             To reach what the user means, open_screen (list_screens) for a page or run_action (list_actions) for a state the app \
+             declared (a level, a dialog); never tap through the app to get there. Check results with get_tree or snapshot. \
              Use set_property to try a value live and write_property to change the app's code as well (C#, TSX or Rust). \
              insert, remove and move change the controls live; write_insert, write_remove and write_move put those changes into the code; \
              undo_write takes any write back.",
