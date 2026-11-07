@@ -110,6 +110,9 @@ pub struct Core {
     place_line: Option<Rect>,
     /// Frames the tree has waited; past `TREE_WAIT` it goes out as it is.
     tree_waited: u32,
+    /// The host draws the next frame off screen (`take_hidden_frame_request` said yes): the window is
+    /// covered or minimized.
+    hidden: bool,
     /// The designer's ids of the controls ([`Core::wire_id`]).
     ids: std::cell::RefCell<WireIds>,
 }
@@ -208,7 +211,7 @@ impl Core {
     }
 
     fn new(wire: Wire, waker: Waker) -> Self {
-        Core { wire, waker, revision: 0, highlight: None, highlight_popup: None, box_color: BOX_COLOR, boxed: None, picking: false, tree_due: false, tree_waited: 0, placing: None, place_line: None, ids: Default::default() }
+        Core { wire, waker, revision: 0, highlight: None, highlight_popup: None, box_color: BOX_COLOR, boxed: None, picking: false, tree_due: false, tree_waited: 0, hidden: false, placing: None, place_line: None, ids: Default::default() }
     }
 
     /// The designer's id of control `id`: given once, kept while the control lives.
@@ -339,9 +342,12 @@ impl Core {
             // The host restores and raises the window after this frame (a hidden one too).
             HubToApp::Focus => frame.host.request_window_focus(),
             // Not before the app has built and laid out its controls (but not forever: it may have none).
+            // Its next frame is asked for as a hidden one too: a covered or minimized window gets no
+            // other (macOS draws it none).
             HubToApp::GetTree if !tree_ready(ui.tree()) && self.tree_waited < TREE_WAIT => {
                 self.tree_due = true;
                 self.tree_waited += 1;
+                self.waker.request_hidden_frame();
             }
             HubToApp::GetTree => {
                 self.tree_waited = 0;
@@ -522,14 +528,23 @@ impl Core {
         if std::mem::take(&mut self.tree_due) {
             later.push(HubToApp::GetTree);
         }
+        let mut handled = false;
         if self.wire.ready() {
             while let Some(msg) = self.wire.next() {
+                handled = true;
                 match guarded(|| self.before_draw(ui, msg)) {
                     Ok(Some(msg)) => later.push(msg),
                     Ok(None) => {}
                     Err(message) => self.send(AppMsg::Error { request: None, message }),
                 }
             }
+        }
+        // The designer's changes are in this frame: prepared again after them. macOS's host prepares
+        // before the frame, so a removal made after that showed only in the next frame, and the
+        // tree sent from this one still had the control (and none came after it). A hidden frame
+        // (a covered or minimized window) comes without the host's `prepare`: prepared here too.
+        if std::mem::take(&mut self.hidden) || handled {
+            App::prepare(ui, frame.width, frame.height, frame.scale, frame.time_ms);
         }
         let more = App::frame(ui, frame);
         if self.highlight.is_some() {
@@ -796,7 +811,9 @@ impl<S: 'static> App for Agent<S> {
         App::close_popup_windows(&mut self.ui)
     }
     fn take_hidden_frame_request(&mut self) -> bool {
-        App::take_hidden_frame_request(&mut self.ui)
+        // Asked only while the window is covered; yes: the host draws a frame off screen now.
+        self.core.hidden = App::take_hidden_frame_request(&mut self.ui);
+        self.core.hidden
     }
     fn as_any(&self) -> Option<&dyn std::any::Any> {
         App::as_any(&self.ui)
@@ -841,6 +858,8 @@ mod tests {
         answers: Receiver<Out>,
         surface: skia::Surface,
         time: f64,
+        /// The host's frame requests, counted (`ask_hidden`).
+        requests: Arc<std::sync::atomic::AtomicU32>,
     }
 
     impl Rig {
@@ -875,9 +894,17 @@ mod tests {
             let (out, answers) = mpsc::channel();
             let waker = ui.waker();
             let wire = Wire { inbox, queued: Arc::new(AtomicBool::new(false)), out };
-            let agent = Agent::with(ui, wire, waker);
+            let mut agent = Agent::with(ui, wire, waker);
+            // The host's frame requests, counted (see `ask_hidden`).
+            let requests = Arc::new(std::sync::atomic::AtomicU32::new(0));
+            let mut host = Host::default();
+            let r = requests.clone();
+            host.on_frame_requested(move || {
+                r.fetch_add(1, Ordering::Relaxed);
+            });
+            App::init(&mut agent, &mut host);
             let surface = skia::surfaces::raster_n32_premul((400, 300)).unwrap();
-            let mut rig = Rig { agent, hub, answers, surface, time: 1000.0 };
+            let mut rig = Rig { agent, hub, answers, surface, time: 1000.0, requests };
             rig.frames(3);
             // As the designer: the tree first, then requests about its controls.
             rig.ask(HubToApp::GetTree);
@@ -893,11 +920,44 @@ mod tests {
             }
         }
 
+        /// A frame as macOS's host draws a shown window: `prepare`, then the frame.
+        fn shown_frame(&mut self) {
+            App::prepare(&mut self.agent, 400.0, 300.0, 1.0, self.time + 16.0);
+            self.frames(1);
+        }
+
+        /// The designer's message, then two frames as macOS draws a shown window.
+        fn ask_shown(&mut self, msg: HubToApp) -> Vec<AppMsg> {
+            self.hub.send(msg).unwrap();
+            self.agent.wire.queued.store(true, Ordering::Release);
+            self.shown_frame();
+            self.shown_frame();
+            self.answers.try_iter().map(Out::into_msg).collect()
+        }
+
         fn ask(&mut self, msg: HubToApp) -> Vec<Out> {
             self.hub.send(msg).unwrap();
             self.agent.wire.queued.store(true, Ordering::Release);
             self.frames(1);
             self.answers.try_iter().collect()
+        }
+
+        /// The designer's message while the window is covered or minimized, as macOS's host runs
+        /// it: a redraw only when the app asks for a frame (`Host::on_frame_requested`), and then a
+        /// frame only when it is a hidden one the agent asked for; else nothing is drawn.
+        fn ask_hidden(&mut self, msg: HubToApp) -> Vec<AppMsg> {
+            self.hub.send(msg).unwrap();
+            self.agent.wire.queued.store(true, Ordering::Release);
+            self.agent.ui.waker().request_hidden_frame();
+            for _ in 0..2 * TREE_WAIT {
+                if self.requests.swap(0, Ordering::Relaxed) == 0 {
+                    break;
+                }
+                if App::take_hidden_frame_request(&mut self.agent) {
+                    self.frames(1);
+                }
+            }
+            self.answers.try_iter().map(Out::into_msg).collect()
         }
 
         fn click(&mut self, at: (f32, f32)) {
@@ -1024,6 +1084,45 @@ mod tests {
         let saved = drawnui::hot::save::<Counter>(&agent).expect("the wrapper hands its Ui to hot::save");
         let back: Counter = drawnui::hot::restore(Some(&saved));
         assert_eq!(back.count, 7);
+    }
+
+    /// macOS's host prepares a frame before the app draws it, so before the agent makes the
+    /// designer's changes: an insert, a removal and a value each come back with the tree (and the
+    /// properties) as they are after them, the last tree sent being the one after the change.
+    #[test]
+    fn on_macos_frames_the_tree_after_a_change_has_it() {
+        let mut rig = Rig::new();
+        rig.shown_frame();
+        let root = rig.agent.wire_id(rig.agent.ui.tree.root().unwrap());
+        let last_has = |msgs: &[AppMsg], id: u64| msgs.iter().rev().find_map(|m| if let AppMsg::Tree(t) = m { Some(t.nodes.iter().any(|n| n.id == id)) } else { None });
+        let outs = rig.ask_shown(HubToApp::Insert { request: 1, parent: root, index: Some(1), type_name: "SkiaLabel".into(), props: vec![("text".into(), "Copy".into())], children: vec![] });
+        let Some(&AppMsg::Inserted { node: Some(copy), .. }) = outs.iter().find(|m| matches!(m, AppMsg::Inserted { .. })) else { panic!("{outs:?}") };
+        assert_eq!(last_has(&outs, copy), Some(true), "{outs:?}");
+        // A value set live, then read: the new one.
+        rig.ask_shown(HubToApp::SetProperty { request: 2, node: copy, name: "text".into(), value: "Set".into() });
+        let outs = rig.ask_shown(HubToApp::GetProps { node: copy });
+        assert!(outs.iter().any(|m| matches!(m, AppMsg::Props { props, .. } if props.iter().any(|p| p.name == "text" && p.value == "Set"))), "{outs:?}");
+        let outs = rig.ask_shown(HubToApp::Remove { request: 3, node: copy });
+        let first = outs.iter().find_map(|m| if let AppMsg::Tree(t) = m { Some(t.nodes.iter().any(|n| n.id == copy)) } else { None });
+        assert_eq!(first, Some(false), "the first tree after the removal is without the copy: {outs:?}");
+    }
+
+    /// A covered window (macOS: no frames but the hidden ones the agent asks for, drawn without the
+    /// host's `prepare`): an insert and then its removal each come back with the tree as it is
+    /// after them.
+    #[test]
+    fn a_covered_window_answers_inserts_and_removals_with_its_tree() {
+        let mut rig = Rig::new();
+        // Shown once as macOS's host shows a frame (prepared first), then covered.
+        rig.shown_frame();
+        let root = rig.agent.ui.tree.root().unwrap();
+        let root = rig.agent.wire_id(root);
+        let has = |msgs: &[AppMsg], id: u64| msgs.iter().rev().find_map(|m| if let AppMsg::Tree(t) = m { Some(t.nodes.iter().any(|n| n.id == id)) } else { None });
+        let outs = rig.ask_hidden(HubToApp::Insert { request: 1, parent: root, index: Some(1), type_name: "SkiaLabel".into(), props: vec![("text".into(), "Copy".into())], children: vec![] });
+        let Some(&AppMsg::Inserted { node: Some(copy), .. }) = outs.iter().find(|m| matches!(m, AppMsg::Inserted { .. })) else { panic!("{outs:?}") };
+        assert_eq!(has(&outs, copy), Some(true), "a tree with the copy: {outs:?}");
+        let outs = rig.ask_hidden(HubToApp::Remove { request: 2, node: copy });
+        assert_eq!(has(&outs, copy), Some(false), "a tree without the copy: {outs:?}");
     }
 
     #[test]
