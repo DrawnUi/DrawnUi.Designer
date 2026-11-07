@@ -73,6 +73,28 @@ if (typeof(Super).GetEvent("ChildrenChanged") != null)
 else
     Console.WriteLine("skip a control the app adds: this DrawnUi has no Super.ChildrenChanged");
 
+// Actions the app declares: DrawnUi's DesignerActions (when this DrawnUi has it) and Hot Preview [Preview] commands.
+if (typeof(Super).Assembly.GetType("DrawnUi.Draw.DesignerActions") is { } designerActions)
+{
+    var ran = "";
+    var add = designerActions.GetMethod("Add")!;
+    var added = (IDisposable)add.Invoke(null, new object[] { "Levels/Level 3", (Action)(() => ran = "level 3") })!;
+    var list = Next("actions")["actions"].AsArray().Select(a => (string)a["path"]).ToList();
+    Check(list.SequenceEqual(new[] { "Levels/Level 3", "Previews/Game lost" }), "actions: the declared one, then the [Preview] command: " + string.Join(", ", list));
+    _ = handle("{\"type\":\"runAction\",\"path\":\"Levels/Level 3\"}");
+    for (var i = 0; i < 50 && ran == ""; i++)
+        await Task.Delay(20);
+    Check(ran == "level 3", "runAction runs a DesignerActions action");
+    _ = handle("{\"type\":\"runAction\",\"path\":\"Previews/Game lost\"}");
+    for (var i = 0; i < 50 && !Previews.Lost; i++)
+        await Task.Delay(20);
+    Check(Previews.Lost, "runAction runs a [Preview] command");
+    added.Dispose();
+    Check(!Next("actions")["actions"].AsArray().Any(a => (string)a["path"] == "Levels/Level 3"), "a removed action leaves the list");
+}
+else
+    Console.WriteLine("skip actions: this DrawnUi has no DesignerActions");
+
 var id = (long)labelNode["id"];
 await handle($"{{\"type\":\"getProps\",\"node\":{id}}}");
 var props = Next("props")["props"].AsArray();
@@ -507,3 +529,22 @@ Check(Collected(seen), "a left canvas the agent saw last (tree, highlight, pick 
 
 Console.WriteLine(failures == 0 ? "PASS" : $"{failures} FAILED");
 return failures == 0 ? 0 : 1;
+
+/// <summary>A Hot Preview command, as an app declares it (the attribute below stands in for Hot Preview's).</summary>
+static class Previews
+{
+    public static bool Lost;
+
+    [HotPreview.Preview("Game lost")]
+    public static void State_Game_Lost() => Lost = true;
+}
+
+namespace HotPreview
+{
+    /// <summary>Hot Preview's attribute, matched by its full name.</summary>
+    [AttributeUsage(AttributeTargets.Method)]
+    sealed class PreviewAttribute(string displayName = null) : Attribute
+    {
+        public string DisplayName { get; } = displayName;
+    }
+}

@@ -692,6 +692,7 @@ namespace DrawnUi.Designer.Agent
             var screens = await Ui(ReadScreens);
             if (screens != null)
                 await Send(new { type = "screens", screens });
+            await SendActions();
             await SendTree();
         }
 
@@ -986,6 +987,12 @@ namespace DrawnUi.Designer.Agent
                         }
                         break;
 
+                    case "runAction":
+                        await RunAction(root.GetProperty("path").GetString());
+                        // what the action changed: the tree after it (a transition settles first)
+                        _ = TreeAfterChange();
+                        break;
+
                     default:
                         await SendError(request, "unknown message: " + text);
                         break;
@@ -1062,6 +1069,7 @@ namespace DrawnUi.Designer.Agent
             (_hotReload, _onHotReload) = (null, null);
             _childrenChanged?.RemoveEventHandler(null, _onChildrenChanged);
             (_childrenChanged, _onChildrenChanged) = (null, null);
+            UnwatchActions();
             UnwatchShell();
             (_watchedShell, _shellNavigated) = (null, null);
             WatchScrolls(null);

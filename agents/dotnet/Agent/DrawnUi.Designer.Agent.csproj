@@ -21,7 +21,7 @@
 
     <PropertyGroup>
         <PackageId>DrawnUi.Designer.Agent</PackageId>
-        <Version>0.1.0-preview.7</Version>
+        <Version>0.1.0-preview.8</Version>
         <Authors>Nick Kovalsky aka AppoMobi</Authors>
         <Description>DrawnUI Designer agent: in Debug builds of a DrawnUi app it lets the DrawnUI Designer show the app's screens, control tree and properties, edit them live and write edits to code. Release builds get nothing.</Description>
         <PackageTags>drawnui designer maui wpf skiasharp</PackageTags>
