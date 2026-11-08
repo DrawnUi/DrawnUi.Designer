@@ -13,7 +13,7 @@ path = "src/main.rs"
 designer-protocol.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-drawnui = "0.1.0-preview.34"
+drawnui = "0.1.0-preview.37"
 designer-i18n.workspace = true
 
 [target.'cfg(not(target_os = "emscripten"))'.dependencies]
