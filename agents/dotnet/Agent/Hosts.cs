@@ -241,6 +241,79 @@ namespace DrawnUi.Designer.Agent
 
         #endregion
 
+        #region OpenTK
+
+        /// <summary>
+        /// DrawnUi.OpenTk: the canvas of the open DrawnUiWindow (DrawnUiWindow.Current). The window's own thread is the
+        /// UI thread: work goes through DrawnUi's MainThread queue, which the window drains at its next frame (it wakes
+        /// at least once a refresh).
+        /// </summary>
+        private sealed class OpenTkHost : IHost
+        {
+            private readonly Type _windowType;
+            private readonly MethodInfo _post;
+
+            private OpenTkHost(Type windowType, MethodInfo post)
+            {
+                _windowType = windowType;
+                _post = post;
+            }
+
+            public static IHost TryCreate()
+            {
+                var window = LoadedType("DrawnUi.OpenTk.DrawnUiWindow");
+                var post = LoadedType("DrawnUi.MainThread")?.GetMethod("BeginInvokeOnMainThread", new[] { typeof(Action) });
+                // a DrawnUi.OpenTk from before DrawnUiWindow.Current: the agent cannot find its window
+                return window?.GetProperty("Current", BindingFlags.Public | BindingFlags.Static) == null || post == null ? null : new OpenTkHost(window, post);
+            }
+
+            private object Window => StaticGet(_windowType, "Current");
+
+            public void Post(Action action, bool low) => _post.Invoke(null, new object[] { action });
+
+            public object FindCanvas() => Window is { } window ? Get(window, "Canvas") : null;
+
+            public (float Width, float Height) CanvasPixelSize(object canvas)
+            {
+                // ClientSize is the framebuffer the canvas draws into, in pixels; OpenTK's Vector2i has fields X and Y
+                var size = Get(Window, "ClientSize");
+                float Field(string name) => Convert.ToSingle(size?.GetType().GetField(name)?.GetValue(size) ?? 0);
+                return (Field("X"), Field("Y"));
+            }
+
+            public bool CanvasHidden(object canvas) =>
+                Window is not { } window || Get(window, "IsVisible") is false || Get(window, "WindowState")?.ToString() == "Minimized";
+
+            public IntPtr WindowHandle(object canvas) => OperatingSystem.IsWindows() ? Process.GetCurrentProcess().MainWindowHandle : IntPtr.Zero;
+
+            public IDisposable HookEscape(object canvas, Func<bool> onEscape) => new Unhook(() => { });
+
+            public IEnumerable<object> FieldOwners()
+            {
+                if (Window is { } window)
+                    yield return window;
+            }
+
+            public List<object> Screens() => null;
+
+            public Task OpenScreen(string route) => null;
+
+            // DrawnUi.OpenTk navigates inside the canvas only: its SkiaShell's events are watched by the agent itself
+            public void WatchNavigation(bool on)
+            {
+            }
+
+            public IEnumerable<object> Ancestors(object canvas)
+            {
+                if (Window is { } window)
+                    yield return window;
+            }
+
+            public bool IsPage(object element) => IsType(element.GetType(), "DrawnUi.OpenTk.DrawnUiWindow");
+        }
+
+        #endregion
+
         #region Page (Blazor WebAssembly)
 
         /// <summary>

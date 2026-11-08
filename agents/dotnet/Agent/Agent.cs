@@ -129,7 +129,7 @@ namespace DrawnUi.Designer.Agent
             {
                 try
                 {
-                    _host ??= MauiHost.TryCreate() ?? WpfHost.TryCreate();
+                    _host ??= MauiHost.TryCreate() ?? WpfHost.TryCreate() ?? OpenTkHost.TryCreate();
                     if (_host != null)
                     {
                         var found = Ui(() => _host.FindCanvas());
@@ -677,7 +677,7 @@ namespace DrawnUi.Designer.Agent
                 role = "app",
                 protocol = Protocol,
                 name = AppAssembly()?.GetName().Name ?? "app",
-                engine = _host switch { MauiHost => "dotnet-maui", BlazorHost => "dotnet-blazor", _ => "dotnet-wpf" },
+                engine = _host switch { MauiHost => "dotnet-maui", BlazorHost => "dotnet-blazor", OpenTkHost => "dotnet-opentk", _ => "dotnet-wpf" },
                 pid = page ? 0 : Environment.ProcessId,
                 platform,
                 project = page ? null : _project ??= BakedProject ?? FindProject(),
