@@ -44,7 +44,8 @@ VS Code runs the hub), and VS Code says how many, with **Reopen**.
 ## Attach your app
 
 **Debug builds of a DrawnUi app attach by themselves** when the app references the NuGet package
-`DrawnUi.Designer.Agent`. DrawnUi.Maui and DrawnUi.Wpf 1.10.8.15 or newer bring it along: then there is nothing to do. Otherwise
+`DrawnUi.Designer.Agent`. DrawnUi.Maui and DrawnUi.Wpf 1.10.8.15 or newer, and DrawnUi.OpenTk 1.10.8.24 or newer (apps on
+`DrawnUiWindow`), bring it along: then there is nothing to do. Otherwise
 add it to the app:
 
 ```xml

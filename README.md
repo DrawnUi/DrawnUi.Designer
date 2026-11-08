@@ -52,7 +52,7 @@ macOS (Apple silicon and Intel) in a zip. It tells you when a newer release is o
 **2. Add the agent to your app.** It is active in debug and development builds only; release builds carry nothing
 of it.
 
-- **.NET (DrawnUi MAUI, WPF):** apps on DrawnUi 1.10.8.15 or newer have it already. Otherwise reference the NuGet
+- **.NET (DrawnUi MAUI, WPF, OpenTK):** apps on DrawnUi 1.10.8.15 or newer (OpenTK: 1.10.8.24) have it already. Otherwise reference the NuGet
   package [`DrawnUi.Designer.Agent`](https://www.nuget.org/packages/DrawnUi.Designer.Agent). Set
   `DrawnUiDesigner=false` in your project to turn it off.
 - **Rust (DrawnUI for Rust):** add the agent crate and wrap your `Ui` where you hand it to `drawnui::run`:
@@ -96,6 +96,7 @@ the browser, hot reload, which code the designer can write to, and every MCP too
 | App | How it connects |
 |---|---|
 | DrawnUi WPF, DrawnUi MAUI on Windows | On the same computer |
+| DrawnUi OpenTK (`DrawnUiWindow`) on Windows | On the same computer (DrawnUi 1.10.8.24 or newer) |
 | DrawnUi MAUI on Android | Over the USB cable (the designer sets up adb by itself) |
 | DrawnUi MAUI on iPhone and iPad | Over the USB cable, the way the debugger does |
 | DrawnUi MAUI on Mac (Mac Catalyst) | On the same Mac; from another computer's designer over Wi-Fi |
