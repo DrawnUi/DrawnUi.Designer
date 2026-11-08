@@ -79,7 +79,7 @@ DesignerActions.Add("Dialogs/Options", () => Game.ShowOptions());   // Add retur
 ```
 
 ```tsx
-// React, the drawnui-react release after 0.1.0-preview.40
+// React, drawnui-react 0.1.0-preview.41 or newer
 import { designerAction, useDesignerAction, DesignerAction } from "drawnui-react";
 designerAction("Levels/Level 3", () => startLevel(3));             // returns its remover
 useDesignerAction("Dialogs/Options", () => showOptions());         // exists while the component is mounted
@@ -93,7 +93,7 @@ Ui::new(state, build).designer_action("Levels/Level 3", |s: &mut Game, _cx| s.st
 ```
 
 ```
-// NX (DrawFiddle): an element in a component; onRun runs like that component's onTapped
+// NX (DrawFiddle, from its next release): an element in a component; onRun runs like that component's onTapped
 <DesignerAction Name="Levels/Level 3" onRun={<State.Update level=3 />} />
 ```
 

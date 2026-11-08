@@ -381,6 +381,15 @@ Ui::new(state, build)
 // while the app runs: cx.add_designer_action::<Game>(path, |game, cx| ..) and cx.remove_designer_action(path)
 ```
 
+React (drawnui-react 0.1.0-preview.41 or newer):
+
+```tsx
+import { designerAction, useDesignerAction, DesignerAction } from "drawnui-react";
+designerAction("Levels/Level 3", () => startLevel(3));      // returns its remover
+useDesignerAction("Dialogs/Options", () => showOptions());  // while the component is mounted
+<DesignerAction Name="Game/Paused" onRun={() => pause()} />  // draws nothing
+```
+
 - The path names the action and its groups, slash-separated: `Levels/Level 3` shows as **Level 3** under **Levels**.
   Groups and actions keep the order the app added them in.
 - The action runs on the app's UI thread. A failure shows in the status bar.
