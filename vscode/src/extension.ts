@@ -25,6 +25,14 @@ export function activate(context: vscode.ExtensionContext) {
     // here so that VS Code does not run its own command for them too (see contributes.keybindings).
     vscode.commands.registerCommand("drawnuiDesigner.designerKey", () => {}),
   );
+  // One click from anywhere: the status bar opens the designer (the Command Palette is not where people look).
+  const button = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
+  button.text = "$(layers) DrawnUI Designer";
+  button.tooltip = "Open the DrawnUI Designer beside your code";
+  button.command = "drawnuiDesigner.open";
+  button.accessibilityInformation = { label: "Open the DrawnUI Designer", role: "button" };
+  button.show();
+  context.subscriptions.push(button);
   // For test runs: open at startup without anyone running the command.
   if (process.env.DRAWNUI_DESIGNER_AUTOOPEN === "1") {
     open(context);
