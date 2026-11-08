@@ -87,7 +87,7 @@ useDesignerAction("Dialogs/Options", () => showOptions());         // exists whi
 ```
 
 ```rust
-// DrawnUI for Rust, the drawnui crate release after 0.1.0-preview.36
+// DrawnUI for Rust, drawnui 0.1.0-preview.37 or newer
 Ui::new(state, build).designer_action("Levels/Level 3", |s: &mut Game, _cx| s.start_level(3));
 // while running: cx.add_designer_action::<Game>(path, |s, cx| ..) / cx.remove_designer_action(path)
 ```

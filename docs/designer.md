@@ -122,7 +122,7 @@ drawnui::run("My app", || drawnui_designer_agent::attach!(Ui::new(App::default()
 ```
 
 `attach!` returns the app with the agent around it in debug builds and the app as it is in release builds. The crate
-turns on drawnui's `designer` feature itself (drawnui 0.1.0-preview.36 or newer from crates.io). The
+turns on drawnui's `designer` feature itself (drawnui 0.1.0-preview.37 or newer from crates.io). The
 app shows up with engine `rust`, its exe name, and its crate's `Cargo.toml` as the project. The tree lists the
 controls with their type, tag, text and where they are drawn, the engine's own parts (a button's caption, a
 switch's look, scroll bars) marked as the library's; each open popup window (a menu, a dropdown) follows as a root
@@ -356,7 +356,7 @@ Some states are hard to reach by hand: level 12 of a game, the game-over dialog,
 as actions; the designer lists them under its screens, in their groups, and one click puts the running app there.
 AI agents run the same actions with `list_actions` and `run_action`.
 
-C# (DrawnUi, any head):
+C# (DrawnUi 1.10.8.22 or newer, any head):
 
 ```csharp
 using DrawnUi.Draw;
@@ -369,6 +369,15 @@ for (var i = 1; i <= 20; i++)
 }
 DesignerActions.Add("Game/Paused", () => Game.Pause());
 DesignerActions.Add("Dialogs/Options", () => Game.ShowOptions());
+```
+
+DrawnUI for Rust (drawnui 0.1.0-preview.37 or newer):
+
+```rust
+Ui::new(state, build)
+    .designer_action("Levels/Level 3", |game: &mut Game, _cx| game.start_level(3))
+    .designer_action("Dialogs/Options", |game: &mut Game, _cx| game.show_options());
+// while the app runs: cx.add_designer_action::<Game>(path, |game, cx| ..) and cx.remove_designer_action(path)
 ```
 
 - The path names the action and its groups, slash-separated: `Levels/Level 3` shows as **Level 3** under **Levels**.
