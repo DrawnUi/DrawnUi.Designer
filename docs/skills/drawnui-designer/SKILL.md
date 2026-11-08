@@ -15,6 +15,10 @@ Load `drawnui` (engine semantics) and `drawnui-fluent` (C# composition) with thi
 
 - The designer serves MCP at `http://127.0.0.1:54271/mcp` while its window (or its VS Code panel) runs.
   Claude Code: `claude mcp add --transport http drawnui-designer http://127.0.0.1:54271/mcp`.
+- The MCP does not answer (no designer open)? Start one without a window, in the background:
+  `drawnui-designer --mcp`. Exit code **3** means a designer already runs: use its MCP at the address it prints
+  (the user's window serves it and shows what you do). Never start a second designer on another port to get around
+  it, and stop only a `--mcp` designer you started yourself, never the user's window.
 - An app connects by itself when it runs in **Debug** with the designer agent: DrawnUi packages that carry
   `DrawnUi.Designer.Agent` attach it with nothing to set up; Release builds never contain it.
 - A DrawnUI for React app connects in development builds once it calls `attach(canvas)` from

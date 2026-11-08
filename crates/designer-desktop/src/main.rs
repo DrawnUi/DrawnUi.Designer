@@ -28,6 +28,9 @@ fn main() {
     if std::env::args().any(|arg| arg == "--sidecar") {
         return sidecar(port);
     }
+    if std::env::args().any(|arg| arg == "--mcp") {
+        mcp_only(port);
+    }
     // Fails when a hub already runs on the port: then the window uses that one.
     let _ = designer_core::spawn(port);
     ui::run(port);
@@ -36,6 +39,27 @@ fn main() {
 #[cfg(target_os = "emscripten")]
 fn main() {
     ui::run(0);
+}
+
+/// Exit code of `--mcp` when a designer already runs on the port: use that one's MCP.
+#[cfg(not(target_os = "emscripten"))]
+const ALREADY_RUNNING: i32 = 3;
+
+/// `--mcp`: the hub and its MCP server without a window, for AI agents (Claude Code) when no designer
+/// window or VS Code panel runs. Runs until it is stopped. When a designer already runs on the port it
+/// does not start: it says where that designer's MCP is and exits with [`ALREADY_RUNNING`], since the
+/// window (or panel) serves MCP itself and the agent should use it.
+#[cfg(not(target_os = "emscripten"))]
+fn mcp_only(port: u16) -> ! {
+    let mcp = format!("http://127.0.0.1:{}/mcp", port.wrapping_add(1));
+    if !designer_core::spawn(port) {
+        eprintln!("drawnui-designer: a DrawnUI Designer already runs on 127.0.0.1:{port}; use its MCP at {mcp}");
+        std::process::exit(ALREADY_RUNNING);
+    }
+    println!("drawnui-designer: MCP at {mcp} (hub on 127.0.0.1:{port}), no window; stop this process to end it");
+    loop {
+        std::thread::park();
+    }
 }
 
 /// Only the hub. Lives until stdin reaches its end: the extension host holds the other end of the

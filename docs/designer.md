@@ -596,7 +596,17 @@ Claude Code once:
 claude mcp add --transport http --scope user drawnui-designer http://127.0.0.1:54271/mcp
 ```
 
-The server runs only while a designer window or the VS Code panel is open.
+The server runs while a designer window or the VS Code panel is open. Without either, an agent starts a designer
+with no window:
+
+```powershell
+drawnui-designer --mcp
+```
+
+It serves the hub and the same MCP until the process is stopped; apps connect to it as to the window, and a window
+opened later joins it. When a designer already runs on the port, `--mcp` does not start: it prints that designer's
+MCP address (`http://127.0.0.1:54271/mcp`) on stderr and exits with code **3**. The agent then uses the running one,
+whose window shows what the agent does.
 
 | Tool | Arguments | What it does |
 |---|---|---|

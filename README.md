@@ -160,6 +160,10 @@ code" while the app runs.
    ```
 
    Settings, Connection shows the same address and command with copy buttons.
+
+   No designer window open? The agent can start one without a window: `drawnui-designer --mcp` serves the same
+   MCP until it is stopped. When a designer already runs, it does not start (exit code 3) and names the running
+   one's MCP address, so the agent uses that one.
 2. **Give it the skill.** The [drawnui-designer skill](docs/skills/drawnui-designer/SKILL.md) teaches the agent the
    tools, the workflow, and what to do when a value cannot be written to code. Load it with
    the [drawnui](https://drawnui.net/skills/drawnui/SKILL.md) and
