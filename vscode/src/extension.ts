@@ -88,6 +88,14 @@ function startSidecar(context: vscode.ExtensionContext, port: number) {
     log.warn(`drawnui-designer not found: the designer uses a hub already running on port ${port}`);
     return;
   }
+  if (process.platform !== "win32") {
+    // A package built on Windows carries the macOS hub without its executable bit.
+    try {
+      fs.chmodSync(exe, 0o755);
+    } catch {
+      // not ours to change (a sidecarPath of the user's): spawn says why if it cannot run
+    }
+  }
   log.info(`starting the hub: ${exe} --sidecar (port ${port})`);
   // stdin stays a pipe: the sidecar exits when it closes, also when this host dies.
   const child = spawn(exe, ["--sidecar"], {

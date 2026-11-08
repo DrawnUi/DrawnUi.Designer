@@ -37,13 +37,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.event.release.tag_name || inputs.tag }}
         run: |
-          name=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '[.assets[].name | select(endswith(".vsix"))] | first // empty')
-          if [ -z "$name" ]; then
+          # Every .vsix of the release: one package per platform (win32-x64, win32-arm64, darwin-arm64,
+          # darwin-x64), each carrying its own designer hub; the Marketplace gives each user theirs.
+          count=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '[.assets[].name | select(endswith(".vsix"))] | length')
+          if [ "$count" = "0" ]; then
             echo "::error::Release $TAG has no .vsix asset"
             exit 1
           fi
-          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "$name" --dir vsix
-          echo "path=vsix/$name" >> "$GITHUB_OUTPUT"
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "*.vsix" --dir vsix
+          echo "paths=$(ls vsix/*.vsix | xargs)" >> "$GITHUB_OUTPUT"
 
       - uses: actions/setup-node@v4
         with:
@@ -51,9 +53,10 @@ jobs:
 
       - name: Publish with trusted publishing
         env:
-          VSIX: ${{ steps.vsix.outputs.path }}
+          VSIX: ${{ steps.vsix.outputs.paths }}
           PRERELEASE: ${{ github.event.release.prerelease || inputs.prerelease }}
         run: |
           flags=""
           if [ "$PRERELEASE" = "true" ]; then flags="--pre-release"; fi
-          npx --yes @vscode/vsce@4.1.0 publish --oidc --packagePath "$VSIX" $flags
+          # one publish, every package: vsce takes several package paths
+          npx --yes @vscode/vsce@4.1.0 publish --oidc --packagePath $VSIX $flags
