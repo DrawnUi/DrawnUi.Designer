@@ -127,7 +127,7 @@ screens, controls and screenshots when the designer asks. One console line at st
 
 ## VS Code
 
-**DrawnUI: Open Designer** in the Command Palette opens the designer beside your code, for Windows.
+**DrawnUI: Open Designer** in the Command Palette opens the designer beside your code, on Windows and macOS.
 
 - **From Releases:** download `drawnui-designer-win32-x64-0.6.0.vsix` from
   [Releases](https://github.com/DrawnUi/DrawnUi.Designer/releases), then in VS Code run **Extensions: Install from

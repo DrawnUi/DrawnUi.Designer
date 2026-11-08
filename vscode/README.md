@@ -15,4 +15,4 @@ Inspect and edit running DrawnUI apps from VS Code.
 Settings: `drawnuiDesigner.port` (hub port, default 54270), `drawnuiDesigner.sidecarPath` (a hub executable of your
 own instead of the bundled one).
 
-Windows for now. More: https://github.com/DrawnUi/DrawnUi.Designer
+Windows (x64, ARM64) and macOS (Apple silicon, Intel). More: https://github.com/DrawnUi/DrawnUi.Designer
