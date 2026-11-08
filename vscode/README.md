@@ -2,7 +2,8 @@
 
 Inspect and edit running DrawnUI apps from VS Code.
 
-- **DrawnUI: Open Designer** (Command Palette) starts the designer hub and opens the designer beside your editor.
+- **DrawnUI Designer** in the status bar (or **DrawnUI: Open Designer** in the Command Palette) starts the designer hub
+  and opens the designer beside your editor.
 - Running DrawnUI apps that load the designer agent appear at the top: pick one to see its screens, its live
   control tree and the selected control's properties.
 - Selecting a control highlights it in the app; tapping a screen opens it there; an edited property changes the
