@@ -390,6 +390,9 @@ useDesignerAction("Dialogs/Options", () => showOptions());  // while the compone
 <DesignerAction Name="Game/Paused" onRun={() => pause()} />  // draws nothing
 ```
 
+NX (DrawFiddle, drawn by React or by DrawnUI for Rust): `<DesignerAction Name="Levels/Level 3" onRun={<State.Update level=3 />} />`
+in a component; its `onRun` runs like that component's `onTapped`.
+
 - The path names the action and its groups, slash-separated: `Levels/Level 3` shows as **Level 3** under **Levels**.
   Groups and actions keep the order the app added them in.
 - The action runs on the app's UI thread. A failure shows in the status bar.

@@ -93,7 +93,7 @@ Ui::new(state, build).designer_action("Levels/Level 3", |s: &mut Game, _cx| s.st
 ```
 
 ```
-// NX (DrawFiddle, from its next release): an element in a component; onRun runs like that component's onTapped
+// NX (DrawFiddle, React or Rust renderer): an element in a component; onRun runs like that component's onTapped
 <DesignerAction Name="Levels/Level 3" onRun={<State.Update level=3 />} />
 ```
 
